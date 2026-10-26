@@ -85,6 +85,7 @@ create table if not exists public.app_users (
 );
 
 -- safe re-runs on existing installs
+alter table public.masjid   add column if not exists email text default '';
 alter table public.families add column if not exists updated_at timestamptz default now();
 alter table public.members  add column if not exists occupation  text default '';
 alter table public.members  add column if not exists schemes     jsonb default '{}'::jsonb;

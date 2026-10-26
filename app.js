@@ -1074,8 +1074,48 @@ function viewDashboard(){
           </tbody></table></div>
         ${!s.scheme.applied ? '<p class="muted small" style="margin-top:10px">Abhi koi scheme mark nahi hui — member form me scheme chips tap karo.</p>' : ''}
       </section>
-    </div>`;
+    </div>
+    ${aboutContactBlock(mj)}`;
 }
+
+function aboutContactBlock(mj){
+  const owner = DB.admins()[0] || null;
+  const yr = new Date().getFullYear();
+  const name = mj.name || CFG.ORG_NAME || 'Masjid e Mohammadi';
+  const sub = CFG.ORG_SUB || 'Khidmath Committee';
+  const phone = String(mj.phone||'').trim();
+  const tel = phone.replace(/[^\d+]/g,'');
+  const email = String(mj.email||'').trim();
+  const addr = String(mj.address||'').trim();
+  const ownerName = owner ? (owner.name || String(owner.email||'').split('@')[0]) : 'Committee admin';
+  const ownerMail = owner ? OwnerEmail(owner) : '';
+  return `
+    <div class="ac-grid">
+      <section class="ac-card" id="about">
+        <div class="ac-kicker">About</div>
+        <h2>${esc(name)}</h2>
+        <p>${esc(mj.note || name + ' ke mohalle ka survey — har ghar, har fard, taleem, kaam aur deeni khidmat ka poora hisaab. Ye data ' + sub + ' ke records ke liye rakha jata hai.')}</p>
+        ${mj.established?`<p class="ac-line"><b>Qayam:</b> ${esc(mj.established)}</p>`:''}
+        ${mj.imam?`<p class="ac-line"><b>Imam:</b> ${esc(mj.imam)}</p>`:''}
+        ${mj.madrasa?`<p class="ac-line"><b>Madrasa:</b> ${esc(mj.madrasa)}</p>`:''}
+      </section>
+      <section class="ac-card" id="contact">
+        <div class="ac-kicker">Contact</div>
+        <h2>Rabta karo</h2>
+        <ul class="ac-list">
+          <li><span>Masjid phone</span>${phone?`<a href="tel:${esc(tel)}">${esc(phone)}</a>`:'<em>admin add karega</em>'}</li>
+          <li><span>Masjid email</span>${email?`<a href="mailto:${esc(email)}">${esc(email)}</a>`:'<em>admin add karega</em>'}</li>
+          <li><span>Address</span>${addr?`<a href="https://maps.google.com/?q=${encodeURIComponent(addr)}" target="_blank" rel="noopener">${esc(addr)}</a>`:'<em>admin add karega</em>'}</li>
+          <li><span>Admin</span><span class="ac-admin"><b>${esc(ownerName)}</b>${ownerMail?` · <a href="mailto:${esc(ownerMail)}">${esc(ownerMail)}</a>`:''}</span></li>
+        </ul>
+      </section>
+    </div>
+    <footer class="site-foot">
+      <span>© ${yr} ${esc(name)} · ${esc(sub)} — All rights reserved.</span>
+      <span class="small">Survey data sirf committee ke records ke liye · public view read-only</span>
+    </footer>`;
+}
+function OwnerEmail(o){ return String(o && o.email || '').trim(); }
 
 /* ============================================================
    HOUSEHOLDS LIST
@@ -1388,6 +1428,7 @@ const MASJID_FIELDS = [
   ['established','Qayam saal','e.g. 1985'],
   ['address','Pura pata','Mohalla, shehar, pincode'],
   ['phone','Rabta number','10-digit mobile'],
+  ['email','Masjid ka email ID','masjid@example.com'],
   ['imam','Imam sahab ka naam',''],
   ['muazzin','Muazzin ka naam',''],
   ['area','Raqba (sq ft / gaj)',''],
