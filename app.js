@@ -348,10 +348,10 @@ function renderRegister(){
     if (mailMode() === 'cloud'){
       const c = await CLOUD.get();
       if (!c){ alertBox.innerHTML='<div class="alert err">Cloud connect nahi hua.</div>'; return; }
-      const { error } = await c.auth.signUp({ email, password: pass, options:{ data:{ name, phone } } });
+      const { error } = await c.auth.signUp({ email, password: pass, options:{ data:{ name, phone }, emailRedirectTo: location.origin + location.pathname } });
       if (error){ alertBox.innerHTML='<div class="alert err">'+esc(error.message)+'</div>'; return; }
-      pending = { kind:'register', email, name, phone, code:'', expires:Date.now()+10*60*1000 };
-      renderCodeStep(); return;
+      pending = { kind:'register', email, name, phone };
+      renderLinkSent(); return;
     }
 
     const code = newCode();
@@ -372,6 +372,38 @@ async function cloudClaimAdmin(email, name, phone){
     const { error } = await c.from('app_users').upsert({ id:email, user_id:u.id, role:'admin', name:name||'', phone:phone||'' });
     return !error;
   } catch(e){ return false; }
+}
+
+
+/* ---------------- email LINK step (cloud) ---------------- */
+function renderLinkSent(){
+  const isReset = pending.kind === 'reset';
+  $('#authScreen').innerHTML = authCard(`
+    <h1>${isReset?'Reset link bhej diya':'Email check karo'}</h1>
+    <p class="lead"><b>${esc(pending.email)}</b> par ${isReset?'password reset':'confirm'} link bheja hai.</p>
+    <div class="alert info">Email kholo → link par <b>click</b> karo → app khud login kar lega.<br>
+      <span class="small">Link na dikhe to spam folder dekho. Link 1 ghante tak chalta hai.</span></div>
+    <button class="btn block" type="button" data-act="auth-check">Maine link par click kar liya</button>
+    <button class="btn ghost block" type="button" data-act="auth-cancel">Cancel</button>`);
+}
+
+async function cloudLinkCheck(){
+  const c = await CLOUD.get();
+  if (!c){ toast('Cloud connect nahi hua','err'); return; }
+  const { data } = await c.auth.getSession();
+  const sess = data && data.session;
+  if (!sess){ toast('Abhi verify nahi hua — email me link par click karo','err'); return; }
+  const email = (sess.user.email||'').toLowerCase();
+  if (pending && pending.kind === 'reset'){ pending = { kind:'newpass', email }; return renderNewPassword(); }
+  const md = sess.user.user_metadata || {};
+  await cloudClaimAdmin(email, md.name||'', md.phone||'');
+  if (!adminByEmail(email)){
+    const admins = DB.admins();
+    admins.push({ email, name:md.name||email.split('@')[0], phone:md.phone||'', createdAt:Date.now(), verified:true, cloud:true });
+    DB.setAdmins(admins);
+  }
+  setSession({ kind:'admin', email });
+  pending=null; closeAuth(); enterApp(); toast('Admin login ho gaya');
 }
 
 /* ---------------- email code step ---------------- */
@@ -468,9 +500,8 @@ function renderForgot(){
       if (!c){ alertBox.innerHTML='<div class="alert err">Cloud connect nahi hua.</div>'; return; }
       const { error } = await c.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname });
       if (error){ alertBox.innerHTML='<div class="alert err">'+esc(error.message)+'</div>'; return; }
-      alertBox.innerHTML='<div class="alert ok">Reset code email par bhej diya.</div>';
-      pending = { kind:'reset', email, code:'', expires:Date.now()+10*60*1000 };
-      return renderCodeStep();
+      pending = { kind:'reset', email };
+      return renderLinkSent();
     }
     if (!adminByEmail(email)){ alertBox.innerHTML='<div class="alert err">Is email se koi admin nahi hai.</div>'; return; }
     pending = { kind:'reset', email, code:newCode(), expires:Date.now()+10*60*1000 };
@@ -1359,6 +1390,7 @@ document.addEventListener('click', (e)=>{
 
   if (act==='toggle-theme') { toggleTheme(); const b=$('#themeBtn2'); if(b) b.textContent = document.documentElement.getAttribute('data-theme')==='night'?'☾ Night':'☀ Day'; return; }
   if (act==='goto'){ if (el.dataset.view==='add'){ state.draft=blankDraft(); go(el.dataset.view); } else go(el.dataset.view, el.dataset.street||null); return; }
+  if (act==='auth-check'){ cloudLinkCheck(); return; }
   if (act==='open-auth'){ openAuth('login'); return; }
   if (act==='close-auth'){ closeAuth(); return; }
   if (act==='auth-tab'){ pending=null; renderAuth(el.dataset.tab||'login'); return; }
@@ -1769,6 +1801,29 @@ function loadSample(){
 /* ============================================================
    INIT
    ============================================================ */
+
+/* email link se wapas aaya? → session se admin login */
+async function cloudAutoLogin(){
+  if (!CLOUD.enabled()) return;
+  try {
+    const c = await CLOUD.get(); if (!c) return;
+    const { data } = await c.auth.getSession();
+    const sess = data && data.session; if (!sess) return;
+    const email = (sess.user.email||'').toLowerCase();
+    if (/type=recovery/.test(location.hash)){ pending = { kind:'newpass', email }; openAuth('login'); return renderNewPassword(); }
+    if (isAdmin()) return;
+    const md = sess.user.user_metadata || {};
+    await cloudClaimAdmin(email, md.name||'', md.phone||'');
+    if (!adminByEmail(email)){
+      const admins = DB.admins();
+      admins.push({ email, name:md.name||email.split('@')[0], phone:md.phone||'', createdAt:Date.now(), verified:true, cloud:true });
+      DB.setAdmins(admins);
+    }
+    setSession({ kind:'admin', email });
+    enterApp(); toast('Email verified — admin login');
+  } catch(e){}
+}
+
 function init(){
   /* recovery link se aaya user: naya password set kare */
   try {
@@ -1780,6 +1835,7 @@ function init(){
     }
   } catch(e){}
   enterApp();   // public dashboard pehle — login optional
+  cloudAutoLogin();
 }
 if (document.readyState==='loading') document.addEventListener('DOMContentLoaded', init);
 else init();
