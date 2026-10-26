@@ -1010,7 +1010,7 @@ function viewCat(param){
       + tbl(['Scheme','Members'], SCHEMES.filter(([k])=>k!=='other').map(([k,l])=>`<tr><td>${esc(l)}</td><td><b>${s.scheme.counts[k]||0}</b></td></tr>`).concat(s.scheme.byName.map(([nm,c])=>`<tr><td>${esc(nm)}</td><td><b>${c}</b></td></tr>`)));
   }
 
-  return `<div class="page-head"><div><h1>${esc(cat[1])}</h1><p>${esc(cat[2])} — public totals</p></div><div class="ph-actions">${back}</div></div>
+  return `<div class="page-head"><div><h1>${esc(cat[1])}</h1><p>${esc(cat[2])} · <span>public totals</span></p></div><div class="ph-actions">${back}</div></div>
     <div class="card"><div class="metrics cols2">${metrics}</div>${extra}</div>
     <p class="muted small" style="margin-top:14px">Har ghar ki zaati tafseel (naam, umar, documents, schemes) sirf admin login ke andar hai.</p>`;
 }
@@ -1174,7 +1174,7 @@ function aboutContactBlock(mj){
       <section class="ac-card" id="about">
         <div class="ac-kicker">About</div>
         <h2>${esc(name)}</h2>
-        <p>${esc(mj.note || name + ' ke mohalle ka survey — har ghar, har fard, taleem, kaam aur deeni khidmat ka poora hisaab. Ye data ' + sub + ' ke records ke liye rakha jata hai.')}</p>
+        <p>${mj.note ? esc(mj.note) : `<span>${esc(name)}</span> ke mohalle ka survey — har ghar, har fard, taleem, kaam aur deeni khidmat ka poora hisaab.`}</p>
         ${mj.established?`<p class="ac-line"><b>Qayam:</b> ${esc(mj.established)}</p>`:''}
         ${mj.imam?`<p class="ac-line"><b>Imam:</b> ${esc(mj.imam)}</p>`:''}
         ${mj.madrasa?`<p class="ac-line"><b>Madrasa:</b> ${esc(mj.madrasa)}</p>`:''}
@@ -1502,6 +1502,330 @@ function viewUsers(){
 /* ============================================================
    SETTINGS
    ============================================================ */
+/* ============================== i18n (Hinglish / English / Tamil) ==============================
+   Approach: the Hinglish strings already in the UI are the KEYS. A dictionary maps each
+   key to English / Tamil, and translateTree() rewrites the live text nodes. No build step,
+   no data-i18n attributes to maintain — new strings simply stay Hinglish until added here. */
+const LANGS = [['hi','Hinglish'],['en','English'],['ta','Tamil']];
+const I18N = {
+  en: {
+    'Add Household':'Add Household',
+    'Edit Household':'Edit Household',
+    'Survey Dashboard':'Survey Dashboard',
+    'Survey Category':'Survey Category',
+    'Household Record':'Household Record',
+    'Public view':'Public view',
+    'Admin login':'Admin login',
+    'Admin mode · you can add and edit':'Admin mode · you can add and edit',
+    'Public view · read only':'Public view · read only',
+    'Admin login / create admin':'Admin login / create admin',
+    'Mohalla ke ghar, raste aur logon ka poora hisaab — live totals.':'Every house, street and person in the mohalla — live totals.',
+    'No households surveyed yet':'No households surveyed yet',
+    'Add the first household, ya sample data load karke dashboard dekh lo.':'Add the first household, or load sample data to see the dashboard.',
+    'Add first household':'Add first household',
+    'Load sample data':'Load sample data',
+    'Ghar aur raste ki details':'Houses and streets',
+    'Ghar walon ki details':'Family details',
+    'Padhne wale bachche aur students':'Children and students',
+    'Kaam ke hisaab se ginti':'Counted by occupation',
+    'Aalim aur Hafiz':'Aalim and Hafiz',
+    'Documents aur scheme ka hisaab':'Documents and schemes',
+    'Ghar, raste aur makan ki qism':'Houses, streets and house type',
+    'Ghar walon ki ginti, umar aur halat':'Family count, age and status',
+    'Survey — 6 categories':'Survey — 6 categories',
+    'Sirf totals public hain. Har ghar ki zaati tafseel sirf committee admin ke paas rehti hai.':'Only totals are public. Each household\u2019s private detail stays with the committee admin.',
+    'public totals':'public totals',
+    'Har ghar ki zaati tafseel (naam, umar, documents, schemes) sirf admin login ke andar hai.':'Private household details (name, age, documents, schemes) are inside admin login only.',
+    'ghar':'houses',
+    'families':'families',
+    'students':'students',
+    'log kaam par':'people working',
+    'aalim / hafiz':'aalim / hafiz',
+    'scheme li':'on a scheme',
+    'Moulding (concrete)':'Moulding (concrete)',
+    'Cement sheet':'Cement sheet',
+    'Palm leaf':'Palm leaf',
+    'Other / kachcha':'Other / kachcha',
+    'Total streets':'Total streets',
+    'Total houses':'Total houses',
+    'Total families':'Total families',
+    'Total population':'Total population',
+    'Total students':'Total students',
+    'Total':'Total',
+    'Street':'Street',
+    'Street name':'Street name',
+    'Houses':'Houses',
+    'Moulding':'Moulding',
+    'Cement':'Cement',
+    'Palm':'Palm',
+    'Other':'Other',
+    'Men':'Men',
+    'Women':'Women',
+    'Primary':'Primary',
+    'Higher secondary':'Higher secondary',
+    'College':'College',
+    'Madarsa':'Madarsa',
+    'Married (men+women)':'Married (men+women)',
+    'Unmarried (men+women)':'Unmarried (men+women)',
+    'Widow':'Widow',
+    'Physically challenged':'Physically challenged',
+    'Children (under 18)':'Children (under 18)',
+    'Members with a job':'Members with a job',
+    'Different occupations':'Different occupations',
+    'Occupation':'Occupation',
+    'Members':'Members',
+    'Document':'Document',
+    'Have':'Have',
+    "Don't have":"Don't have",
+    'Scheme':'Scheme',
+    'Members with all basic documents':'Members with all basic documents',
+    'Members with no basic document':'Members with no basic document',
+    'Scheme applied':'Scheme applied',
+    'Scheme not applied':'Scheme not applied',
+    'Aalim (men)':'Aalim (men)',
+    'Hafiz (men)':'Hafiz (men)',
+    'Aalim (women)':'Aalim (women)',
+    'Hafiz (women)':'Hafiz (women)',
+    'About':'About',
+    'Contact':'Contact',
+    'Rabta karo':'Get in touch',
+    'Masjid phone':'Masjid phone',
+    'Masjid email':'Masjid email',
+    'Address':'Address',
+    'Admin':'Admin',
+    'admin add karega':'admin will add',
+    'Qayam':'Established',
+    'Pata':'Address',
+    'Imam':'Imam',
+    'Raqba':'Area',
+    'Capacity':'Capacity',
+    'Masjid photos':'Masjid photos',
+    'Admin login karke Masjid Profile me photos add hongi.':'Log in as admin to add photos in Masjid Profile.',
+    'Masjid profile edit karo':'Edit masjid profile',
+    'ke mohalle ka survey — har ghar, har fard, taleem, kaam aur deeni khidmat ka poora hisaab.':'survey of the mohalla — every house, every person, education, work and religious service in one place.',
+    'Survey data sirf committee ke records ke liye · public view read-only':'Survey data is for committee records only · public view is read-only',
+    'Sirf committee admin ke liye. Baaki sab public dashboard dekh sakte hain.':'For committee admin only. Everyone else can view the public dashboard.',
+    'Email ID':'Email ID',
+    'Password':'Password',
+    'Captcha — answer the sum':'Captcha — answer the sum',
+    'Answer':'Answer',
+    'Login':'Login',
+    'Email link se login (password ke bina)':'Log in with an email link (no password)',
+    'Forgot password / ID?':'Forgot password / ID?',
+    'Create admin':'Create admin',
+    'New captcha':'New captcha'
+  },
+  ta: {
+    'Dashboard':'டாஷ்போர்டு',
+    'Households':'குடும்பங்கள்',
+    'Add Household':'குடும்பம் சேர்',
+    'Edit Household':'குடும்பம் திருத்து',
+    'Masjid Profile':'மசூதி விவரம்',
+    'Admins':'நிர்வாகிகள்',
+    'Settings':'அமைப்புகள்',
+    'Survey Dashboard':'கணக்கெடுப்பு டாஷ்போர்டு',
+    'Survey Category':'கணக்கெடுப்பு பிரிவு',
+    'Household Record':'குடும்பப் பதிவு',
+    'Public view':'பொது பார்வை',
+    'Admin login':'நிர்வாகி உள்நுழைவு',
+    'Admin mode · you can add and edit':'நிர்வாகி பயன்முறை · சேர்க்கவும் திருத்தவும் முடியும்',
+    'Public view · read only':'பொது பார்வை · படிக்க மட்டும்',
+    'Admin login / create admin':'நிர்வாகி உள்நுழைவு / நிர்வாகி உருவாக்கு',
+    'Mohalla ke ghar, raste aur logon ka poora hisaab — live totals.':'ஒவ்வொரு வீடு, தெரு மற்றும் மக்களின் முழு கணக்கு — நேரடி மொத்தம்.',
+    'No households surveyed yet':'இன்னும் எந்த குடும்பமும் பதிவாகவில்லை',
+    'Add the first household, ya sample data load karke dashboard dekh lo.':'முதல் குடும்பத்தைச் சேர்க்கவும், அல்லது மாதிரி தரவை ஏற்றி டாஷ்போர்டைப் பாருங்கள்.',
+    'Add first household':'முதல் குடும்பத்தைச் சேர்',
+    'Load sample data':'மாதிரி தரவை ஏற்று',
+    'Location & Housing':'இடம் & வீடு',
+    'Family & Demographics':'குடும்பம் & மக்கள்தொகை',
+    'Education':'கல்வி',
+    'Occupations':'தொழில்கள்',
+    'Religious Education':'மதக் கல்வி',
+    'Documents & Govt. Schemes':'ஆவணங்கள் & அரசு திட்டங்கள்',
+    'Ghar aur raste ki details':'வீடு மற்றும் தெரு விவரம்',
+    'Ghar walon ki details':'குடும்ப விவரம்',
+    'Padhne wale bachche aur students':'படிக்கும் குழந்தைகள் மற்றும் மாணவர்கள்',
+    'Kaam ke hisaab se ginti':'தொழில் வாரியாக எண்ணிக்கை',
+    'Aalim aur Hafiz':'ஆலிம் மற்றும் ஹாபிழ்',
+    'Documents aur scheme ka hisaab':'ஆவணங்கள் மற்றும் திட்டக் கணக்கு',
+    'Ghar, raste aur makan ki qism':'வீடுகள், தெருக்கள் மற்றும் வீட்டு வகை',
+    'Ghar walon ki ginti, umar aur halat':'குடும்ப எண்ணிக்கை, வயது மற்றும் நிலை',
+    'Survey — 6 categories':'கணக்கெடுப்பு — 6 பிரிவுகள்',
+    'Sirf totals public hain. Har ghar ki zaati tafseel sirf committee admin ke paas rehti hai.':'பொதுவில் மொத்த எண்ணிக்கை மட்டும். ஒவ்வொரு வீட்டின் தனிப்பட்ட விவரம் குழு நிர்வாகியிடம் மட்டுமே.',
+    'public totals':'பொது மொத்தம்',
+    'Har ghar ki zaati tafseel (naam, umar, documents, schemes) sirf admin login ke andar hai.':'தனிப்பட்ட விவரங்கள் (பெயர், வயது, ஆவணங்கள், திட்டங்கள்) நிர்வாகி உள்நுழைவில் மட்டும்.',
+    'ghar':'வீடுகள்',
+    'families':'குடும்பங்கள்',
+    'students':'மாணவர்கள்',
+    'log kaam par':'வேலை செய்வோர்',
+    'aalim / hafiz':'ஆலிம் / ஹாபிழ்',
+    'scheme li':'திட்டம் பெற்றோர்',
+    'Moulding (concrete)':'கான்கிரீட்',
+    'Cement sheet':'சிமெண்ட் ஷீட்',
+    'Palm leaf':'ஓலை',
+    'Other / kachcha':'மற்றவை / கச்சா',
+    'Total streets':'மொத்த தெருக்கள்',
+    'Total houses':'மொத்த வீடுகள்',
+    'Total families':'மொத்த குடும்பங்கள்',
+    'Total population':'மொத்த மக்கள் தொகை',
+    'Total students':'மொத்த மாணவர்கள்',
+    'Total':'மொத்தம்',
+    'Street':'தெரு',
+    'Street name':'தெரு பெயர்',
+    'Houses':'வீடுகள்',
+    'Moulding':'கான்கிரீட்',
+    'Cement':'சிமெண்ட்',
+    'Palm':'ஓலை',
+    'Other':'மற்றவை',
+    'Men':'ஆண்கள்',
+    'Women':'பெண்கள்',
+    'Primary':'தொடக்கநிலை',
+    'Higher secondary':'மேல்நிலை',
+    'College':'கல்லூரி',
+    'Madarsa':'மதரஸா',
+    'Married (men+women)':'திருமணமானவர்கள் (ஆண்+பெண்)',
+    'Unmarried (men+women)':'திருமணமாகாதவர்கள் (ஆண்+பெண்)',
+    'Widow':'விதவைகள்',
+    'Physically challenged':'மாற்றுத்திறனாளிகள்',
+    'Children (under 18)':'குழந்தைகள் (18 வயதுக்கு கீழ்)',
+    'Members with a job':'வேலை உள்ள உறுப்பினர்கள்',
+    'Different occupations':'வெவ்வேறு தொழில்கள்',
+    'Occupation':'தொழில்',
+    'Members':'உறுப்பினர்கள்',
+    'Document':'ஆவணம்',
+    'Have':'உள்ளது',
+    "Don't have":'இல்லை',
+    'Scheme':'திட்டம்',
+    'Members with all basic documents':'அனைத்து அடிப்படை ஆவணங்களும் உள்ளவர்கள்',
+    'Members with no basic document':'எந்த ஆவணமும் இல்லாதவர்கள்',
+    'Scheme applied':'திட்டம் பெற்றவர்',
+    'Scheme not applied':'திட்டம் பெறாதவர்',
+    'Aalim (men)':'ஆலிம் (ஆண்)',
+    'Hafiz (men)':'ஹாபிழ் (ஆண்)',
+    'Aalim (women)':'ஆலிம் (பெண்)',
+    'Hafiz (women)':'ஹாபிழ் (பெண்)',
+    'About':'பற்றி',
+    'Contact':'தொடர்பு',
+    'Rabta karo':'தொடர்பு கொள்ளுங்கள்',
+    'Masjid phone':'மசூதி தொலைபேசி',
+    'Masjid email':'மசூதி மின்னஞ்சல்',
+    'Address':'முகவரி',
+    'Admin':'நிர்வாகி',
+    'admin add karega':'நிர்வாகி சேர்ப்பார்',
+    'Qayam':'நிறுவப்பட்டது',
+    'Pata':'முகவரி',
+    'Imam':'இமாம்',
+    'Raqba':'பரப்பளவு',
+    'Capacity':'கொள்ளளவு',
+    'Masjid photos':'மசூதி படங்கள்',
+    'Admin login karke Masjid Profile me photos add hongi.':'நிர்வாகி உள்நுழைந்து மசூதி விவரத்தில் படங்களைச் சேர்க்கலாம்.',
+    'Masjid profile edit karo':'மசூதி விவரம் திருத்து',
+    'ke mohalle ka survey — har ghar, har fard, taleem, kaam aur deeni khidmat ka poora hisaab.':'முகவரி கணக்கெடுப்பு — ஒவ்வொரு வீடும், ஒவ்வொரு நபரும், கல்வி, வேலை மற்றும் மத சேவையின் முழு விவரம்.',
+    'Survey data sirf committee ke records ke liye · public view read-only':'தரவு குழு பதிவுகளுக்கு மட்டும் · பொது பார்வை படிக்க மட்டும்',
+    'Sirf committee admin ke liye. Baaki sab public dashboard dekh sakte hain.':'குழு நிர்வாகிக்கு மட்டும். மற்ற அனைவரும் பொது டாஷ்போர்டைப் பார்க்கலாம்.',
+    'Email ID':'மின்னஞ்சல் ஐடி',
+    'Password':'கடவுச்சொல்',
+    'Captcha — answer the sum':'கேப்ட்சா — கூட்டலுக்கு பதில் சொல்லுங்கள்',
+    'Answer':'பதில்',
+    'Login':'உள்நுழை',
+    'Email link se login (password ke bina)':'மின்னஞ்சல் இணைப்பால் உள்நுழை (கடவுச்சொல் இல்லாமல்)',
+    'Forgot password / ID?':'கடவுச்சொல் / ஐடி மறந்துவிட்டதா?',
+    'Create admin':'நிர்வாகி உருவாக்கு',
+    'New captcha':'புதிய கேப்ட்சா'
+  }
+};
+
+let LANG = 'hi';
+try { const saved = localStorage.getItem('memc_lang'); if (saved) LANG = saved; } catch(e){}
+if (LANG !== 'hi' && !I18N[LANG]) LANG = 'hi';
+
+const _norm = s => String(s).replace(/\s+/g,' ').trim();
+const _DICT = {};                                  // lang -> {normKey: text}
+const _REV  = {};                                  // lang -> {normText: normKey}
+Object.keys(I18N).forEach(lg=>{
+  _DICT[lg] = {}; _REV[lg] = {};
+  Object.keys(I18N[lg]).forEach(k=>{ const nk=_norm(k); _DICT[lg][nk]=I18N[lg][k]; _REV[lg][_norm(I18N[lg][k])]=nk; });
+});
+
+const _ORIGTXT = new WeakMap();                    // text node -> Hinglish source
+const _ORIGATTR = new WeakMap();                   // element  -> {attr: Hinglish source}
+const _TR_ATTRS = ['placeholder','title','aria-label'];
+
+function tStr(s){
+  if (LANG === 'hi' || s == null) return s;
+  const key = _norm(s);
+  const hit = _DICT[LANG][key];
+  if (hit) return hit;
+  if (_REV[LANG][key]) return s;                   // already translated
+  return s;
+}
+
+function langLabel(code){ const l = LANGS.find(x=>x[0]===code); return l ? l[1] : 'Hinglish'; }
+
+function translateTree(root){
+  const base = root || document.body;
+  if (!base) return;
+  const walker = document.createTreeWalker(base, NodeFilter.SHOW_TEXT, {
+    acceptNode(n){
+      const p = n.parentElement;
+      if (!p) return NodeFilter.FILTER_REJECT;
+      const tag = p.tagName;
+      if (tag==='SCRIPT'||tag==='STYLE'||tag==='TEXTAREA'||p.closest('.no-i18n')) return NodeFilter.FILTER_REJECT;
+      return n.nodeValue && n.nodeValue.trim() ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+    }
+  });
+  const nodes = []; let n;
+  while ((n = walker.nextNode())) nodes.push(n);
+
+  if (LANG === 'hi'){
+    nodes.forEach(node=>{ if (_ORIGTXT.has(node)) node.nodeValue = _ORIGTXT.get(node); });
+    base.querySelectorAll('[placeholder],[title],[aria-label]').forEach(el=>{
+      const o = _ORIGATTR.get(el); if (!o) return;
+      _TR_ATTRS.forEach(a=>{ if (o[a] != null) el.setAttribute(a, o[a]); });
+    });
+    return;
+  }
+
+  nodes.forEach(node=>{
+    if (!_ORIGTXT.has(node)) _ORIGTXT.set(node, node.nodeValue);
+    const src = _ORIGTXT.get(node);
+    const key = _norm(src);
+    const tr = _DICT[LANG][key];
+    const next = tr ? src.replace(key, tr) : src;
+    if (next !== node.nodeValue) node.nodeValue = next;
+  });
+
+  base.querySelectorAll('[placeholder],[title],[aria-label]').forEach(el=>{
+    let o = _ORIGATTR.get(el);
+    if (!o){ o = {}; _ORIGATTR.set(el, o); }
+    _TR_ATTRS.forEach(a=>{
+      const v = el.getAttribute(a); if (!v) return;
+      if (o[a] == null) o[a] = v;
+      const tr = _DICT[LANG][_norm(o[a])];
+      if (tr && el.getAttribute(a) !== tr) el.setAttribute(a, tr);
+    });
+  });
+
+  try { document.documentElement.setAttribute('lang', LANG); } catch(e){}
+}
+
+let _trTimer = null;
+function translateSoon(){
+  clearTimeout(_trTimer);
+  _trTimer = setTimeout(()=>{ try { translateTree(document.body); } catch(e){} }, 25);
+}
+
+function setLang(code){
+  if (code !== 'hi' && !I18N[code]) code = 'hi';
+  LANG = code;
+  try { localStorage.setItem('memc_lang', code); } catch(e){}
+  const sel = $('#langSel'); if (sel) sel.value = code;
+  try { renderShell(); } catch(e){}
+  try { go(state.view, state.param); } catch(e){}  // re-render content
+  translateTree(document.body);                    // then translate what is on screen
+  try { toast('Language: ' + langLabel(code), 'ok'); } catch(e){}
+}
+
 /* ============================== MASJID PROFILE ============================== */
 const MASJID_FIELDS = [
   ['name','Masjid ka naam','e.g. Masjid e Mohammadi'],
@@ -1774,6 +2098,10 @@ document.addEventListener('submit', async (e)=>{
 });
 
 // hamburger
+document.addEventListener('change', (e)=>{
+  if (e.target && e.target.id === 'langSel'){ setLang(e.target.value); }
+});
+
 document.addEventListener('DOMContentLoaded', ()=>{
   const b=$('#burger'); if(b) b.addEventListener('click', ()=>{ $('#sidebar').classList.add('open'); $('#scrimNav').classList.add('show'); });
   const sc=$('#scrimNav'); if(sc) sc.addEventListener('click', closeNav);
@@ -2110,8 +2438,17 @@ function init(){
       return;
     }
   } catch(e){}
+  try {
+    const sel = $('#langSel');
+    if (sel){ sel.value = LANG; sel.addEventListener('change', ()=> setLang(sel.value)); }
+  } catch(e){}
   enterApp();   // public dashboard pehle — login optional
   cloudAutoLogin();
+  try { new MutationObserver(()=>translateSoon()).observe(document.body, { childList:true, subtree:true }); } catch(e){}
+  translateSoon();
 }
 if (document.readyState==='loading') document.addEventListener('DOMContentLoaded', init);
 else init();
+
+/* debug/test hooks (harmless) */
+try { window.setLang = setLang; window.translateTree = translateTree; window.getLang = ()=>LANG; } catch(e){}
