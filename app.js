@@ -268,6 +268,7 @@ function renderLogin(){
       </div>
       <div id="loginAlert"></div>
       <button class="btn block" type="submit">Login</button>
+      <button class="btn ghost block" type="button" data-act="magic-login" style="margin-top:8px">Email link se login (password ke bina)</button>
       <div style="display:flex;gap:8px;justify-content:space-between;margin-top:12px;flex-wrap:wrap">
         <button class="linklike" type="button" data-act="auth-tab" data-tab="forgot">Forgot password / ID?</button>
         <button class="linklike" type="button" data-act="auth-tab" data-tab="register">Create admin</button>
@@ -386,9 +387,10 @@ async function cloudClaimAdmin(email, name, phone){
 /* ---------------- email LINK step (cloud) ---------------- */
 function renderLinkSent(){
   const isReset = pending.kind === 'reset';
+  const isLogin = pending.kind === 'login';
   $('#authScreen').innerHTML = authCard(`
-    <h1>${isReset?'Reset link bhej diya':'Email check karo'}</h1>
-    <p class="lead"><b>${esc(pending.email)}</b> par ${isReset?'password reset':'confirm'} link bheja hai.</p>
+    <h1>${isReset?'Reset link bhej diya':isLogin?'Login link bhej diya':'Email check karo'}</h1>
+    <p class="lead"><b>${esc(pending.email)}</b> par ${isReset?'password reset':isLogin?'login':'confirm'} link bheja hai.</p>
     <div class="alert info">Email kholo → link par <b>click</b> karo → app khud login kar lega.<br>
       <span class="small">Link na dikhe to spam folder dekho. Link 1 ghante tak chalta hai.</span></div>
     <button class="btn block" type="button" data-act="auth-check">Maine link par click kar liya</button>
@@ -404,8 +406,20 @@ async function cloudLinkCheck(){
   const email = (sess.user.email||'').toLowerCase();
   if (pending && pending.kind === 'reset'){ pending = { kind:'newpass', email }; return renderNewPassword(); }
   const md = sess.user.user_metadata || {};
-  await cloudClaimAdmin(email, md.name||'', md.phone||'');
-  if (!adminByEmail(email)){
+  const known = !!adminByEmail(email);
+  const granted = await cloudClaimAdmin(email, md.name||'', md.phone||'');
+  if (!known && !granted){
+    await c.auth.signOut();
+    setSession(null);
+    const box = $('#codeAlert') || $('#authScreen');
+    $('#authScreen').innerHTML = authCard(`
+      <h1>Permission nahi mili</h1>
+      <p class="lead"><b>${esc(email)}</b> admin list me nahi hai.</p>
+      <div class="alert info">Admin login sirf committee ke registered email se hota hai. Is email ko pehle <b>Admins</b> screen se add karna hoga (cloud me write permission sirf pehle admin ke paas hai).</div>
+      <button class="btn block" type="button" data-act="open-auth">Wapas login</button>`);
+    return;
+  }
+  if (!known){
     const admins = DB.admins();
     admins.push({ email, name:md.name||email.split('@')[0], phone:md.phone||'', createdAt:Date.now(), verified:true, cloud:true });
     DB.setAdmins(admins);
@@ -1433,6 +1447,22 @@ document.addEventListener('click', (e)=>{
   if (act==='toggle-theme') { toggleTheme(); const b=$('#themeBtn2'); if(b) b.textContent = document.documentElement.getAttribute('data-theme')==='night'?'☾ Night':'☀ Day'; return; }
   if (act==='goto'){ if (el.dataset.view==='add'){ state.draft=blankDraft(); go(el.dataset.view); } else go(el.dataset.view, el.dataset.street||null); return; }
   if (act==='auth-check'){ cloudLinkCheck(); return; }
+  if (act==='magic-login'){
+    const f = $('#loginForm');
+    const email = f ? String(f.elements.email.value||'').trim().toLowerCase() : '';
+    const box = $('#loginAlert');
+    if (!isEmail(email)){ if (box) box.innerHTML='<div class="alert err">Pehle upar apna email daalo, phir ye button dabao.</div>'; return; }
+    if (mailMode() !== 'cloud'){ if (box) box.innerHTML='<div class="alert err">Email login ke liye cloud on hona chahiye.</div>'; return; }
+    (async ()=>{
+      const c = await CLOUD.get();
+      if (!c){ if (box) box.innerHTML='<div class="alert err">Cloud connect nahi hua — internet check karo.</div>'; return; }
+      const { error } = await c.auth.signInWithOtp({ email, options:{ shouldCreateUser:false, emailRedirectTo: location.origin + location.pathname } });
+      if (error){ if (box) box.innerHTML='<div class="alert err">'+esc(error.message)+'</div>'; return; }
+      pending = { kind:'login', email };
+      renderLinkSent();
+    })();
+    return;
+  }
   if (act==='photo'){ const src = el.dataset.src; if (src) openPhoto(src); return; }
   if (act==='open-auth'){ openAuth('login'); return; }
   if (act==='close-auth'){ closeAuth(); return; }
