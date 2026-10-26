@@ -151,3 +151,4 @@ grant select, insert, update, delete on public.families to authenticated;
 grant select, insert, update, delete on public.members  to authenticated;
 grant select, insert, update, delete on public.masjid   to authenticated;
 grant select, insert, update on public.app_users to authenticated;
+revoke all on public.app_users from anon;

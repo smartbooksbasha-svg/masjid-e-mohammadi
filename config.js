@@ -12,8 +12,8 @@
     Row Level Security policies, not kept secret.)
    ============================================================ */
 window.APP_CONFIG = {
-  SUPABASE_URL: "",       // e.g. "https://xxxxxxxx.supabase.co"
-  SUPABASE_ANON_KEY: "",  // e.g. "eyJhbGciOi..."
+  SUPABASE_URL: "https://yipxzbgqtyvfllrpqehs.supabase.co", // Shan ka project (2026-10-26)
+  SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlpcHh6YmdxdHl2ZmxscnBxZWhzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMwMjczNjcsImV4cCI6MjEwODYwMzM2N30.7nopVZwAOvi6Wu3g3nM1Chxfwt5AHoaVlgFlgNa9qXM",  // e.g. "eyJhbGciOi..."
   ADMIN_INVITE_CODE: "MEMC-2026",  // naye admin register karne ke liye code (badal lo)
   ORG_NAME: "Masjid - E- Mohammadiy",
   ORG_SUB: "Khidmath Committee",

@@ -289,6 +289,7 @@ function renderLogin(){
       if (!c){ alertBox.innerHTML='<div class="alert err">Cloud connect nahi hua — internet check karo.</div>'; return; }
       const { error } = await c.auth.signInWithPassword({ email, password: pass });
       if (error){ alertBox.innerHTML='<div class="alert err">'+esc(error.message)+'</div>'; return; }
+      await cloudClaimAdmin(email, '', '');
       if (!adminByEmail(email)){
         const admins = DB.admins();
         admins.push({ email, name:email.split('@')[0], phone:'', createdAt:Date.now(), verified:true, cloud:true });
@@ -359,6 +360,20 @@ function renderRegister(){
   });
 }
 
+
+/* Supabase side: logged-in auth user ko app_users (admin) me claim karo */
+async function cloudClaimAdmin(email, name, phone){
+  const c = await CLOUD.get(); if (!c) return false;
+  try {
+    const { data } = await c.auth.getUser();
+    const u = data && data.user; if (!u) return false;
+    const { data: rows } = await c.from('app_users').select('id').eq('user_id', u.id).limit(1);
+    if (rows && rows.length) return true;
+    const { error } = await c.from('app_users').upsert({ id:email, user_id:u.id, role:'admin', name:name||'', phone:phone||'' });
+    return !error;
+  } catch(e){ return false; }
+}
+
 /* ---------------- email code step ---------------- */
 function renderCodeStep(){
   const p = pending;
@@ -387,6 +402,7 @@ function renderCodeStep(){
       if (pending.kind === 'register'){
         const { error } = await c.auth.verifyOtp({ email:pending.email, token:code, type:'signup' });
         if (error){ alertBox.innerHTML='<div class="alert err">'+esc(error.message)+'</div>'; return; }
+        await cloudClaimAdmin(pending.email, pending.name, pending.phone);
         const admins = DB.admins();
         admins.push({ email:pending.email, name:pending.name, phone:pending.phone, createdAt:Date.now(), verified:true, cloud:true });
         DB.setAdmins(admins);
