@@ -672,7 +672,9 @@ function renderShell(){
     chip.title = 'Read-only public view';
   }
   const foot = document.querySelector('.sb-foot');
-  if (foot) foot.textContent = u ? 'Admin mode · you can add and edit' : 'Public view · read only';
+  if (foot) foot.innerHTML = u
+    ? 'Admin mode · you can add and edit'
+    : 'Public view · read only<br><button class="linklike" type="button" data-act="open-auth" style="margin-top:8px">Admin login / create admin</button>';
   $$('#nav .nav-item').forEach(a=>a.classList.toggle('active', a.dataset.view===state.view || (state.view==='add' && a.dataset.view==='add')));
   closeNav();
 }

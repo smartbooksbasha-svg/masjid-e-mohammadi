@@ -296,7 +296,8 @@ td .mono{font-family:var(--font-display);font-weight:600;color:var(--accent)}
   .topbar{gap:8px;padding:10px max(12px,env(safe-area-inset-left)) 10px max(12px,env(safe-area-inset-right))}
   .topbar .title{font-size:.98rem}
   .user-chip{padding:4px}
-  .user-chip>span:last-child{display:none}
+  .user-chip>span:not(.av):not(.btn){display:none}
+  .user-chip .btn.sm{padding:7px 10px;font-size:.78rem}
   .user-chip .av{width:30px;height:30px}
   .toggle{padding:0 11px}
   .content{padding:16px 14px calc(24px + env(safe-area-inset-bottom))}
