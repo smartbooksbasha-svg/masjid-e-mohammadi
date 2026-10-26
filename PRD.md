@@ -81,8 +81,14 @@ Shan ka survey plan hi data model ban gaya. Har household record me:
    challenged / widow), children under 18.
 3. **Education** — students split: primary, higher secondary, college,
    madarsa.
-4. **Professional** — men & women × private sector / government / business.
+4. **Occupations** — free-text kaam (plumber, electrician, painter, helper,
+   tailor, driver…) ginti ke saath; men/women split. Purane records ka
+   private/government/business ab occupation me map ho jata hai.
 5. **Religious Education** — Aalim & Hafiz, men and women separately.
+6. **Documents & Schemes** — per-member documents (Aadhaar, Ration, Voter,
+   BPL/Ayushman, Bank, Passport, TN Kapidu Thittam card) aur welfare
+   schemes (Magalir Urimai Thogai, disability pension, old age pension,
+   widow pension, school scholarship, PM Awas, Ayushman, Ujjwala, bus pass).
 
 Dashboard in 5 numbered group cards + a street-wise table (street → houses →
 moulding / cement sheet / other) + KPI row (streets · houses · families ·

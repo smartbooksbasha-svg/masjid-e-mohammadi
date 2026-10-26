@@ -86,6 +86,20 @@ Password = SHA-256 + per-user salt (`crypto.subtle`, fnv fallback).
   Printed on the report header; exported as an Excel `Masjid` sheet.
 - Family role can open Masjid Profile (read-only).
 
+## v2.2 changes (2026-10-26, Shan's correction)
+- **Occupation replaces the private/govt/business sector dropdown.** Field is
+  free text `member.occupation` with a suggestion list `OCCUPATIONS`
+  (`#occList` datalist). Legacy `sector` is mapped through `occName()`.
+- Dashboard group 4 = **Occupations**: members-with-a-job, distinct count, and
+  a table Occupation | Men | Women | Total (sorted by total).
+- **Documents** now include Passport and TN Kapidu Thittam card (7 total).
+- **Schemes are a multi-select** (`member.schemes = {key:'yes'}`) from the
+  `SCHEMES` list: Magalir Urimai Thogai, disability / old age / widow pension,
+  school scholarship, PM Awas, Ayushman, Ujjwala, bus pass, other.
+  Old `govtScheme` + `schemeName` still read via `memberSchemes()`.
+- Scheme table on dashboard group 6 shows per-scheme member counts.
+- Tests: 81/81 green.
+
 ## State of things (2026-10-26)
 Live: https://smartbooksbasha-svg.github.io/masjid-kidmat-records/
 v2 survey upgrade: 5-section dashboard + extended household/member form +
