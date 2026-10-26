@@ -14,6 +14,7 @@
 window.APP_CONFIG = {
   SUPABASE_URL: "",       // e.g. "https://xxxxxxxx.supabase.co"
   SUPABASE_ANON_KEY: "",  // e.g. "eyJhbGciOi..."
+  ADMIN_INVITE_CODE: "MEMC-2026",  // naye admin register karne ke liye code (badal lo)
   ORG_NAME: "Masjid - E- Mohammadiy",
   ORG_SUB: "Khidmath Committee",
   FAMILY_ID_PREFIX: "MEMC"

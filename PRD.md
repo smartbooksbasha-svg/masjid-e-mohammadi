@@ -111,3 +111,12 @@ inferred into a level).
 9. **Masjid Profile** — masjid details (name, est. year, address, phone,
    imam, muazzin, area, capacity, rooms, madrasa, waqf, bank, note) and up
    to six photos; appears on printed reports + Excel `Masjid` sheet.
+
+### v3 (2026-10-26) — public survey website, single admin
+- Visitor (no login): dashboard totals, family list + household detail, masjid profile + photos.
+  Phone masked, no export, no edit.
+- Admin (email + password + captcha): everything — add/edit/delete households, members,
+  documents, schemes, masjid profile, publish changes to cloud.
+- Forgot password (email code) + forgot user ID (phone lookup). New admin needs invite code +
+  email verification.
+- Cloud = Supabase when keys present, else local demo mode.

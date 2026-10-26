@@ -108,3 +108,19 @@ Smoke test 75/75 green (v2.1).
 Open: wire Supabase keys; real OTP SMS later.
 - Note: login IDs/passwords live only in the browser localStorage — no
   password-reset flow yet (forgotten password = add reset or clear data).
+
+## v3 — PUBLIC WEBSITE + SINGLE ADMIN (2026-10-26)
+- Roles: **admin** (email login, `memc_admins`) + **anonymous public** (no session).
+  Family/super logins hata diye; purane `memc_users` ek baar migrate hote hain.
+- Public dekh sakta hai: dashboard (saare 6 groups + KPI), families list + detail,
+  masjid photos. Nahin dekh sakta: phone (masked), edit/add/delete, export/print,
+  Admins + Settings screens (public ho to sirf "Admin login" button).
+- Admin login page: email + password + captcha; **forgot password** (email code →
+  new password) aur **forgot user ID** (registered phone se email dhundho).
+  Register: invite code (`config.js → ADMIN_INVITE_CODE`) + email verification code.
+- Cloud: `SYNC` (app.js) — anon *read* + admin *write*; Supabase keys na ho to
+  demo mode (local only) aur verification code screen par dikhta hai.
+- Schema v3 (`supabase/schema.sql`) — public read allowed, phone/address column
+  grants se anon ke liye blocked, writes sirf `is_admin()`.
+- sw cache: `memc-app-v5`.
+- QA: jsdom smoke 97/97 (`$TMPDIR/zytest/smoke-survey.js`).

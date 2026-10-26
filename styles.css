@@ -356,3 +356,16 @@ td .mono{font-family:var(--font-display);font-weight:600;color:var(--accent)}
   .doc-pills button{border:1px solid #999}
   .doc-pills button.on{background:#ddd}
 }
+
+
+/* ---------- public view / auth links ---------- */
+.linklike{background:none;border:0;color:var(--accent);font:inherit;font-size:.82rem;font-weight:600;
+  padding:6px 0;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+.linklike:hover{opacity:.8}
+.public-chip{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:999px;
+  background:var(--surface-2);border:1px solid var(--line);font-size:.74rem;font-weight:700;color:var(--muted)}
+.auth-card .role-tabs{margin-bottom:14px}
+#userChip{gap:8px}
+@media (max-width:560px){
+  .public-chip{display:none}
+}

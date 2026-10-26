@@ -7,7 +7,7 @@
 /* ---------------- config / constants ---------------- */
 const CFG = window.APP_CONFIG || {};
 const PREFIX = CFG.FAMILY_ID_PREFIX || 'MEMC';
-const LS = { users:'memc_users', families:'memc_families', seq:'memc_seq', session:'memc_session', theme:'memc_theme', seeded:'memc_seeded', masjid:'memc_masjid' };
+const LS = { users:'memc_users', admins:'memc_admins', families:'memc_families', seq:'memc_seq', session:'memc_session', theme:'memc_theme', seeded:'memc_seeded', masjid:'memc_masjid' };
 
 const DOC_TYPES = [
   ['aadhaar','Aadhaar Card'], ['pan','PAN Card'], ['passport','Passport'],
@@ -114,6 +114,11 @@ function ageFromDob(dob){
   if (m<0 || (m===0 && t.getDate()<d.getDate())) a--;
   return a>=0 && a<130 ? a : null;
 }
+function maskPhone(p){
+  const d = String(p||'').replace(/\D/g,'');
+  if (d.length < 6) return p ? '••••••' : '—';
+  return d.slice(0,2) + '•••••' + d.slice(-2);
+}
 function fmtDate(d){ if(!d) return '—'; const x=new Date(d); return isNaN(x)?d:x.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}); }
 function todayStr(){ const d=new Date(); return d.getFullYear()+'-'+pad(d.getMonth()+1,2)+'-'+pad(d.getDate(),2); }
 
@@ -121,6 +126,21 @@ function todayStr(){ const d=new Date(); return d.getFullYear()+'-'+pad(d.getMon
 const DB = {
   users(){ try{ return JSON.parse(localStorage.getItem(LS.users)||'[]'); }catch(e){ return []; } },
   setUsers(v){ localStorage.setItem(LS.users, JSON.stringify(v)); },
+  /* single-role world: admins only. Old super/admin accounts migrate once. */
+  admins(){
+    try {
+      const raw = JSON.parse(localStorage.getItem(LS.admins)||'null');
+      if (Array.isArray(raw)) return raw;
+    } catch(e){}
+    const legacy = this.users().filter(u=>u.role==='super'||u.role==='admin').map(u=>({
+      email: String(u.id||'').includes('@') ? u.id : (u.email||''),
+      name: u.name||u.id, phone:u.phone||'', salt:u.salt, passHash:u.passHash,
+      createdAt:u.createdAt||Date.now(), verified:true, legacyId:u.id
+    })).filter(a=>a.email);
+    localStorage.setItem(LS.admins, JSON.stringify(legacy));
+    return legacy;
+  },
+  setAdmins(v){ localStorage.setItem(LS.admins, JSON.stringify(v)); },
   families(){ try{ return JSON.parse(localStorage.getItem(LS.families)||'[]'); }catch(e){ return []; } },
   setFamilies(v){ localStorage.setItem(LS.families, JSON.stringify(v)); },
   seq(){ return parseInt(localStorage.getItem(LS.seq)||'0',10)||0; },
@@ -134,7 +154,29 @@ const DB = {
 function getSession(){ try{ return JSON.parse(localStorage.getItem(LS.session)||'null'); }catch(e){ return null; } }
 function setSession(s){ localStorage.setItem(LS.session, JSON.stringify(s)); }
 function clearSession(){ localStorage.removeItem(LS.session); }
-function currentUser(){ const s=getSession(); if(!s) return null; return DB.users().find(u=>u.id===s.userId) || null; }
+
+/* ---------- optional cloud (Supabase) ---------- */
+const CLOUD = {
+  enabled(){ return !!(CFG.SUPABASE_URL && CFG.SUPABASE_ANON_KEY); },
+  client: null, failed: false,
+  async get(){
+    if (!this.enabled() || this.failed) return null;
+    if (this.client) return this.client;
+    try {
+      const mod = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm');
+      this.client = mod.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY);
+      return this.client;
+    } catch(e){ this.failed = true; return null; }
+  }
+};
+
+function currentUser(){
+  const s = getSession();
+  if (!s || s.kind !== 'admin' || !s.email) return null;
+  const a = DB.admins().find(x=>String(x.email).toLowerCase()===String(s.email).toLowerCase());
+  return a ? { id:a.email, email:a.email, name:a.name||a.email, role:'admin' } : null;
+}
+function isAdmin(){ return !!currentUser(); }
 
 /* ---------------- theme ---------------- */
 function applyTheme(t){ document.documentElement.setAttribute('data-theme', t); localStorage.setItem(LS.theme, t);
@@ -163,119 +205,306 @@ const ICON = {
 };
 
 /* ============================================================
-   AUTH
+   AUTH — ek Admin login · public visitors read-only
    ============================================================ */
-let pending = null; // {user, otp} during login
+let pending = null;      // { kind:'login'|'register'|'reset', email, code, name, phone, pass, expires }
 
-function renderAuth(){
-  const app = $('#appScreen'); if (app) app.classList.add('hidden');
-  const auth = $('#authScreen'); auth.classList.remove('hidden');
-  if (!DB.users().some(u=>u.role==='super')) { renderSetup(); return; }
-  if (!currentUser()) { renderLogin(); return; }
-  enterApp();
+function adminByEmail(email){
+  const e = String(email||'').trim().toLowerCase();
+  return DB.admins().find(a=>String(a.email||'').toLowerCase()===e) || null;
 }
+function mailMode(){ return CLOUD.enabled() ? 'cloud' : 'demo'; }
+function newCode(){ return String(100000 + Math.floor(Math.random()*900000)); }
+function isEmail(v){ return /^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(String(v||'').trim()); }
 
-function renderSetup(){
-  $('#authScreen').innerHTML = `
-  <div class="auth-wrap"><div class="auth-card">
+function authCard(inner){
+  return `<div class="auth-wrap"><div class="auth-card">
     <div class="auth-brand"><span class="crest">M</span><div><div class="t">${esc(CFG.ORG_NAME||'Masjid - E- Mohammadiy')}</div><div class="s">${esc(CFG.ORG_SUB||'Khidmath Committee')}</div></div></div>
-    <h1>First-time setup</h1>
-    <p class="lead">Create the <b>Super Admin</b> account. Iske baad login screen khulegi.</p>
-    <form id="setupForm">
-      <div class="field"><label>Full name</label><input class="inp" name="name" required placeholder="e.g. Abdul Rahman" /></div>
-      <div class="grid g2">
-        <div class="field"><label>Mobile number</label><input class="inp" name="phone" inputmode="numeric" placeholder="10-digit number" /></div>
-        <div class="field"><label>Login ID</label><input class="inp" name="id" required placeholder="e.g. admin" /></div>
-      </div>
-      <div class="grid g2">
-        <div class="field"><label>Password</label><input class="inp" name="pass" type="password" required minlength="4" placeholder="min 4 characters" /></div>
-        <div class="field"><label>Confirm password</label><input class="inp" name="pass2" type="password" required minlength="4" /></div>
-      </div>
-      <div id="setupAlert"></div>
-      <button class="btn block" type="submit">Create Super Admin</button>
-    </form>
+    ${inner}
+    <button class="btn ghost block" type="button" data-act="close-auth" style="margin-top:10px">← Public dashboard</button>
   </div></div>`;
-  $('#setupForm').addEventListener('submit', async (e)=>{
-    e.preventDefault();
-    const E = e.target.elements;
-    const name=E.name.value.trim(), phone=E.phone.value.trim(), id=E.id.value.trim().toLowerCase(), pass=E.pass.value, pass2=E.pass2.value;
-    const alertBox = $('#setupAlert');
-    if (pass !== pass2){ alertBox.innerHTML = '<div class="alert err">Passwords do not match.</div>'; return; }
-    if (DB.users().some(u=>u.id===id)){ alertBox.innerHTML = '<div class="alert err">That ID is already taken.</div>'; return; }
-    const salt = uid();
-    const user = { id, role:'super', name:name||id, phone, salt, passHash: await hashPass(pass, salt), createdAt: Date.now() };
-    const users = DB.users(); users.push(user); DB.setUsers(users);
-    toast('Super Admin created — please log in');
-    renderLogin();
-  });
+}
+function authTabs(active){
+  return `<div class="role-tabs" id="authTabs">
+    <button data-tab="login" class="${active==='login'?'active':''}">Login</button>
+    <button data-tab="register" class="${active==='register'?'active':''}">Register</button>
+    <button data-tab="forgot" class="${active==='forgot'?'active':''}">Forgot</button>
+  </div>`;
 }
 
+function openAuth(tab){
+  renderAuth(tab || 'login');
+}
+function closeAuth(){
+  const a = $('#authScreen'); if (a){ a.classList.add('hidden'); a.innerHTML=''; }
+  const app = $('#appScreen'); if (app) app.classList.remove('hidden');
+}
+
+function renderAuth(tab){
+  const app = $('#appScreen'); if (app) app.classList.add('hidden');
+  const box = $('#authScreen'); box.classList.remove('hidden');
+  pending = pending && pending.expires > Date.now() ? pending : null;
+  if (pending) return renderCodeStep();
+
+  if (tab === 'register') return renderRegister();
+  if (tab === 'forgot')  return renderForgot();
+  return renderLogin();
+}
+
+/* ---------------- login ---------------- */
 function renderLogin(){
-  $('#authScreen').innerHTML = `
-  <div class="auth-wrap"><div class="auth-card">
-    <div class="auth-brand"><span class="crest">M</span><div><div class="t">${esc(CFG.ORG_NAME||'Masjid - E- Mohammadiy')}</div><div class="s">${esc(CFG.ORG_SUB||'Khidmath Committee')}</div></div></div>
-    <h1>Sign in</h1>
-    <p class="lead">Apna login ID aur password daaliye.</p>
-    <div class="role-tabs" id="roleTabs">
-      <button data-role="super" class="active">Super Admin</button>
-      <button data-role="admin">Admin</button>
-      <button data-role="family">Family</button>
-    </div>
+  $('#authScreen').innerHTML = authCard(`
+    <h1>Admin login</h1>
+    <p class="lead">Sirf committee admin ke liye. Baaki sab public dashboard dekh sakte hain.</p>
+    ${authTabs('login')}
     <form id="loginForm">
-      <div class="field"><label>Login ID</label><input class="inp" name="id" required autocomplete="username" placeholder="ID / Family ID" /></div>
+      <div class="field"><label>Email ID</label><input class="inp" name="email" type="email" required autocomplete="username" placeholder="admin@example.com" /></div>
       <div class="field"><label>Password</label><input class="inp" name="pass" type="password" required autocomplete="current-password" /></div>
       <div class="field"><label>Captcha — answer the sum</label>
         <div class="captcha-box"><div class="captcha-q" id="captchaQ"></div><button type="button" class="icon-btn" id="captchaReload" aria-label="New captcha">↻</button></div>
         <input class="inp" name="captcha" inputmode="numeric" required placeholder="Answer" style="margin-top:6px" />
       </div>
       <div id="loginAlert"></div>
-      <button class="btn block" type="submit">Continue</button>
-    </form>
-  </div></div>`;
+      <button class="btn block" type="submit">Login</button>
+      <div style="display:flex;gap:8px;justify-content:space-between;margin-top:12px;flex-wrap:wrap">
+        <button class="linklike" type="button" data-act="auth-tab" data-tab="forgot">Forgot password / ID?</button>
+        <button class="linklike" type="button" data-act="auth-tab" data-tab="register">Create admin</button>
+      </div>
+    </form>`);
 
-  let role = 'super', capA = 0, capB = 0;
-  const newCaptcha = ()=>{ capA = 2+Math.floor(Math.random()*8); capB = 1+Math.floor(Math.random()*8); $('#captchaQ').textContent = capA + ' + ' + capB + ' = ?'; };
+  let capA=0, capB=0;
+  const newCaptcha = ()=>{ capA=2+Math.floor(Math.random()*8); capB=1+Math.floor(Math.random()*8); $('#captchaQ').textContent = capA+' + '+capB+' = ?'; };
   newCaptcha();
   $('#captchaReload').addEventListener('click', newCaptcha);
-  $('#roleTabs').addEventListener('click', (e)=>{ const b=e.target.closest('button'); if(!b) return; $$('#roleTabs button').forEach(x=>x.classList.remove('active')); b.classList.add('active'); role=b.dataset.role; });
 
   $('#loginForm').addEventListener('submit', async (e)=>{
     e.preventDefault();
-    const f=e.target, E=f.elements, alertBox=$('#loginAlert');
-    const id=E.id.value.trim().toLowerCase(), pass=E.pass.value, cap=parseInt(E.captcha.value,10);
-    if (cap !== capA + capB){ alertBox.innerHTML='<div class="alert err">Captcha answer is wrong.</div>'; newCaptcha(); E.captcha.value=''; return; }
-    const user = DB.users().find(u=>u.id===id);
-    if (!user){ alertBox.innerHTML='<div class="alert err">No account with that ID.</div>'; newCaptcha(); return; }
-    if (user.role !== role){ alertBox.innerHTML=`<div class="alert err">This is not a ${ROLE_LABEL[role]} account.</div>`; newCaptcha(); return; }
-    const h = await hashPass(pass, user.salt);
-    if (h !== user.passHash){ alertBox.innerHTML='<div class="alert err">Incorrect password.</div>'; newCaptcha(); return; }
-    // demo OTP step
-    pending = { user, otp: String(100000 + Math.floor(Math.random()*900000)) };
-    renderOtp();
+    const E = e.target.elements, alertBox = $('#loginAlert');
+    const email = E.email.value.trim().toLowerCase(), pass = E.pass.value;
+    if (parseInt(E.captcha.value,10) !== capA+capB){ alertBox.innerHTML='<div class="alert err">Captcha answer is wrong.</div>'; newCaptcha(); E.captcha.value=''; return; }
+    if (!isEmail(email)){ alertBox.innerHTML='<div class="alert err">Email ID theek nahi lag rahi.</div>'; return; }
+
+    if (mailMode() === 'cloud'){
+      const c = await CLOUD.get();
+      if (!c){ alertBox.innerHTML='<div class="alert err">Cloud connect nahi hua — internet check karo.</div>'; return; }
+      const { error } = await c.auth.signInWithPassword({ email, password: pass });
+      if (error){ alertBox.innerHTML='<div class="alert err">'+esc(error.message)+'</div>'; return; }
+      if (!adminByEmail(email)){
+        const admins = DB.admins();
+        admins.push({ email, name:email.split('@')[0], phone:'', createdAt:Date.now(), verified:true, cloud:true });
+        DB.setAdmins(admins);
+      }
+      setSession({ kind:'admin', email });
+      closeAuth(); enterApp(); toast('Welcome back'); return;
+    }
+
+    const admin = adminByEmail(email);
+    if (!admin){ alertBox.innerHTML='<div class="alert err">Is email se koi admin nahi hai.</div>'; newCaptcha(); return; }
+    const h = await hashPass(pass, admin.salt);
+    if (h !== admin.passHash){ alertBox.innerHTML='<div class="alert err">Password galat hai.</div>'; newCaptcha(); return; }
+    pending = { kind:'login', email, code:newCode(), expires:Date.now()+10*60*1000 };
+    renderCodeStep();
   });
 }
 
-function renderOtp(){
-  $('#authScreen').innerHTML = `
-  <div class="auth-wrap"><div class="auth-card">
-    <div class="auth-brand"><span class="crest">M</span><div><div class="t">${esc(CFG.ORG_NAME||'Masjid - E- Mohammadiy')}</div><div class="s">${esc(CFG.ORG_SUB||'Khidmath Committee')}</div></div></div>
-    <h1>Verify mobile OTP</h1>
-    <p class="lead">A 6-digit code was sent to <b>${esc(pending.user.phone||'your mobile')}</b>.</p>
-    <div class="alert info">Demo mode — SMS is not connected yet. Your code is: <span class="otp-badge">${pending.otp}</span></div>
-    <form id="otpForm" style="margin-top:14px">
-      <div class="field"><label>Enter OTP</label><input class="inp" name="otp" inputmode="numeric" maxlength="6" required placeholder="6-digit code" style="letter-spacing:.3em;text-align:center;font-size:1.2rem" /></div>
-      <div id="otpAlert"></div>
-      <button class="btn block" type="submit">Verify &amp; Sign in</button>
-      <button class="btn ghost block" type="button" id="otpBack">Back</button>
-    </form>
-  </div></div>`;
-  $('#otpBack').addEventListener('click', ()=>{ pending=null; renderLogin(); });
-  $('#otpForm').addEventListener('submit', (e)=>{
+/* ---------------- register ---------------- */
+function renderRegister(){
+  const first = DB.admins().length === 0;
+  $('#authScreen').innerHTML = authCard(`
+    <h1>${first?'Create the first admin':'Create another admin'}</h1>
+    <p class="lead">${first ? 'Pehla admin account banao — email par 6-digit code aayega.' : 'Naya admin banane ke liye committee ka invite code chahiye.'}</p>
+    ${authTabs('register')}
+    <form id="regForm">
+      <div class="field"><label>Full name</label><input class="inp" name="name" required placeholder="e.g. Abdul Rahman" /></div>
+      <div class="grid g2">
+        <div class="field"><label>Email ID</label><input class="inp" name="email" type="email" required placeholder="name@example.com" /></div>
+        <div class="field"><label>Mobile</label><input class="inp" name="phone" inputmode="numeric" placeholder="10-digit" /></div>
+      </div>
+      <div class="grid g2">
+        <div class="field"><label>Password</label><input class="inp" name="pass" type="password" required minlength="6" placeholder="min 6 characters" /></div>
+        <div class="field"><label>Confirm password</label><input class="inp" name="pass2" type="password" required minlength="6" /></div>
+      </div>
+      ${first ? '' : `<div class="field"><label>Invite code</label><input class="inp" name="invite" required placeholder="Admin se poochho" />
+        <span class="hint">Settings me admin invite code dikhta hai.</span></div>`}
+      <div id="regAlert"></div>
+      <button class="btn block" type="submit">Send code to email</button>
+    </form>`);
+
+  $('#regForm').addEventListener('submit', async (e)=>{
     e.preventDefault();
-    if (e.target.elements.otp.value.trim() !== pending.otp){ $('#otpAlert').innerHTML='<div class="alert err">Wrong OTP. Try again.</div>'; return; }
-    const u = pending.user; pending=null;
-    setSession({ userId:u.id });
-    enterApp();
+    const E = e.target.elements, alertBox = $('#regAlert');
+    const name = E.name.value.trim(), email = E.email.value.trim().toLowerCase(), phone = E.phone.value.trim();
+    const pass = E.pass.value, pass2 = E.pass2.value;
+    if (!isEmail(email)){ alertBox.innerHTML='<div class="alert err">Valid email ID daalo.</div>'; return; }
+    if (adminByEmail(email)){ alertBox.innerHTML='<div class="alert err">Ye email pehle se admin hai — login karo.</div>'; return; }
+    if (pass !== pass2){ alertBox.innerHTML='<div class="alert err">Passwords match nahi kar rahe.</div>'; return; }
+    if (pass.length < 6){ alertBox.innerHTML='<div class="alert err">Password kam se kam 6 characters ka ho.</div>'; return; }
+    if (DB.admins().length){
+      const code = (CFG.ADMIN_INVITE_CODE||'').trim().toUpperCase();
+      if (!code || E.invite.value.trim().toUpperCase() !== code){ alertBox.innerHTML='<div class="alert err">Invite code galat hai.</div>'; return; }
+    }
+
+    if (mailMode() === 'cloud'){
+      const c = await CLOUD.get();
+      if (!c){ alertBox.innerHTML='<div class="alert err">Cloud connect nahi hua.</div>'; return; }
+      const { error } = await c.auth.signUp({ email, password: pass, options:{ data:{ name, phone } } });
+      if (error){ alertBox.innerHTML='<div class="alert err">'+esc(error.message)+'</div>'; return; }
+      pending = { kind:'register', email, name, phone, code:'', expires:Date.now()+10*60*1000 };
+      renderCodeStep(); return;
+    }
+
+    const code = newCode();
+    pending = { kind:'register', email, name, phone, pass, code, expires:Date.now()+10*60*1000 };
+    renderCodeStep();
+  });
+}
+
+/* ---------------- email code step ---------------- */
+function renderCodeStep(){
+  const p = pending;
+  const demo = mailMode() === 'demo';
+  const titleMap = { login:'Confirm login', register:'Verify your email', reset:'Reset password' };
+  $('#authScreen').innerHTML = authCard(`
+    <h1>${titleMap[p.kind]||'Verify'}</h1>
+    <p class="lead">6-digit code bheja gaya hai <b>${esc(p.email)}</b> par.${demo?'':''}</p>
+    ${demo ? `<div class="alert info">Demo mode — email service abhi connect nahi hai. Aapka code: <span class="otp-badge">${esc(p.code||'——')}</span><br><span class="small">Asli email code ke liye Supabase keys chahiye (Settings → Cloud sync).</span></div>`
+           : `<div class="alert info">Email khol ke 6-digit code daalo. Na mile to spam folder dekho.</div>`}
+    <form id="codeForm" style="margin-top:14px">
+      <div class="field"><label>Code</label><input class="inp" name="code" inputmode="numeric" maxlength="6" required placeholder="6-digit" style="letter-spacing:.3em;text-align:center;font-size:1.2rem" /></div>
+      <div id="codeAlert"></div>
+      <button class="btn block" type="submit">Verify</button>
+      <button class="btn ghost block" type="button" data-act="auth-cancel">Cancel</button>
+    </form>`);
+
+  $('#codeForm').addEventListener('submit', async (e)=>{
+    e.preventDefault();
+    const code = e.target.elements.code.value.trim();
+    const alertBox = $('#codeAlert');
+
+    if (mailMode() === 'cloud'){
+      const c = await CLOUD.get();
+      if (!c){ alertBox.innerHTML='<div class="alert err">Cloud connect nahi hua.</div>'; return; }
+      if (pending.kind === 'register'){
+        const { error } = await c.auth.verifyOtp({ email:pending.email, token:code, type:'signup' });
+        if (error){ alertBox.innerHTML='<div class="alert err">'+esc(error.message)+'</div>'; return; }
+        const admins = DB.admins();
+        admins.push({ email:pending.email, name:pending.name, phone:pending.phone, createdAt:Date.now(), verified:true, cloud:true });
+        DB.setAdmins(admins);
+        setSession({ kind:'admin', email:pending.email });
+        pending=null; closeAuth(); enterApp(); toast('Admin account ban gaya'); return;
+      }
+      if (pending.kind === 'reset'){
+        const { error } = await c.auth.verifyOtp({ email:pending.email, token:code, type:'recovery' });
+        if (error){ alertBox.innerHTML='<div class="alert err">'+esc(error.message)+'</div>'; return; }
+        pending = { ...pending, kind:'newpass', code:'' };
+        return renderNewPassword();
+      }
+      return;
+    }
+
+    if (!pending || code !== pending.code){ alertBox.innerHTML='<div class="alert err">Code galat hai — dobara dekho.</div>'; return; }
+
+    if (pending.kind === 'login'){
+      setSession({ kind:'admin', email:pending.email });
+      pending=null; closeAuth(); enterApp(); toast('Welcome back'); return;
+    }
+    if (pending.kind === 'register'){
+      const salt = uid();
+      const admins = DB.admins();
+      admins.push({ email:pending.email, name:pending.name, phone:pending.phone, salt, passHash: await hashPass(pending.pass, salt), createdAt:Date.now(), verified:true });
+      DB.setAdmins(admins);
+      setSession({ kind:'admin', email:pending.email });
+      pending=null; closeAuth(); enterApp(); toast('Admin account ban gaya'); return;
+    }
+    if (pending.kind === 'reset'){
+      pending = { ...pending, kind:'newpass', code:'' };
+      return renderNewPassword();
+    }
+  });
+}
+
+/* ---------------- forgot password / id ---------------- */
+function renderForgot(){
+  $('#authScreen').innerHTML = authCard(`
+    <h1>Forgot password / ID</h1>
+    <p class="lead">Email ID yaad hai to password reset karo. Nahi to mobile number se ID dhoondo.</p>
+    ${authTabs('forgot')}
+    <div class="sec-title" style="margin-top:0;font-size:.9rem">Reset password</div>
+    <form id="forgotForm">
+      <div class="field"><label>Registered email ID</label><input class="inp" name="email" type="email" required placeholder="admin@example.com" /></div>
+      <div id="forgotAlert"></div>
+      <button class="btn block" type="submit">Send reset code</button>
+    </form>
+    <div class="sec-title" style="margin-top:18px;font-size:.9rem">Forgot your ID?</div>
+    <form id="findForm">
+      <div class="field"><label>Registered mobile number</label><input class="inp" name="phone" inputmode="numeric" required placeholder="10-digit" /></div>
+      <div id="findAlert"></div>
+      <button class="btn ghost block" type="submit">Find my ID</button>
+    </form>`);
+
+  $('#forgotForm').addEventListener('submit', async (e)=>{
+    e.preventDefault();
+    const email = e.target.elements.email.value.trim().toLowerCase();
+    const alertBox = $('#forgotAlert');
+    if (!isEmail(email)){ alertBox.innerHTML='<div class="alert err">Valid email daalo.</div>'; return; }
+    if (mailMode() === 'cloud'){
+      const c = await CLOUD.get();
+      if (!c){ alertBox.innerHTML='<div class="alert err">Cloud connect nahi hua.</div>'; return; }
+      const { error } = await c.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname });
+      if (error){ alertBox.innerHTML='<div class="alert err">'+esc(error.message)+'</div>'; return; }
+      alertBox.innerHTML='<div class="alert ok">Reset code email par bhej diya.</div>';
+      pending = { kind:'reset', email, code:'', expires:Date.now()+10*60*1000 };
+      return renderCodeStep();
+    }
+    if (!adminByEmail(email)){ alertBox.innerHTML='<div class="alert err">Is email se koi admin nahi hai.</div>'; return; }
+    pending = { kind:'reset', email, code:newCode(), expires:Date.now()+10*60*1000 };
+    renderCodeStep();
+  });
+
+  $('#findForm').addEventListener('submit', (e)=>{
+    e.preventDefault();
+    const phone = e.target.elements.phone.value.trim().replace(/\D/g,'');
+    const alertBox = $('#findAlert');
+    const hit = DB.admins().find(a=>String(a.phone||'').replace(/\D/g,'')===phone && phone);
+    if (!hit){ alertBox.innerHTML='<div class="alert err">Is number se koi admin nahi mila.</div>'; return; }
+    alertBox.innerHTML=`<div class="alert ok">Aapki admin ID: <b>${esc(hit.email)}</b><br><span class="small">Ab password reset kar sakte ho.</span></div>`;
+  });
+}
+
+function renderNewPassword(){
+  $('#authScreen').innerHTML = authCard(`
+    <h1>Set a new password</h1>
+    <p class="lead">Naya password daalo — iske baad login ho jayega.</p>
+    <form id="newPassForm">
+      <div class="grid g2">
+        <div class="field"><label>New password</label><input class="inp" name="pass" type="password" required minlength="6" /></div>
+        <div class="field"><label>Confirm</label><input class="inp" name="pass2" type="password" required minlength="6" /></div>
+      </div>
+      <div id="npAlert"></div>
+      <button class="btn block" type="submit">Save password</button>
+    </form>`);
+  $('#newPassForm').addEventListener('submit', async (e)=>{
+    e.preventDefault();
+    const E = e.target.elements, alertBox = $('#npAlert');
+    if (E.pass.value !== E.pass2.value){ alertBox.innerHTML='<div class="alert err">Passwords match nahi kar rahe.</div>'; return; }
+    if (E.pass.value.length < 6){ alertBox.innerHTML='<div class="alert err">Kam se kam 6 characters.</div>'; return; }
+
+    if (mailMode() === 'cloud'){
+      const c = await CLOUD.get();
+      const { error } = await c.auth.updateUser({ password: E.pass.value });
+      if (error){ alertBox.innerHTML='<div class="alert err">'+esc(error.message)+'</div>'; return; }
+    } else {
+      const admins = DB.admins();
+      const idx = admins.findIndex(a=>a.email===pending.email);
+      if (idx < 0){ alertBox.innerHTML='<div class="alert err">Admin nahi mila.</div>'; return; }
+      const salt = uid();
+      admins[idx].salt = salt;
+      admins[idx].passHash = await hashPass(E.pass.value, salt);
+      DB.setAdmins(admins);
+    }
+    const email = pending.email; pending = null;
+    toast('Password badal gaya — ab login karo');
+    renderLogin();
   });
 }
 
@@ -284,39 +513,123 @@ function renderOtp(){
    ============================================================ */
 const state = { view:'dashboard', param:null, draft:null };
 
+
+/* ============================================================
+   CLOUD SYNC — public read, admin write (activates with keys)
+   ============================================================ */
+const PUB_FAM_COLS = 'id,house_name,house_no,street,house_type,notes,docs,custom,created_at';
+const ADMIN_FAM_COLS = PUB_FAM_COLS + ',address,phone';
+const MEMBER_COLS = ['relation','name','father_name','mother_name','gender','dob','education','education_level','occupation','sector','religious','marital_status','children','disability','schemes','scheme_name','docs'];
+const MEMBER_TO_JS = { father_name:'fatherName', mother_name:'motherName', education_level:'educationLevel', marital_status:'maritalStatus', scheme_name:'schemeName' };
+
+const SYNC = {
+  on(){ return CLOUD.enabled(); },
+  famCols(){ return isAdmin() ? ADMIN_FAM_COLS : PUB_FAM_COLS; },
+  async pull(){
+    const c = await CLOUD.get(); if (!c) return false;
+    try {
+      const { data, error } = await c.from('families').select(this.famCols() + ',members(' + MEMBER_COLS.join(',') + ')');
+      if (error) throw error;
+      const fams = (data||[]).map(f=>({
+        id:f.id, houseName:f.house_name||'', houseNo:f.house_no||'', street:f.street||'',
+        houseType:f.house_type||'moulding', address:f.address||'', phone:f.phone||'',
+        notes:f.notes||'', docs:f.docs||{}, custom:f.custom||[], createdAt:f.created_at?Date.parse(f.created_at):Date.now(),
+        members:(f.members||[]).map(m=>{
+          const o = { id:m.id };
+          MEMBER_COLS.forEach(k=>{ o[MEMBER_TO_JS[k]||k] = m[k]; });
+          o.docs = m.docs || {}; o.schemes = m.schemes || {};
+          return o;
+        })
+      }));
+      if (fams.length) DB.setFamilies(fams);
+      const { data: mj } = await c.from('masjid').select('*').limit(1);
+      if (mj && mj[0]) DB.setMasjid(mj[0]);
+      return true;
+    } catch(e){ return false; }
+  },
+  async saveFamily(f){
+    const c = await CLOUD.get(); if (!c) return false;
+    try {
+      const row = {
+        id:f.id, house_name:f.houseName||'', house_no:f.houseNo||'', street:f.street||'',
+        house_type:f.houseType||'moulding', address:f.address||'', phone:f.phone||'',
+        notes:f.notes||'', docs:f.docs||{}, custom:f.custom||[], updated_at:new Date().toISOString()
+      };
+      const { error } = await c.from('families').upsert(row);
+      if (error) throw error;
+      await c.from('members').delete().eq('family_id', f.id);
+      const rows = (f.members||[]).filter(m=>String(m.name||'').trim()).map(m=>({
+        family_id:f.id, relation:m.relation||'', name:m.name||'', father_name:m.fatherName||'', mother_name:m.motherName||'',
+        gender:m.gender||'', dob:m.dob||null, education:m.education||'', education_level:m.educationLevel||'',
+        occupation:m.occupation||'', sector:m.sector||'', religious:m.religious||'', marital_status:m.maritalStatus||'',
+        children:String(m.children||''), disability:m.disability||'no', schemes:m.schemes||{}, scheme_name:m.schemeName||'', docs:m.docs||{}
+      }));
+      if (rows.length){ const { error: e2 } = await c.from('members').insert(rows); if (e2) throw e2; }
+      return true;
+    } catch(e){ return false; }
+  },
+  async delFamily(id){
+    const c = await CLOUD.get(); if (!c) return false;
+    try { const { error } = await c.from('families').delete().eq('id', id); if (error) throw error; return true; } catch(e){ return false; }
+  },
+  async saveMasjid(m){
+    const c = await CLOUD.get(); if (!c) return false;
+    try {
+      const row = Object.assign({}, m, { id:true, updated_at:new Date().toISOString() });
+      const { error } = await c.from('masjid').upsert(row);
+      if (error) throw error; return true;
+    } catch(e){ return false; }
+  }
+};
+
+let cloudPulled = false;
 function enterApp(){
-  $('#authScreen').classList.add('hidden');
+  const a = $('#authScreen'); if (a) a.classList.add('hidden');
   $('#appScreen').classList.remove('hidden');
   renderShell();
-  go('dashboard');
+  if (!state.view || state.view==='myfamily') state.view = 'dashboard';
+  go(state.view, state.param);
+  if (SYNC.on() && !cloudPulled){
+    cloudPulled = true;
+    SYNC.pull().then(ok=>{ if (ok) go(state.view, state.param); });
+  }
 }
 
 function navItems(){
-  const u = currentUser(); if(!u) return [];
-  if (u.role==='family') return [ ['myfamily','My Family',ICON.home], ['masjid','Masjid Profile',ICON.mosque], ['settings','Settings',ICON.gear] ];
-  const items = [ ['dashboard','Dashboard',ICON.dash], ['families','Households',ICON.list], ['add','Add Household',ICON.plus], ['masjid','Masjid Profile',ICON.mosque] ];
-  if (u.role==='super') items.push(['users','Users',ICON.users]);
-  items.push(['settings','Settings',ICON.gear]);
+  const items = [ ['dashboard','Dashboard',ICON.dash], ['families','Households',ICON.list], ['masjid','Masjid Profile',ICON.mosque] ];
+  if (isAdmin()){
+    items.splice(2,0,['add','Add Household',ICON.plus]);
+    items.push(['users','Admins',ICON.users], ['settings','Settings',ICON.gear]);
+  }
   return items;
 }
 
 function renderShell(){
   const u = currentUser();
   $('#nav').innerHTML = navItems().map(([v,label,ic])=>`<a class="nav-item" data-act="goto" data-view="${v}">${ic}<span>${label}</span></a>`).join('');
-  const initials = (u.name||u.id).split(' ').map(w=>w[0]).slice(0,2).join('').toUpperCase();
-  $('#userChip').innerHTML = `<span class="av">${esc(initials)}</span><span><span class="nm">${esc(u.name||u.id)}</span><br><span class="rl">${ROLE_LABEL[u.role]}</span></span>`;
-  $('#userChip').setAttribute('data-act','logout');
-  $('#userChip').title = 'Click to sign out';
+  const chip = $('#userChip');
+  if (u){
+    const initials = (u.name||u.email).split(/[ @.]/).filter(Boolean).map(w=>w[0]).slice(0,2).join('').toUpperCase();
+    chip.innerHTML = `<span class="av">${esc(initials)}</span><span><span class="nm">${esc(u.name||u.email)}</span><br><span class="rl">Admin · logout</span></span>`;
+    chip.setAttribute('data-act','admin-logout');
+    chip.title = 'Click to log out';
+  } else {
+    chip.innerHTML = `<span class="public-chip">Public view</span><span class="btn ghost sm" data-act="open-auth" style="margin-left:8px">Admin login</span>`;
+    chip.removeAttribute('data-act');
+    chip.title = 'Read-only public view';
+  }
+  const foot = document.querySelector('.sb-foot');
+  if (foot) foot.textContent = u ? 'Admin mode · you can add and edit' : 'Public view · read only';
   $$('#nav .nav-item').forEach(a=>a.classList.toggle('active', a.dataset.view===state.view || (state.view==='add' && a.dataset.view==='add')));
   closeNav();
 }
 
 function go(view, param){
-  const u = currentUser(); if(!u){ renderAuth(); return; }
-  if (u.role==='family' && !['myfamily','settings','masjid'].includes(view)) view='myfamily';
+  const ADMIN_ONLY = ['add','users','settings'];
+  if (ADMIN_ONLY.includes(view) && !isAdmin()){ toast('Ye page sirf admin ke liye hai','err'); view='dashboard'; }
   state.view = view; state.param = param||null;
   closeNav();
-  const titles = { dashboard:'Survey Dashboard', families:'Households', add:(state.param?'Edit Household':'Add Household'), detail:'Household Record', users:'Users', settings:'Settings', myfamily:'My Family', masjid:'Masjid Profile' };
+  const titles = { dashboard:'Survey Dashboard', families:'Households', add:(state.param?'Edit Household':'Add Household'), detail:'Household Record', users:'Admins', settings:'Settings', masjid:'Masjid Profile' };
   $('#pageTitle').textContent = titles[view] || 'Survey Dashboard';
   let html='';
   if (view==='dashboard') html = viewDashboard();
@@ -325,7 +638,6 @@ function go(view, param){
   else if (view==='detail') html = viewFamilyDetail(state.param);
   else if (view==='users') html = viewUsers();
   else if (view==='settings') html = viewSettings();
-  else if (view==='myfamily') html = viewMyFamily();
   else if (view==='masjid') html = viewMasjid();
   $('#content').innerHTML = html;
   $$('#nav .nav-item').forEach(a=>a.classList.toggle('active', a.dataset.view===view || (view==='detail'&&a.dataset.view==='families')||(view==='add'&&a.dataset.view==='add')));
@@ -488,14 +800,16 @@ function viewDashboard(){
 
   const empty = s.houses ? '' : `<div class="empty" style="margin-top:18px"><div class="big">🕌</div><h3>No households surveyed yet</h3><p>Add the first household, ya sample data load karke dashboard dekh lo.</p>
      <div style="margin-top:16px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
-     ${u.role!=='family' ? '<button class="btn" data-act="goto" data-view="add">Add first household</button>' : ''}
+     ${isAdmin() ? '<button class="btn" data-act="goto" data-view="add">Add first household</button>' : ''}
      <button class="btn ghost" data-act="load-sample">Load sample data</button></div></div>`;
 
   return `
     <div class="page-head"><div><h1>Survey Dashboard</h1><p>Mohalla ke ghar, raste aur logon ka poora hisaab — live totals.</p></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn ghost sm" data-act="export-excel">⭳ Excel</button>
-        <button class="btn ghost sm" data-act="print-all">⎙ PDF / Print</button>
+        ${isAdmin()
+          ? `<button class="btn ghost sm" data-act="export-excel">⭳ Excel</button>
+             <button class="btn ghost sm" data-act="print-all">⎙ PDF / Print</button>`
+          : `<span class="badge gray">Public view · read only</span>`}
       </div></div>
 
     <div class="kpi-row">${kpis.map(k=>`<div class="stat"><div class="ic">${k[0]}</div><div class="n">${k[1]}</div><div class="l">${k[2]}</div></div>`).join('')}</div>
@@ -609,7 +923,7 @@ function viewFamilies(){
   const pre = state.param ? esc(state.param) : '';
   return `
     <div class="page-head"><div><h1>Households</h1><p>${fams.length} households on record.</p></div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn ghost sm" data-act="export-excel">⭳ Excel</button><button class="btn ghost sm" data-act="print-all">⎙ PDF</button><button class="btn sm" data-act="goto" data-view="add">+ Add Household</button></div></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">${isAdmin()?`<button class="btn ghost sm" data-act="export-excel">⭳ Excel</button><button class="btn ghost sm" data-act="print-all">⎙ PDF</button><button class="btn sm" data-act="goto" data-view="add">+ Add Household</button>`:''}</div></div>
     <div class="toolbar">
       <input class="inp grow" id="famSearch" placeholder="Search household, Family ID, phone, street…" />
       <select class="inp" id="famStreetF" style="max-width:200px"><option value="">All streets</option>${streets.map(st=>`<option ${pre===st?'selected':''}>${esc(st)}</option>`).join('')}</select>
@@ -622,7 +936,7 @@ function emptyFamilies(){
   return `<div class="page-head"><div><h1>Households</h1><p>No households on record yet.</p></div></div>
     <div class="card"><div class="empty"><div class="big">📋</div><h3>Start the survey</h3><p>Add your first household, or load sample data to explore.</p>
       <div style="margin-top:16px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
-      <button class="btn" data-act="goto" data-view="add">+ Add Household</button>
+      ${isAdmin()?`<button class="btn" data-act="goto" data-view="add">+ Add Household</button>`:''}
       <button class="btn ghost" data-act="load-sample">Load sample data</button></div></div></div>`;
 }
 function familyMatches(f, q, st, g, ms){
@@ -651,8 +965,8 @@ function renderFamilyList(){
       <td>${esc(f.phone||'—')}</td>
       <td style="white-space:nowrap">
         <button class="btn ghost sm" data-act="view-family" data-id="${esc(f.id)}">View</button>
-        <button class="btn ghost sm" data-act="edit-family" data-id="${esc(f.id)}">Edit</button>
-        <button class="btn ghost sm" data-act="del-family" data-id="${esc(f.id)}" style="color:var(--danger)">Del</button>
+        ${isAdmin()?`<button class="btn ghost sm" data-act="edit-family" data-id="${esc(f.id)}">Edit</button>
+        <button class="btn ghost sm" data-act="del-family" data-id="${esc(f.id)}" style="color:var(--danger)">Del</button>`:''}
       </td></tr>`).join('')}
     </tbody></table></div>`;
 }
@@ -810,16 +1124,16 @@ function viewFamilyDetail(id){
   const f = DB.families().find(x=>x.id===id);
   if (!f) return `<div class="empty"><h3>Household not found</h3><p>It may have been deleted.</p><button class="btn ghost" data-act="goto" data-view="families" style="margin-top:14px">← Back</button></div>`;
   const u = currentUser();
-  const canEdit = u.role!=='family';
+  const canEdit = isAdmin();
   const docsYes = DOC_TYPES.filter(([k])=>f.docs && f.docs[k]==='yes').map(([,l])=>l);
   const customYes = (f.custom||[]).filter(c=>c.label && c.value==='yes').map(c=>c.label);
   const members = f.members||[];
   const men = members.filter(m=>m.gender==='Male').length;
   const women = members.filter(m=>m.gender==='Female').length;
   return `
-    <div class="page-head"><div><h1>${esc(f.houseName||'Household')}</h1><p>${esc(streetName(f))}${f.houseNo?' · House '+esc(f.houseNo):''} · ${members.length} member(s)</p></div>
+    <div class="page-head"><div><h1>${esc(f.houseName||'Household')}</h1><p>${esc(streetName(f))}${f.houseNo?' · House '+esc(f.houseNo):''} · ${members.length} member(s)${canEdit?'':' · public view (phone hidden)'}</p></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn ghost sm" data-act="print-family" data-id="${esc(f.id)}">⎙ PDF</button>
+        ${canEdit?`<button class="btn ghost sm" data-act="print-family" data-id="${esc(f.id)}">⎙ PDF</button>`:''}
         <button class="btn ghost sm" data-act="goto" data-view="families">← Back</button>
         ${canEdit?`<button class="btn sm" data-act="edit-family" data-id="${esc(f.id)}">Edit</button>`:''}
       </div></div>
@@ -835,7 +1149,7 @@ function viewFamilyDetail(id){
           <div class="row"><span>Street</span><span>${esc(streetName(f))}</span></div>
           <div class="row"><span>House no.</span><span>${esc(f.houseNo||'—')}</span></div>
           <div class="row"><span>House type</span><span>${esc(labelOf(HOUSE_TYPES, houseTypeKey(f.houseType)))}</span></div>
-          <div class="row"><span>Phone</span><span>${esc(f.phone||'—')}</span></div>
+          <div class="row"><span>Phone</span><span>${canEdit?esc(f.phone||'—'):esc(maskPhone(f.phone))}</span></div>
           <div class="row"><span>Address</span><span>${esc(f.address||'—')}</span></div>
           <div class="row"><span>Members</span><span>${members.length} · ${men} men · ${women} women</span></div>
         </div>
@@ -866,42 +1180,37 @@ function viewFamilyDetail(id){
    USERS (super admin)
    ============================================================ */
 function viewUsers(){
-  const u = currentUser();
-  if (u.role!=='super') return `<div class="empty"><h3>Admins only</h3><p>Only the Super Admin can manage logins.</p></div>`;
-  const users = DB.users();
-  const fams = DB.families();
+  if (!isAdmin()) return `<div class="empty"><h3>Admins only</h3><p>Ye page sirf admin ke liye hai.</p></div>`;
+  const me = currentUser();
+  const admins = DB.admins();
   return `
-    <div class="page-head"><div><h1>Users</h1><p>Create admin logins and family view-only logins.</p></div></div>
+    <div class="page-head"><div><h1>Admins</h1><p>Committee admin accounts — sab ke paas poora add/edit access hota hai.</p></div></div>
 
     <div class="card">
-      <div class="sec-title" style="margin-top:0">Add an Admin</div>
-      <form id="addAdminForm" class="grid g3">
-        <div class="field"><label>Name</label><input class="inp" name="name" required /></div>
-        <div class="field"><label>Login ID</label><input class="inp" name="id" required /></div>
-        <div class="field"><label>Mobile</label><input class="inp" name="phone" inputmode="numeric" /></div>
-        <div class="field"><label>Password</label><input class="inp" name="pass" type="password" required minlength="4" /></div>
-        <div class="field" style="justify-content:flex-end"><button class="btn" type="submit">Add Admin</button></div>
-      </form>
+      <div class="sec-title" style="margin-top:0">Invite code for new admins</div>
+      <div class="kv"><div class="row"><span>Invite code</span><span class="mono">${esc(CFG.ADMIN_INVITE_CODE||'—')}</span></div></div>
+      <p class="muted small" style="margin-top:8px">Naya admin <b>Register</b> page par ye code daal ke apna account bana sakta hai. Code badalna ho to <span class="mono">config.js</span> → <span class="mono">ADMIN_INVITE_CODE</span>.</p>
     </div>
 
     <div class="card" style="margin-top:16px">
-      <div class="sec-title" style="margin-top:0">Create a Family login</div>
-      <p class="muted small" style="margin-bottom:12px">Family login ID = the Family ID. The member can only view their own record.</p>
-      <form id="addFamForm" class="grid g3">
-        <div class="field"><label>Family</label><select class="inp" name="familyId" required>
-          <option value="">Select family…</option>${fams.map(f=>`<option value="${esc(f.id)}">${esc(f.id)} — ${esc(f.houseName||'')}</option>`).join('')}</select></div>
-        <div class="field"><label>Password</label><input class="inp" name="pass" type="password" required minlength="4" /></div>
-        <div class="field" style="justify-content:flex-end"><button class="btn" type="submit">Create Family Login</button></div>
+      <div class="sec-title" style="margin-top:0">Add admin directly</div>
+      <form id="addAdminForm" class="grid g3">
+        <div class="field"><label>Name</label><input class="inp" name="name" required /></div>
+        <div class="field"><label>Email ID</label><input class="inp" name="email" type="email" required /></div>
+        <div class="field"><label>Mobile</label><input class="inp" name="phone" inputmode="numeric" /></div>
+        <div class="field"><label>Password</label><input class="inp" name="pass" type="password" required minlength="6" /></div>
+        <div class="field" style="justify-content:flex-end"><button class="btn" type="submit">Add admin</button></div>
       </form>
     </div>
 
-    <div class="sec-title">All logins</div>
-    <div class="table-wrap"><table><thead><tr><th>Login ID</th><th>Name</th><th>Role</th><th>Linked Family</th><th></th></tr></thead><tbody>
-      ${users.map(x=>`<tr>
-        <td><span class="mono">${esc(x.id)}</span></td><td>${esc(x.name||'—')}</td>
-        <td><span class="badge ${x.role==='super'?'':'gray'}">${ROLE_LABEL[x.role]}</span></td>
-        <td>${esc(x.familyId||'—')}</td>
-        <td>${x.role==='super'?'':`<button class="btn ghost sm" data-act="del-user" data-id="${esc(x.id)}" style="color:var(--danger)">Delete</button>`}</td>
+    <div class="sec-title">All admins</div>
+    <div class="table-wrap"><table><thead><tr><th>Email (login ID)</th><th>Name</th><th>Mobile</th><th>Added</th><th></th></tr></thead><tbody>
+      ${admins.map(a=>`<tr>
+        <td><span class="mono">${esc(a.email)}</span></td><td>${esc(a.name||'—')}</td><td>${esc(a.phone||'—')}</td>
+        <td>${fmtDate(a.createdAt ? new Date(a.createdAt).toISOString() : '')}</td>
+        <td>${String(a.email).toLowerCase()===String(me.email).toLowerCase()
+          ? '<span class="badge">You</span>'
+          : `<button class="btn ghost sm" data-act="del-admin" data-id="${esc(a.email)}" style="color:var(--danger)">Remove</button>`}</td>
       </tr>`).join('')}
     </tbody></table></div>`;
 }
@@ -932,7 +1241,7 @@ function masjidData(){
 
 function viewMasjid(){
   const u = currentUser();
-  const canEdit = u.role !== 'family';
+  const canEdit = isAdmin();
   const m = masjidData();
   return `
   <div class="page-head"><div><h1>Masjid Profile</h1><p>Masjid ki tafseel, imam/muazzin, tasveerein — report ke saath print hoti hain.</p></div></div>
@@ -975,9 +1284,9 @@ async function compressImage(file, maxSide = 1100, quality = 0.72){
 
 function viewSettings(){
   const u = currentUser();
-  const cloudOn = !!(CFG.SUPABASE_URL && CFG.SUPABASE_ANON_KEY);
+  const cloudOn = CLOUD.enabled();
   return `
-    <div class="page-head"><div><h1>Settings</h1><p>Appearance, data and account.</p></div></div>
+    <div class="page-head"><div><h1>Settings</h1><p>Appearance, data, cloud aur account.</p></div></div>
 
     <div class="card">
       <div class="sec-title" style="margin-top:0">Appearance</div>
@@ -987,7 +1296,7 @@ function viewSettings(){
       </div>
     </div>
 
-    ${u.role==='family'?'':`<div class="card" style="margin-top:16px">
+    <div class="card" style="margin-top:16px">
       <div class="sec-title" style="margin-top:0">Data &amp; backup</div>
       <div style="display:flex;gap:10px;flex-wrap:wrap">
         <button class="btn ghost sm" data-act="export-excel">⭳ Export Excel (.xlsx)</button>
@@ -995,38 +1304,31 @@ function viewSettings(){
         <button class="btn ghost sm" data-act="backup-json">⭳ Backup (JSON)</button>
         <button class="btn ghost sm" data-act="load-sample">Load sample data</button>
       </div>
-    </div>`}
+    </div>
 
     <div class="card" style="margin-top:16px">
-      <div class="sec-title" style="margin-top:0">Cloud sync (Supabase)</div>
-      <p class="muted small">Status: <b style="color:${cloudOn?'var(--ok)':'var(--warn)'}">${cloudOn?'Connected':'Not connected — running on this device'}</b></p>
-      ${cloudOn?'':'<p class="muted small" style="margin-top:8px">Add your Supabase Project URL + anon key in <span class="mono">config.js</span> and run <span class="mono">supabase/schema.sql</span> to switch to shared cloud storage.</p>'}
+      <div class="sec-title" style="margin-top:0">Cloud sync &amp; email (Supabase)</div>
+      <p class="muted small">Status: <b style="color:${cloudOn?'var(--ok)':'var(--warn)'}">${cloudOn?'Connected':'Not connected — data is on this device only'}</b></p>
+      <div class="kv" style="margin-top:10px">
+        <div class="row"><span>Public website</span><span>${cloudOn?'Live for everyone':'Only this device'}</span></div>
+        <div class="row"><span>Email codes</span><span>${cloudOn?'Real email':'On-screen (demo)'}</span></div>
+      </div>
+      ${cloudOn ? '' : `<p class="muted small" style="margin-top:10px">Public dashboard aur asli email code ke liye Supabase free project chahiye: <span class="mono">supabase.com</span> → naya project → Settings → API se <b>Project URL</b> + <b>anon key</b>, aur <span class="mono">supabase/schema.sql</span> run karo. Phir dono values <span class="mono">config.js</span> me daalo.</p>`}
     </div>
 
     <div class="card" style="margin-top:16px">
       <div class="sec-title" style="margin-top:0">Account</div>
-      <div class="kv"><div class="row"><span>Name</span><span>${esc(u.name||u.id)}</span></div>
-        <div class="row"><span>Login ID</span><span>${esc(u.id)}</span></div>
-        <div class="row"><span>Role</span><span>${ROLE_LABEL[u.role]}</span></div>
-        <div class="row"><span>Mobile</span><span>${esc(u.phone||'—')}</span></div></div>
-      <button class="btn danger sm" data-act="logout" style="margin-top:16px">Sign out</button>
+      <div class="kv"><div class="row"><span>Name</span><span>${esc(u.name||'—')}</span></div>
+        <div class="row"><span>Login ID (email)</span><span class="mono">${esc(u.email)}</span></div>
+        <div class="row"><span>Role</span><span>Admin — full edit</span></div></div>
+      <button class="btn danger sm" data-act="admin-logout" style="margin-top:16px">Log out</button>
     </div>
 
-    ${u.role==='super'?`<div class="card" style="margin-top:16px;border-color:var(--danger-brd)">
+    <div class="card" style="margin-top:16px;border-color:var(--danger-brd)">
       <div class="sec-title" style="margin-top:0;color:var(--danger)">Danger zone</div>
-      <p class="muted small" style="margin-bottom:12px">Deletes all household records on this device. Logins are kept.</p>
+      <p class="muted small" style="margin-bottom:12px">Deletes all household records on this device. Admin accounts are kept.</p>
       <button class="btn danger sm" data-act="clear-data">Erase all household records</button>
-    </div>`:''}`;
-}
-
-/* ============================================================
-   MY FAMILY (family role)
-   ============================================================ */
-function viewMyFamily(){
-  const u = currentUser();
-  const f = DB.families().find(x=>x.id===u.familyId);
-  if (!f) return `<div class="empty"><h3>No record linked</h3><p>Your login is not linked to a household record yet. Please contact the committee.</p></div>`;
-  return viewFamilyDetail(f.id);
+    </div>`;
 }
 
 /* ============================================================
@@ -1036,10 +1338,25 @@ document.addEventListener('click', (e)=>{
   const el = e.target.closest('[data-act]'); if(!el) return;
   const act = el.dataset.act;
   const id = el.dataset.id;
+  const ADMIN_ACTS = ['load-sample','clear-data','export-excel','print-all','backup-json','edit-family','del-family','del-admin','saveMasjid','delPhoto','print-family'];
+  if (ADMIN_ACTS.includes(act) && !isAdmin()){ toast('Ye sirf admin kar sakta hai','err'); return; }
 
   if (act==='toggle-theme') { toggleTheme(); const b=$('#themeBtn2'); if(b) b.textContent = document.documentElement.getAttribute('data-theme')==='night'?'☾ Night':'☀ Day'; return; }
   if (act==='goto'){ if (el.dataset.view==='add'){ state.draft=blankDraft(); go(el.dataset.view); } else go(el.dataset.view, el.dataset.street||null); return; }
-  if (act==='logout'){ clearSession(); state.draft=null; renderAuth(); return; }
+  if (act==='open-auth'){ openAuth('login'); return; }
+  if (act==='close-auth'){ closeAuth(); return; }
+  if (act==='auth-tab'){ pending=null; renderAuth(el.dataset.tab||'login'); return; }
+  if (act==='auth-cancel'){ pending=null; renderAuth('login'); return; }
+  if (act==='admin-logout'){ clearSession(); state.draft=null; toast('Log out ho gaya'); renderShell(); go('dashboard'); return; }
+  if (act==='logout'){ clearSession(); state.draft=null; renderShell(); go('dashboard'); return; }
+  if (act==='del-admin'){
+    const me = currentUser();
+    if (String(id).toLowerCase()===String(me.email).toLowerCase()){ toast('Apna account nahi hata sakte','err'); return; }
+    if (DB.admins().length <= 1){ toast('Kam se kam ek admin rehna chahiye','err'); return; }
+    if (!confirm('Ye admin account hata dein?')) return;
+    DB.setAdmins(DB.admins().filter(a=>a.email!==id));
+    toast('Admin hata diya'); go('users'); return;
+  }
   if (act==='load-sample'){ loadSample(); enterApp(); go('dashboard'); toast('Sample data loaded'); return; }
   if (act==='clear-data'){ if(confirm('Erase ALL household records on this device? This cannot be undone.')){ DB.setFamilies([]); DB.setSeq(0); toast('All household records erased'); go('dashboard'); } return; }
   if (act==='export-excel'){ exportExcel(); return; }
@@ -1048,11 +1365,15 @@ document.addEventListener('click', (e)=>{
   if (act==='backup-json'){ backupJSON(); return; }
   if (act==='view-family'){ go('detail', id); return; }
   if (act==='edit-family'){ const f=DB.families().find(x=>x.id===id); if(f){ state.draft = JSON.parse(JSON.stringify(f)); state.draft.docs = Object.assign(Object.fromEntries(DOC_TYPES.map(d=>[d[0],'no'])), state.draft.docs||{}); state.draft.custom = padCustom(state.draft.custom); if(!state.draft.houseType) state.draft.houseType='moulding'; go('add', id); } return; }
-  if (act==='del-family'){ if(confirm('Delete this household record permanently?')){ DB.setFamilies(DB.families().filter(f=>f.id!==id)); toast('Household deleted'); go('families'); } return; }
+  if (act==='del-family'){ if(confirm('Delete this household record permanently?')){
+    DB.setFamilies(DB.families().filter(f=>f.id!==id));
+    if (SYNC.on() && isAdmin()) SYNC.delFamily(id);
+    toast('Household deleted'); go('families'); } return; }
   if (act==='saveMasjid'){
     const m = masjidData();
     document.querySelectorAll('[data-mj]').forEach(el=>{ m[el.dataset.mj] = el.value.trim(); });
     m.updatedAt = Date.now(); m.updatedBy = currentUser().id;
+    if (SYNC.on() && isAdmin()) SYNC.saveMasjid(m);
     try { DB.setMasjid(m); } catch(err){ toast('Save nahi hua — storage bhar gaya. Kuch photos hata ke dobara koshish karo.','err'); return; }
     toast('Masjid details save ho gayi'); go(state.view, state.param); return;
   }
@@ -1061,7 +1382,6 @@ document.addEventListener('click', (e)=>{
     m.photos.splice(+el.dataset.i,1);
     DB.setMasjid(m); toast('Photo hata di'); go(state.view, state.param); return;
   }
-  if (act==='del-user'){ if(confirm('Delete this login?')){ DB.setUsers(DB.users().filter(u=>u.id!==id)); toast('Login deleted'); go('users'); } return; }
   if (act==='add-member'){ state.draft.members.push(blankMember()); renderMembers(); return; }
   if (act==='remove-member'){ state.draft.members.splice(+el.dataset.idx,1); renderMembers(); return; }
 });
@@ -1140,7 +1460,6 @@ document.addEventListener('submit', async (e)=>{
   const form = e.target;
   if (form.id==='famForm'){ e.preventDefault(); saveFamily(); }
   else if (form.id==='addAdminForm'){ e.preventDefault(); await addAdmin(form); }
-  else if (form.id==='addFamForm'){ e.preventDefault(); await addFamilyLogin(form); }
 });
 
 // hamburger
@@ -1153,7 +1472,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
 /* ---------------- render side-effects ---------------- */
 function afterRender(view){
   if (view==='add' && state.draft){ renderMembers(); }
-  if (view==='detail' || view==='myfamily'){ const id = (view==='detail')?state.param:currentUser().familyId; const f=DB.families().find(x=>x.id===id); const box=$('#qrBox'); if(f&&box) renderQR(box, f.id + ' | ' + (f.houseName||'')); }
+  if (view==='detail'){ const f=DB.families().find(x=>x.id===state.param); const box=$('#qrBox'); if(f&&box) renderQR(box, f.id + ' | ' + (f.houseName||'')); }
   if (view==='families'){ renderFamilyList(); }
   const tb=$('#themeBtn2'); if(tb) tb.textContent = document.documentElement.getAttribute('data-theme')==='night'?'☾ Night':'☀ Day';
 }
@@ -1208,6 +1527,9 @@ function saveFamily(){
   DB.setFamilies(fams);
   const wasNew = !state.param;
   state.draft = null;
+  if (SYNC.on() && isAdmin()){
+    SYNC.saveFamily(d).then(ok=>{ if (!ok) toast('Cloud me save nahi hua — baad me retry karega','err'); });
+  }
   toast(wasNew ? 'Household saved — ID generated' : 'Changes saved');
   go('detail', d.id);
 }
@@ -1223,23 +1545,25 @@ function padCustom(custom){
    USERS create
    ============================================================ */
 async function addAdmin(form){
-  const E=form.elements;
-  const name=E.name.value.trim(), id=E.id.value.trim().toLowerCase(), phone=E.phone.value.trim(), pass=E.pass.value;
-  if (DB.users().some(u=>u.id===id)){ toast('That ID already exists','err'); return; }
-  const salt=uid();
-  const users=DB.users(); users.push({ id, role:'admin', name:name||id, phone, salt, passHash:await hashPass(pass,salt), createdAt:Date.now() });
-  DB.setUsers(users); toast('Admin added'); go('users');
-}
-async function addFamilyLogin(form){
-  const E=form.elements;
-  const familyId=E.familyId.value, pass=E.pass.value;
-  if (!familyId){ toast('Select a family','err'); return; }
-  const id = familyId.toLowerCase();
-  const fam = DB.families().find(f=>f.id===familyId);
-  const users=DB.users().filter(u=>u.id!==id);
-  const salt=uid();
-  users.push({ id, role:'family', name:(fam&&fam.houseName)||familyId, phone:(fam&&fam.phone)||'', familyId, salt, passHash:await hashPass(pass,salt), createdAt:Date.now() });
-  DB.setUsers(users); toast('Family login created (ID: '+familyId+')'); go('users');
+  const E = form.elements;
+  const name = E.name.value.trim(), email = E.email.value.trim().toLowerCase();
+  const phone = E.phone.value.trim(), pass = E.pass.value;
+  if (!isEmail(email)){ toast('Valid email ID daalo','err'); return; }
+  if (adminByEmail(email)){ toast('Ye email pehle se admin hai','err'); return; }
+  if (pass.length < 6){ toast('Password kam se kam 6 characters','err'); return; }
+
+  if (CLOUD.enabled()){
+    const c = await CLOUD.get();
+    if (!c){ toast('Cloud connect nahi hua','err'); return; }
+    const { error } = await c.auth.signUp({ email, password: pass, options:{ data:{ name, phone } } });
+    if (error){ toast(error.message,'err'); return; }
+  } else {
+    const salt = uid();
+    const admins = DB.admins();
+    admins.push({ email, name:name||email, phone, salt, passHash: await hashPass(pass, salt), createdAt:Date.now(), verified:true });
+    DB.setAdmins(admins);
+  }
+  toast('Admin add ho gaya'); go('users');
 }
 
 /* ============================================================
@@ -1329,7 +1653,7 @@ function exportExcel(){
   toast('Excel file downloaded');
 }
 function backupJSON(){
-  const data = { org:CFG.ORG_NAME, exportedAt:new Date().toISOString(), families:DB.families(), masjid:DB.masjid(), users:DB.users().map(u=>({id:u.id,role:u.role,name:u.name,phone:u.phone,familyId:u.familyId})) };
+  const data = { org:CFG.ORG_NAME, exportedAt:new Date().toISOString(), families:DB.families(), masjid:DB.masjid(), admins:DB.admins().map(a=>({email:a.email,name:a.name,phone:a.phone,createdAt:a.createdAt})) };
   const blob = new Blob([JSON.stringify(data,null,2)], {type:'application/json'});
   const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='masjid-survey-backup-'+todayStr()+'.json'; a.click(); URL.revokeObjectURL(a.href);
   toast('Backup downloaded');
@@ -1429,6 +1753,17 @@ function loadSample(){
 /* ============================================================
    INIT
    ============================================================ */
-function init(){ renderAuth(); }
+function init(){
+  /* recovery link se aaya user: naya password set kare */
+  try {
+    if (/type=recovery/.test(location.hash) && CLOUD.enabled()){
+      pending = { kind:'newpass', email:'', code:'' };
+      renderAuth('login');
+      renderNewPassword();
+      return;
+    }
+  } catch(e){}
+  enterApp();   // public dashboard pehle — login optional
+}
 if (document.readyState==='loading') document.addEventListener('DOMContentLoaded', init);
 else init();

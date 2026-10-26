@@ -1,30 +1,33 @@
 -- ============================================================
 --  Masjid - E- Mohammadiy · Khidmath Committee — Mohalla Survey
---  Supabase schema (Postgres)  ·  SECURE allowlist design
+--  Supabase schema v3  ·  SINGLE ADMIN + PUBLIC READ
 -- ------------------------------------------------------------
 --  HOW TO USE
---   1. Supabase dashboard → SQL Editor → New query
---   2. Paste this WHOLE file → RUN
---   3. Project Settings → API → copy "Project URL" + "anon public" key
---      into the app (config.js).
+--   1. Supabase dashboard → SQL Editor → New query → paste → RUN
+--   2. Project Settings → API → copy "Project URL" + "anon public" key
+--      into config.js (Supabase block)
+--   3. Authentication → Providers → Email: enable. Signup email
+--      confirmation ON (real e-mail codes).
+--   4. First admin: app kholo → Admin login → naya admin banao.
 --
---  SECURITY MODEL (why family data stays private)
---   * The anon key is PUBLIC (it ships in the web app) — so the
---     database itself must gate access, not the key.
---   * Access requires a real login (Supabase Auth, email+password).
---   * Even then, a user sees data ONLY if they have a row in
---     app_users (the allowlist). A random sign-up gets NOTHING.
---   * Roles mirror the app: super/admin see all families; a family
---     login sees only its own family record.
+--  SECURITY MODEL
+--   * anon key is public — database gates everything.
+--   * ANYONE (anon) can read survey data for the public website,
+--     BUT never phone/address (column grants below).
+--   * Only a real login listed in app_users as role='admin' can
+--     insert / update / delete.
+--   * First signup (empty app_users) may claim the admin row.
 -- ============================================================
 
--- ---------- tables ----------
+create extension if not exists pgcrypto;
+
+-- ---------- families ----------
 create table if not exists public.families (
-  id          text primary key,              -- MEMC-2026-000001
+  id          text primary key,
   house_name  text not null default '',
   house_no    text default '',
   street      text default '',
-  house_type  text default 'moulding',   -- moulding | cement | other
+  house_type  text default 'moulding',
   address     text default '',
   phone       text default '',
   notes       text default '',
@@ -35,152 +38,116 @@ create table if not exists public.families (
   updated_at  timestamptz not null default now()
 );
 
+-- ---------- members ----------
 create table if not exists public.members (
-  id             uuid primary key default gen_random_uuid(),
-  family_id      text not null references public.families(id) on delete cascade,
-  relation       text default '',
-  name           text not null default '',
-  father_name    text default '',
-  mother_name    text default '',
-  gender         text default '',
-  dob            date,
-  education      text default '',          -- legacy free text
-  education_level text default '',         -- primary | higher_secondary | college | madarsa | none
-  sector          text default '',         -- private | government | business | none
-  religious       text default '',         -- aalim | hafiz | both
-  marital_status text default '',
-  children       text default '',
-  disability     text default 'no',
-  govt_scheme    text default 'no',
-  created_at     timestamptz not null default now()
+  id              uuid primary key default gen_random_uuid(),
+  family_id       text not null references public.families(id) on delete cascade,
+  relation        text default '',
+  name            text not null default '',
+  father_name     text default '',
+  mother_name     text default '',
+  gender          text default '',
+  dob             date,
+  education       text default '',
+  education_level text default '',
+  occupation      text default '',
+  sector          text default '',
+  religious       text default '',
+  marital_status  text default '',
+  children        text default '',
+  disability      text default 'no',
+  schemes         jsonb not null default '{}'::jsonb,
+  scheme_name     text default '',
+  docs            jsonb not null default '{}'::jsonb,
+  created_at      timestamptz not null default now()
 );
 create index if not exists members_family_id_idx on public.members(family_id);
 
--- survey fields for existing installs (safe to re-run)
-alter table public.families add column if not exists street     text default '';
-alter table public.families add column if not exists house_type text default 'moulding';
-alter table public.members  add column if not exists education_level text default '';
-alter table public.members  add column if not exists sector          text default '';
-alter table public.members  add column if not exists religious       text default '';
+-- ---------- masjid profile (single row) ----------
+create table if not exists public.masjid (
+  id          boolean primary key default true check (id),
+  name        text default '', established text default '', address text default '',
+  phone       text default '', imam text default '', muazzin text default '',
+  area        text default '', capacity text default '', rooms text default '',
+  madrasa     text default '', waqf text default '', bank text default '',
+  note        text default '', photos jsonb not null default '[]'::jsonb,
+  updated_at  timestamptz not null default now()
+);
 
--- allowlist of app logins.  user_id stays NULL until the person
--- sets their password (signs up) and CLAIMS the row.
+-- ---------- admin allowlist ----------
 create table if not exists public.app_users (
-  id         text primary key,               -- login id (lowercased)
-  user_id    uuid unique,                    -- auth.uid() once claimed
-  role       text not null default 'admin',  -- super | admin | family
+  id         text primary key,               -- email (lowercase)
+  user_id    uuid unique,                    -- auth.uid()
+  role       text not null default 'admin',
   name       text default '',
   phone      text default '',
-  family_id  text references public.families(id) on delete set null,
   created_at timestamptz not null default now()
 );
 
--- ---------- helpers (security definer so they can read app_users
---            without triggering the table's own RLS / recursion) ----------
-create or replace function public.is_member() returns boolean
-  language sql stable security definer set search_path = public as $$
-  select exists(select 1 from public.app_users where user_id = auth.uid());
-$$;
-create or replace function public.is_staff() returns boolean
-  language sql stable security definer set search_path = public as $$
-  select exists(select 1 from public.app_users where user_id = auth.uid() and role in ('super','admin'));
-$$;
-create or replace function public.is_super() returns boolean
-  language sql stable security definer set search_path = public as $$
-  select exists(select 1 from public.app_users where user_id = auth.uid() and role = 'super');
-$$;
-create or replace function public.my_family_id() returns text
-  language sql stable security definer set search_path = public as $$
-  select family_id from public.app_users where user_id = auth.uid();
-$$;
-create or replace function public.has_super() returns boolean
-  language sql stable security definer set search_path = public as $$
-  select exists(select 1 from public.app_users where role = 'super');
+-- safe re-runs on existing installs
+alter table public.families add column if not exists updated_at timestamptz default now();
+alter table public.members  add column if not exists occupation  text default '';
+alter table public.members  add column if not exists schemes     jsonb default '{}'::jsonb;
+alter table public.members  add column if not exists scheme_name text default '';
+alter table public.members  add column if not exists docs        jsonb default '{}'::jsonb;
+
+-- ---------- helper ----------
+create or replace function public.is_admin() returns boolean
+language sql security definer stable set search_path = public as $$
+  select exists (select 1 from public.app_users where user_id = auth.uid() and role = 'admin');
 $$;
 
--- ---------- family id sequence + updated_at ----------
-create sequence if not exists public.family_seq start 1;
-create or replace function public.next_family_id() returns text
-  language plpgsql as $$
-  declare n bigint;
-  begin
-    n := nextval('public.family_seq');
-    return 'MEMC-' || to_char(now(), 'YYYY') || '-' || lpad(n::text, 6, '0');
-  end $$;
-
-create or replace function public.touch_updated_at() returns trigger
-  language plpgsql as $$ begin new.updated_at := now(); return new; end $$;
-drop trigger if exists families_touch on public.families;
-create trigger families_touch before update on public.families
-  for each row execute function public.touch_updated_at();
-
--- ---------- ROW LEVEL SECURITY ----------
-alter table public.families  enable row level security;
-alter table public.members   enable row level security;
+-- ---------- RLS ----------
+alter table public.families enable row level security;
+alter table public.members  enable row level security;
+alter table public.masjid   enable row level security;
 alter table public.app_users enable row level security;
 
--- clean slate (idempotent re-run)
-do $$ declare r record; begin
-  for r in select policyname, tablename from pg_policies
-           where schemaname='public' and tablename in ('families','members','app_users') loop
-    execute format('drop policy if exists %I on public.%I', r.policyname, r.tablename);
-  end loop;
-end $$;
+drop policy if exists fam_read on public.families;
+create policy fam_read on public.families for select using (true);
+drop policy if exists fam_admin_write on public.families;
+create policy fam_admin_write on public.families for all to authenticated
+  using (public.is_admin()) with check (public.is_admin());
 
--- app_users: read own row (or all if super)
-create policy au_read on public.app_users for select to authenticated
-  using ( user_id = auth.uid() or public.is_super() );
+drop policy if exists mem_read on public.members;
+create policy mem_read on public.members for select using (true);
+drop policy if exists mem_admin_write on public.members;
+create policy mem_admin_write on public.members for all to authenticated
+  using (public.is_admin()) with check (public.is_admin());
 
--- app_users: bootstrap — the FIRST user becomes super admin
-create policy au_bootstrap on public.app_users for insert to authenticated
-  with check ( not public.has_super() and user_id = auth.uid() );
+drop policy if exists mj_read on public.masjid;
+create policy mj_read on public.masjid for select using (true);
+drop policy if exists mj_admin_write on public.masjid;
+create policy mj_admin_write on public.masjid for all to authenticated
+  using (public.is_admin()) with check (public.is_admin());
 
--- app_users: super admin provisions invites (user_id NULL = pending)
-create policy au_super_insert on public.app_users for insert to authenticated
-  with check ( public.is_super() );
-create policy au_super_update on public.app_users for update to authenticated
-  using ( public.is_super() ) with check ( public.is_super() );
-create policy au_super_delete on public.app_users for delete to authenticated
-  using ( public.is_super() );
+drop policy if exists self_read on public.app_users;
+create policy self_read on public.app_users for select to authenticated
+  using (user_id = auth.uid() or public.is_admin());
+drop policy if exists self_bootstrap on public.app_users;
+create policy self_bootstrap on public.app_users for insert to authenticated
+  with check (user_id = auth.uid()
+              and not exists (select 1 from public.app_users));
+drop policy if exists admin_add_admin on public.app_users;
+create policy admin_add_admin on public.app_users for insert to authenticated
+  with check (public.is_admin());
+drop policy if exists admin_edit_admin on public.app_users;
+create policy admin_edit_admin on public.app_users for update to authenticated
+  using (public.is_admin()) with check (public.is_admin());
 
--- app_users: a pending invite CLAIMS itself when that person signs up
--- (their login id = the part of their auth email before '@')
-create policy au_claim on public.app_users for update to authenticated
-  using ( user_id is null and id = lower(split_part(auth.email(), '@', 1)) )
-  with check ( user_id = auth.uid() );
+-- ---------- column grants: anon sees survey data, never phone/address ----------
+revoke all on public.families from anon;
+grant select (id, house_name, house_no, street, house_type, notes, docs, custom, created_at)
+  on public.families to anon;
+revoke all on public.members from anon;
+grant select (id, family_id, relation, name, father_name, mother_name, gender, dob,
+              education, education_level, occupation, sector, religious, marital_status,
+              children, disability, schemes, scheme_name, docs, created_at)
+  on public.members to anon;
+revoke all on public.masjid from anon;
+grant select on public.masjid to anon;
 
--- families: staff see/write all; a family login reads only its own record
-create policy fam_read on public.families for select to authenticated
-  using ( public.is_staff() or id = public.my_family_id() );
-create policy fam_write on public.families for all to authenticated
-  using ( public.is_staff() ) with check ( public.is_staff() );
-
--- members: same rule, resolved through the owning family
-create policy mem_read on public.members for select to authenticated
-  using ( public.is_staff() or family_id = public.my_family_id() );
-create policy mem_write on public.members for all to authenticated
-  using ( public.is_staff() ) with check ( public.is_staff() );
-
--- ============================================================
---  NOTE: turn OFF "Confirm email" in Auth settings (the app uses
---  synthetic addresses like admin@masjid.local, so there is no
---  inbox to confirm). Auth → Providers → Email → disable confirm.
--- ============================================================
-
-
--- ---------- v2.1 additions ----------
-alter table public.members add column if not exists docs jsonb default '{}'::jsonb;
-alter table public.members add column if not exists scheme_name text;
-
-create table if not exists public.masjid (
-  id boolean primary key default true,
-  name text, established text, address text, phone text,
-  imam text, muazzin text, area text, capacity text, rooms text,
-  madrasa text, waqf text, bank text, note text,
-  photos jsonb default '[]'::jsonb,
-  updated_at timestamptz default now()
-);
-alter table public.masjid enable row level security;
--- read for any authenticated user, write for super/admin only
-drop policy if exists masjid_read on public.masjid;
-create policy masjid_read on public.masjid for select using (auth.role() = 'authenticated');
+grant select, insert, update, delete on public.families to authenticated;
+grant select, insert, update, delete on public.members  to authenticated;
+grant select, insert, update, delete on public.masjid   to authenticated;
+grant select, insert, update on public.app_users to authenticated;
