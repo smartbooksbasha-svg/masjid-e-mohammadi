@@ -966,7 +966,12 @@ function viewDashboard(){
      ${isAdmin() ? '<button class="btn" data-act="goto" data-view="add">Add first household</button>' : ''}
      <button class="btn ghost" data-act="load-sample">Load sample data</button></div></div>`;
 
-  return `${heroBlock}
+  const backupBanner = (isAdmin() && needsBackup()) ? `
+    <div class="alert warn" style="margin:0 0 14px;display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap">
+      <span><b>Backup reminder:</b> ${esc(backupHint())} — ek backup file download karke Drive me rakho.</span>
+      <button class="btn sm" type="button" data-act="backup-json">⭳ Backup now</button>
+    </div>` : '';
+  return `${backupBanner}${heroBlock}
 
     <div class="page-head"><div><h1>Survey Dashboard</h1><p>Mohalla ke ghar, raste aur logon ka poora hisaab — live totals.</p></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -1509,6 +1514,7 @@ function viewSettings(){
         <button class="btn ghost sm" data-act="backup-json">⭳ Backup (JSON)</button>
         <button class="btn ghost sm" data-act="load-sample">Load sample data</button>
       </div>
+      <p class="muted small" style="margin:12px 0 0">Last backup: <b>${esc(backupHint())}</b> · har hafte ek backup lena zaroori hai (file Google Drive / laptop me rakho).</p>
     </div>
 
     <div class="card" style="margin-top:16px">
@@ -1882,11 +1888,21 @@ function exportExcel(){
   XLSX.writeFile(wb, 'masjid-survey-'+todayStr()+'.xlsx');
   toast('Excel file downloaded');
 }
+const LS_LASTBACKUP = 'memc_lastbackup';
+function lastBackupAt(){ return Number(localStorage.getItem(LS_LASTBACKUP)||0); }
+function backupAgeDays(){ const t=lastBackupAt(); return t ? Math.floor((Date.now()-t)/86400000) : null; }
+function needsBackup(){ const d=backupAgeDays(); return d===null || d>=7; }
+function backupHint(){
+  const d = backupAgeDays();
+  return d===null ? 'Kabhi backup nahi liya' : (d===0 ? 'Aaj backup liya' : d+' din pehle backup liya');
+}
+
 function backupJSON(){
   const data = { org:CFG.ORG_NAME, exportedAt:new Date().toISOString(), families:DB.families(), masjid:DB.masjid(), admins:DB.admins().map(a=>({email:a.email,name:a.name,phone:a.phone,createdAt:a.createdAt})) };
   const blob = new Blob([JSON.stringify(data,null,2)], {type:'application/json'});
   const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='masjid-survey-backup-'+todayStr()+'.json'; a.click(); URL.revokeObjectURL(a.href);
-  toast('Backup downloaded');
+  try { localStorage.setItem(LS_LASTBACKUP, String(Date.now())); } catch(e){}
+  toast('Backup downloaded — is file ko Google Drive / laptop me rakh do');
 }
 function mjHead(){
   const m = masjidData();
@@ -1900,7 +1916,8 @@ function printFamilies(fams, title){
   if (!fams.length){ toast('Nothing to print','err'); return; }
   const s = computeStats();
   const head = `<h1>${esc(CFG.ORG_NAME||'Masjid e Mohammadi')} — ${esc(title)}</h1>
-    <div class="pmeta">${esc(CFG.ORG_SUB||'Khidmath Committee')} · printed ${new Date().toLocaleDateString('en-GB')}</div>
+    <div class="pmeta">${esc(CFG.ORG_SUB||'Khidmath Committee')} · printed ${new Date().toLocaleDateString('en-GB')}${DB.admins()[0]?' · by '+esc(DB.admins()[0].name||DB.admins()[0].email):''}</div>
+    ${(masjidData().photos||[]).length?`<div class="pphotos">${(masjidData().photos||[]).slice(0,3).map(p=>`<img src="${esc(p.src||p)}" alt="Masjid" />`).join('')}</div>`:''}
     ${title==='All Households'?`
     <div class="psum">
       <b>1 · Location &amp; Housing</b> — streets ${s.streets.length} · houses ${s.houses} · moulding ${s.houseTypes.moulding} · cement sheet ${s.houseTypes.cement} · palm leaf ${s.houseTypes.palm}<br>
@@ -1923,7 +1940,9 @@ function printFamilies(fams, title){
       <div class="pmeta" style="margin-top:6pt">Documents: ${docs.length?esc(docs.join(', ')):'—'}</div>
     </div>`;
   }).join('');
-  const area = $('#printArea'); area.innerHTML = head + body;
+  const yr = new Date().getFullYear();
+  const foot = `<div class="pfoot">© ${yr} ${esc(CFG.ORG_NAME||'Masjid e Mohammadi')} · ${esc(CFG.ORG_SUB||'Khidmath Committee')} — All rights reserved. · ${esc(String(title))} report</div>`;
+  const area = $('#printArea'); area.innerHTML = head + body + foot;
   setTimeout(()=>{ window.print(); }, 120);
 }
 

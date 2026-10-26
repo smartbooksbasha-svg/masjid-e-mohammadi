@@ -438,3 +438,10 @@ td .mono{font-family:var(--font-display);font-weight:600;color:var(--accent)}
 .site-foot{margin:22px 0 6px;padding-top:16px;border-top:1px solid var(--line);display:flex;flex-wrap:wrap;
   gap:6px 18px;justify-content:space-between;color:var(--muted);font-size:.82rem}
 @media (max-width:820px){.ac-grid{grid-template-columns:1fr}}
+
+
+/* ---------- print report extras ---------- */
+.pfoot{margin-top:14pt;padding-top:8pt;border-top:1px solid #ddd;font-size:8.5pt;color:#555;text-align:center}
+.pphotos{display:flex;gap:6pt;margin:8pt 0 10pt}
+.pphotos img{width:32%;height:120pt;object-fit:cover;border-radius:6pt;border:1px solid #ddd}
+@media print{.pfoot{position:relative}.pfooter{page-break-inside:avoid}}
