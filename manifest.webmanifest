@@ -1,7 +1,7 @@
 {
-  "name": "Masjid e Mohammadi — Family Records",
-  "short_name": "Masjid Records",
-  "description": "Family records register for Masjid e Mohammadi by Masjid Kidmat Committee — dashboard, family forms, Family ID + QR, PDF/Excel export.",
+  "name": "Mohalla Survey — Masjid - E- Mohammadiy, Khidmath Committee",
+  "short_name": "Mohalla Survey",
+  "description": "Mohalla survey — streets, houses, families, education, work and deeni taleem totals with PDF/Excel export.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
