@@ -1,5 +1,5 @@
 /* ============================================================
-   Masjid e Mohammadi · Kidmat Committee — Family Records
+   Masjid - E- Mohammadiy · Khidmath Committee — Mohalla Survey
    Application logic (vanilla JS, local-first + optional Supabase)
    ============================================================ */
 'use strict';
@@ -20,6 +20,48 @@ const CUSTOM_DOCS = 12; // "more than 10" empty custom boxes
 const ROLE_LABEL = { super:'Super Admin', admin:'Admin', family:'Family Member' };
 const GENDERS = ['Male','Female','Other'];
 const MARITAL = ['Unmarried','Married','Widow','Widower','Divorced'];
+
+/* survey vocabularies (plan sections 1-5) */
+const HOUSE_TYPES = [
+  ['moulding','Moulding (concrete)'],
+  ['cement','Cement sheet'],
+  ['other','Other / kachcha']
+];
+const EDU = [
+  ['primary','Primary (1-8)'],
+  ['higher_secondary','Higher secondary (9-12)'],
+  ['college','College / University'],
+  ['madarsa','Madarsa'],
+  ['none','Not studying']
+];
+const SECTOR = [
+  ['private','Private sector'],
+  ['government','Government sector'],
+  ['business','Business / self-employed'],
+  ['none','Not working']
+];
+const DEENI = [
+  ['','— none —'],
+  ['aalim','Aalim'],
+  ['hafiz','Hafiz'],
+  ['both','Aalim + Hafiz']
+];
+const labelOf = (list,key) => (list.find(x=>x[0]===key)||[])[1] || '';
+const EDU_LABEL = Object.fromEntries(EDU);
+const SECTOR_LABEL = Object.fromEntries(SECTOR);
+const DEENI_LABEL = Object.fromEntries(DEENI);
+
+/* old records stored free-text education — map it once */
+function inferEdu(text){
+  const t = String(text||'').toLowerCase();
+  if (!t) return '';
+  if (t.includes('madarsa') || t.includes('madrasa') || t.includes('hifz')) return 'madarsa';
+  if (t.includes('graduate') || t.includes('college') || t.includes('degree') || t.includes('b.a') || t.includes('b.sc')) return 'college';
+  if (t.includes('12') || t.includes('11') || t.includes('inter')) return 'higher_secondary';
+  if (t.includes('10') || t.includes('9') || t.includes('8') || t.includes('primary') || t.includes('7')) return 'primary';
+  return '';
+}
+function eduKey(m){ return m.educationLevel || inferEdu(m.education); }
 
 /* ---------------- tiny helpers ---------------- */
 const $  = (s, r=document) => r.querySelector(s);
@@ -104,7 +146,7 @@ function renderAuth(){
 function renderSetup(){
   $('#authScreen').innerHTML = `
   <div class="auth-wrap"><div class="auth-card">
-    <div class="auth-brand"><span class="crest">M</span><div><div class="t">${esc(CFG.ORG_NAME||'Masjid e Mohammadi')}</div><div class="s">${esc(CFG.ORG_SUB||'Masjid Kidmat Committee')}</div></div></div>
+    <div class="auth-brand"><span class="crest">M</span><div><div class="t">${esc(CFG.ORG_NAME||'Masjid - E- Mohammadiy')}</div><div class="s">${esc(CFG.ORG_SUB||'Khidmath Committee')}</div></div></div>
     <h1>First-time setup</h1>
     <p class="lead">Create the <b>Super Admin</b> account. Iske baad login screen khulegi.</p>
     <form id="setupForm">
@@ -139,7 +181,7 @@ function renderSetup(){
 function renderLogin(){
   $('#authScreen').innerHTML = `
   <div class="auth-wrap"><div class="auth-card">
-    <div class="auth-brand"><span class="crest">M</span><div><div class="t">${esc(CFG.ORG_NAME||'Masjid e Mohammadi')}</div><div class="s">${esc(CFG.ORG_SUB||'Masjid Kidmat Committee')}</div></div></div>
+    <div class="auth-brand"><span class="crest">M</span><div><div class="t">${esc(CFG.ORG_NAME||'Masjid - E- Mohammadiy')}</div><div class="s">${esc(CFG.ORG_SUB||'Khidmath Committee')}</div></div></div>
     <h1>Sign in</h1>
     <p class="lead">Apna login ID aur password daaliye.</p>
     <div class="role-tabs" id="roleTabs">
@@ -184,7 +226,7 @@ function renderLogin(){
 function renderOtp(){
   $('#authScreen').innerHTML = `
   <div class="auth-wrap"><div class="auth-card">
-    <div class="auth-brand"><span class="crest">M</span><div><div class="t">${esc(CFG.ORG_NAME||'Masjid e Mohammadi')}</div><div class="s">${esc(CFG.ORG_SUB||'Masjid Kidmat Committee')}</div></div></div>
+    <div class="auth-brand"><span class="crest">M</span><div><div class="t">${esc(CFG.ORG_NAME||'Masjid - E- Mohammadiy')}</div><div class="s">${esc(CFG.ORG_SUB||'Khidmath Committee')}</div></div></div>
     <h1>Verify mobile OTP</h1>
     <p class="lead">A 6-digit code was sent to <b>${esc(pending.user.phone||'your mobile')}</b>.</p>
     <div class="alert info">Demo mode — SMS is not connected yet. Your code is: <span class="otp-badge">${pending.otp}</span></div>
@@ -220,7 +262,7 @@ function enterApp(){
 function navItems(){
   const u = currentUser(); if(!u) return [];
   if (u.role==='family') return [ ['myfamily','My Family',ICON.home], ['settings','Settings',ICON.gear] ];
-  const items = [ ['dashboard','Dashboard',ICON.dash], ['families','Families',ICON.list], ['add','Add Family',ICON.plus] ];
+  const items = [ ['dashboard','Dashboard',ICON.dash], ['families','Households',ICON.list], ['add','Add Household',ICON.plus] ];
   if (u.role==='super') items.push(['users','Users',ICON.users]);
   items.push(['settings','Settings',ICON.gear]);
   return items;
@@ -242,8 +284,8 @@ function go(view, param){
   if (u.role==='family' && !['myfamily','settings'].includes(view)) view='myfamily';
   state.view = view; state.param = param||null;
   closeNav();
-  const titles = { dashboard:'Dashboard', families:'Families', add:(state.param?'Edit Family':'Add Family'), detail:'Family Record', users:'Users', settings:'Settings', myfamily:'My Family' };
-  $('#pageTitle').textContent = titles[view] || 'Dashboard';
+  const titles = { dashboard:'Survey Dashboard', families:'Households', add:(state.param?'Edit Household':'Add Household'), detail:'Household Record', users:'Users', settings:'Settings', myfamily:'My Family' };
+  $('#pageTitle').textContent = titles[view] || 'Survey Dashboard';
   let html='';
   if (view==='dashboard') html = viewDashboard();
   else if (view==='families') html = viewFamilies();
@@ -260,89 +302,238 @@ function go(view, param){
 function closeNav(){ const s=$('#sidebar'), sc=$('#scrimNav'); if(s) s.classList.remove('open'); if(sc) sc.classList.remove('show'); }
 
 /* ============================================================
-   DASHBOARD
+   SURVEY STATS  (plan sections 1-5)
    ============================================================ */
+function houseTypeKey(t){
+  const v = String(t||'').toLowerCase();
+  if (v.includes('mould') || v.includes('concrete') || v.includes('rcc')) return 'moulding';
+  if (v.includes('cement') || v.includes('sheet') || v.includes('tin')) return 'cement';
+  return 'other';
+}
+function streetName(f){ return (String(f.street||'').trim()) || 'Unassigned'; }
+
 function computeStats(){
   const fams = DB.families();
-  let men=0,women=0,children=0,married=0,unmarried=0,widow=0,disability=0,scheme=0;
-  fams.forEach(f => (f.members||[]).forEach(m=>{
-    const g=(m.gender||'').toLowerCase();
-    if (g==='male') men++; else if (g==='female') women++;
-    const a = ageFromDob(m.dob);
-    if (a!==null && a<18) children++;
-    const ms=(m.maritalStatus||'').toLowerCase();
-    if (ms==='married') married++; else if (ms==='unmarried'||ms==='') unmarried++;
-    if (ms==='widow'||ms==='widower') widow++;
-    if (m.disability==='yes') disability++;
-    if (m.govtScheme==='yes') scheme++;
-  }));
-  return { houses:fams.length, men, women, children, married, unmarried, widow, disability, scheme };
+  const s = {
+    houses: fams.length,
+    families: fams.length,
+    streets: [],
+    houseTypes: { moulding:0, cement:0, other:0 },
+    men:   { total:0, married:0, unmarried:0, disabled:0 },
+    women: { total:0, married:0, unmarried:0, disabled:0, widow:0 },
+    others: 0,
+    children: 0,
+    pop: 0,
+    students: { total:0, primary:0, higher_secondary:0, college:0, madarsa:0 },
+    work: { men:{private:0,government:0,business:0}, women:{private:0,government:0,business:0} },
+    deeni: { menAalim:0, menHafiz:0, womenAalim:0, womenHafiz:0 }
+  };
+  const streetMap = new Map();
+
+  fams.forEach(f=>{
+    const name = streetName(f);
+    if (!streetMap.has(name)) streetMap.set(name, { name, houses:0, moulding:0, cement:0, other:0 });
+    const st = streetMap.get(name);
+    st.houses++;
+
+    const ht = houseTypeKey(f.houseType);
+    s.houseTypes[ht]++;
+    st[ht]++;
+
+    (f.members||[]).forEach(m=>{
+      s.pop++;
+      const g = (m.gender||'').toLowerCase();
+      const bucket = g==='female' ? s.women : (g==='male' ? s.men : null);
+      if (g==='other') s.others++;
+
+      const age = ageFromDob(m.dob);
+      if (age!==null && age<18) s.children++;
+
+      const ms = (m.maritalStatus||'').toLowerCase();
+      if (bucket){
+        bucket.total++;
+        if (ms==='married') bucket.married++;
+        else bucket.unmarried++;   // unmarried / widower / widow / divorced
+        if (m.disability==='yes') bucket.disabled++;
+      }
+      if (g==='female' && ms==='widow') s.women.widow++;
+
+      const edu = eduKey(m);
+      // "student" = still of school/college age (26 se kam) aur padhai set hai
+      const isStudent = !!edu && edu!=='none' && (age===null || age<26);
+      if (isStudent){
+        s.students.total++;
+        if (s.students[edu]!==undefined) s.students[edu]++;
+      }
+
+      const sec = (m.sector||'').toLowerCase();
+      if (bucket && (sec==='private'||sec==='government'||sec==='business')){
+        const key = g==='female' ? 'women' : 'men';
+        s.work[key][sec]++;
+      }
+
+      const dn = (m.religious||'').toLowerCase();
+      const isF = g==='female';
+      if (dn==='aalim' || dn==='both'){ if (isF) s.deeni.womenAalim++; else s.deeni.menAalim++; }
+      if (dn==='hafiz' || dn==='both'){ if (isF) s.deeni.womenHafiz++; else s.deeni.menHafiz++; }
+    });
+  });
+
+  s.streets = Array.from(streetMap.values()).sort((a,b)=> a.name.localeCompare(b.name));
+  return s;
 }
 
-function statCard(icon, num, label){
-  return `<div class="stat"><div class="ic">${icon}</div><div class="n">${num}</div><div class="l">${label}</div></div>`;
-}
+/* ============================================================
+   DASHBOARD
+   ============================================================ */
 function icSmall(path){ return `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${path}</svg>`; }
+function metric(label, val, opts){
+  const o = opts||{};
+  return `<div class="metric${o.hi?' hi':''}${o.sub?' sub':''}"><span>${label}</span><b>${val}</b></div>`;
+}
+function grpHead(no, title, sub){
+  return `<header class="grp-head"><span class="grp-no">${no}</span><div><h2>${esc(title)}</h2><p>${esc(sub)}</p></div></header>`;
+}
 
 function viewDashboard(){
   const s = computeStats();
   const u = currentUser();
-  const cards = [
-    [icSmall('<path d="M3 9.5 12 3l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/>'), s.houses, 'Total Houses'],
-    [icSmall('<circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 12 0v1"/>'), s.men, 'Men'],
-    [icSmall('<circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 12 0v1"/><path d="M18 8a3 3 0 0 1 0 6"/>'), s.women, 'Women'],
-    [icSmall('<circle cx="12" cy="8" r="3"/><path d="M9 21v-2a3 3 0 0 1 6 0v2"/>'), s.children, 'Children'],
-    [icSmall('<path d="M20.8 6.6a5 5 0 0 0-7.1 0L12 8.3l-1.7-1.7a5 5 0 1 0-7.1 7.1L12 22l8.8-8.3a5 5 0 0 0 0-7.1z"/>'), s.married, 'Married'],
-    [icSmall('<circle cx="12" cy="7" r="4"/><path d="M5 21a7 7 0 0 1 14 0"/>'), s.unmarried, 'Unmarried'],
-    [icSmall('<circle cx="12" cy="7" r="4"/><path d="M5 21a7 7 0 0 1 14 0"/><line x1="12" y1="11" x2="12" y2="20"/>'), s.widow, 'Widow'],
-    [icSmall('<circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/>'), s.disability, 'Disability'],
-    [icSmall('<path d="M20 7 9 18l-5-5"/>'), s.scheme, 'Govt. Scheme']
+  const kpis = [
+    [icSmall('<path d="M4 20V8l8-4 8 4v12"/><path d="M9 20v-6h6v6"/>'), s.streets.length, 'Total streets'],
+    [icSmall('<path d="M3 9.5 12 3l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/>'), s.houses, 'Total houses'],
+    [icSmall('<circle cx="12" cy="7" r="4"/><path d="M5 21a7 7 0 0 1 14 0"/>'), s.families, 'Total families'],
+    [icSmall('<circle cx="9" cy="8" r="3.4"/><path d="M2.5 21v-1a6.5 6.5 0 0 1 13 0v1"/><path d="M17 5.5a3.4 3.4 0 0 1 0 6"/><path d="M18.5 21v-1a6 6 0 0 0-2-4.5"/>'), s.pop, 'Total population']
   ];
-  const fams = DB.families().slice(-5).reverse();
-  const recent = fams.length ? `<div class="sec-title">Recently added</div>
-    <div class="table-wrap"><table><thead><tr><th>Family ID</th><th>House</th><th>Members</th><th>Phone</th></tr></thead><tbody>
-    ${fams.map(f=>`<tr data-act="view-family" data-id="${esc(f.id)}"><td><span class="mono">${esc(f.id)}</span></td><td>${esc(f.houseName||'—')}</td><td>${(f.members||[]).length}</td><td>${esc(f.phone||'—')}</td></tr>`).join('')}
-    </tbody></table></div>` : '';
-  const empty = s.houses ? '' : `<div class="empty"><div class="big">🕌</div><h3>No families yet</h3><p>Add the first family to see the dashboard fill up.</p>
+
+  const streetRows = s.streets.length ? `
+    <div class="table-wrap street-table" style="margin-top:14px"><table><thead><tr><th>Street name</th><th>Houses</th><th>Moulding</th><th>Cement sheet</th><th>Other</th></tr></thead><tbody>
+      ${s.streets.map(st=>`<tr data-act="goto" data-view="families" data-street="${esc(st.name)}" class="clickable">
+        <td><b>${esc(st.name)}</b></td><td>${st.houses}</td><td>${st.moulding}</td><td>${st.cement}</td><td>${st.other}</td></tr>`).join('')}
+      <tr class="totals"><td>Total</td><td>${s.houses}</td><td>${s.houseTypes.moulding}</td><td>${s.houseTypes.cement}</td><td>${s.houseTypes.other}</td></tr>
+    </tbody></table></div>` : `<p class="muted small" style="margin-top:12px">No streets yet — street names appear here as households are added.</p>`;
+
+  const empty = s.houses ? '' : `<div class="empty" style="margin-top:18px"><div class="big">🕌</div><h3>No households surveyed yet</h3><p>Add the first household, ya sample data load karke dashboard dekh lo.</p>
      <div style="margin-top:16px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
-     ${u.role!=='family' ? '<button class="btn" data-act="goto" data-view="add">Add first family</button>' : ''}
+     ${u.role!=='family' ? '<button class="btn" data-act="goto" data-view="add">Add first household</button>' : ''}
      <button class="btn ghost" data-act="load-sample">Load sample data</button></div></div>`;
+
   return `
-    <div class="page-head"><div><h1>Dashboard</h1><p>Live totals across all mohalla families.</p></div>
+    <div class="page-head"><div><h1>Survey Dashboard</h1><p>Mohalla ke ghar, raste aur logon ka poora hisaab — live totals.</p></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn ghost sm" data-act="export-excel">⭳ Excel</button>
         <button class="btn ghost sm" data-act="print-all">⎙ PDF / Print</button>
       </div></div>
-    <div class="stat-grid">${cards.map(c=>statCard(c[0],c[1],c[2])).join('')}</div>
-    ${empty}${recent}`;
+
+    <div class="kpi-row">${kpis.map(k=>`<div class="stat"><div class="ic">${k[0]}</div><div class="n">${k[1]}</div><div class="l">${k[2]}</div></div>`).join('')}</div>
+    ${empty}
+
+    <div class="grp-grid">
+      <section class="grp wide">
+        ${grpHead(1,'Location & Housing','Ghar aur raste ki details')}
+        <div class="metrics cols2">
+          ${metric('Total streets', s.streets.length)}
+          ${metric('Total houses', s.houses)}
+          ${metric('Moulding (house type)', s.houseTypes.moulding)}
+          ${metric('Cement sheet (house type)', s.houseTypes.cement)}
+        </div>
+        ${streetRows}
+      </section>
+
+      <section class="grp wide">
+        ${grpHead(2,'Family & Demographics','Ghar walon ki details')}
+        <div class="metrics cols2">
+          ${metric('Total families', s.families)}
+          ${metric('Total population', s.pop)}
+          ${metric('Children (under 18)', s.children)}
+          ${metric('Physically challenged (total)', s.men.disabled + s.women.disabled)}
+        </div>
+        <div class="split">
+          <div class="split-col">
+            <h3>Men <span class="pill">${s.men.total}</span></h3>
+            ${metric('Married', s.men.married)}
+            ${metric('Unmarried', s.men.unmarried)}
+            ${metric('Physically challenged', s.men.disabled)}
+          </div>
+          <div class="split-col">
+            <h3>Women <span class="pill">${s.women.total}</span></h3>
+            ${metric('Married', s.women.married)}
+            ${metric('Unmarried', s.women.unmarried)}
+            ${metric('Physically challenged', s.women.disabled)}
+            ${metric('Widow', s.women.widow)}
+          </div>
+        </div>
+      </section>
+
+      <section class="grp">
+        ${grpHead(3,'Education','Total child / students')}
+        <div class="metrics">
+          ${metric('Total students', s.students.total, {hi:true})}
+          ${metric('Primary students', s.students.primary)}
+          ${metric('Higher secondary students', s.students.higher_secondary)}
+          ${metric('College students', s.students.college)}
+          ${metric('Madarsa students', s.students.madarsa)}
+        </div>
+      </section>
+
+      <section class="grp">
+        ${grpHead(4,'Professional','Kaam kaaj ki details')}
+        <div class="metrics">
+          ${metric('Men — private sector', s.work.men.private)}
+          ${metric('Men — government sector', s.work.men.government)}
+          ${metric('Men — business', s.work.men.business)}
+        </div>
+        <div class="metrics" style="margin-top:10px">
+          ${metric('Women — private sector', s.work.women.private)}
+          ${metric('Women — government sector', s.work.women.government)}
+          ${metric('Women — business', s.work.women.business)}
+        </div>
+      </section>
+
+      <section class="grp wide">
+        ${grpHead(5,'Religious Education','Deeni taleem — Aalim & Hafiz')}
+        <div class="metrics cols2">
+          ${metric('Men Aalim', s.deeni.menAalim)}
+          ${metric('Men Hafiz', s.deeni.menHafiz)}
+          ${metric('Women Aalim', s.deeni.womenAalim)}
+          ${metric('Women Hafiz', s.deeni.womenHafiz)}
+        </div>
+        <div class="metrics" style="margin-top:10px">
+          ${metric('Total Aalim & Hafiz (men + women)', s.deeni.menAalim + s.deeni.menHafiz + s.deeni.womenAalim + s.deeni.womenHafiz, {hi:true})}
+        </div>
+      </section>
+    </div>`;
 }
 
 /* ============================================================
-   FAMILIES LIST
+   HOUSEHOLDS LIST
    ============================================================ */
 function viewFamilies(){
   const fams = DB.families();
   if (!fams.length) return emptyFamilies();
+  const streets = Array.from(new Set(fams.map(streetName))).sort();
+  const pre = state.param ? esc(state.param) : '';
   return `
-    <div class="page-head"><div><h1>Families</h1><p>${fams.length} families on record.</p></div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn ghost sm" data-act="export-excel">⭳ Excel</button><button class="btn ghost sm" data-act="print-all">⎙ PDF</button><button class="btn sm" data-act="goto" data-view="add">+ Add Family</button></div></div>
+    <div class="page-head"><div><h1>Households</h1><p>${fams.length} households on record.</p></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn ghost sm" data-act="export-excel">⭳ Excel</button><button class="btn ghost sm" data-act="print-all">⎙ PDF</button><button class="btn sm" data-act="goto" data-view="add">+ Add Household</button></div></div>
     <div class="toolbar">
-      <input class="inp grow" id="famSearch" placeholder="Search name, Family ID, phone, address…" />
+      <input class="inp grow" id="famSearch" placeholder="Search household, Family ID, phone, street…" />
+      <select class="inp" id="famStreetF" style="max-width:200px"><option value="">All streets</option>${streets.map(st=>`<option ${pre===st?'selected':''}>${esc(st)}</option>`).join('')}</select>
       <select class="inp" id="famGenderF" style="max-width:170px"><option value="">All genders</option>${GENDERS.map(g=>`<option>${g}</option>`).join('')}</select>
       <select class="inp" id="famMaritalF" style="max-width:190px"><option value="">All marital status</option>${MARITAL.map(m=>`<option>${m}</option>`).join('')}</select>
     </div>
     <div id="famListWrap"></div>`;
 }
 function emptyFamilies(){
-  return `<div class="page-head"><div><h1>Families</h1><p>No families on record yet.</p></div></div>
-    <div class="card"><div class="empty"><div class="big">📋</div><h3>Start the register</h3><p>Add your first family, or load sample data to explore.</p>
+  return `<div class="page-head"><div><h1>Households</h1><p>No households on record yet.</p></div></div>
+    <div class="card"><div class="empty"><div class="big">📋</div><h3>Start the survey</h3><p>Add your first household, or load sample data to explore.</p>
       <div style="margin-top:16px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
-      <button class="btn" data-act="goto" data-view="add">+ Add Family</button>
+      <button class="btn" data-act="goto" data-view="add">+ Add Household</button>
       <button class="btn ghost" data-act="load-sample">Load sample data</button></div></div></div>`;
 }
-function familyMatches(f, q, g, ms){
+function familyMatches(f, q, st, g, ms){
   q = (q||'').toLowerCase();
-  const hay = [f.id, f.houseName, f.phone, f.address, f.houseNo].join(' ').toLowerCase()
+  if (st && streetName(f)!==st) return false;
+  const hay = [f.id, f.houseName, f.phone, f.address, f.houseNo, f.street, labelOf(HOUSE_TYPES, houseTypeKey(f.houseType))].join(' ').toLowerCase()
     + ' ' + (f.members||[]).map(m=>[m.name,m.fatherName,m.motherName].join(' ')).join(' ').toLowerCase();
   if (q && !hay.includes(q)) return false;
   if (g && !(f.members||[]).some(m=>(m.gender||'')===g)) return false;
@@ -351,17 +542,18 @@ function familyMatches(f, q, g, ms){
 }
 function renderFamilyList(){
   const wrap = $('#famListWrap'); if(!wrap) return;
-  const q = ($('#famSearch')||{}).value||'', g=($('#famGenderF')||{}).value||'', ms=($('#famMaritalF')||{}).value||'';
-  const u = currentUser();
-  const rows = DB.families().filter(f=>familyMatches(f,q,g,ms)).sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
-  if (!rows.length){ wrap.innerHTML = `<div class="card"><div class="empty"><h3>No matching families</h3><p>Try a different search or filter.</p></div></div>`; return; }
-  wrap.innerHTML = `<div class="table-wrap"><table><thead><tr><th>Family ID</th><th>House</th><th>Members</th><th>Phone</th><th>Address</th><th></th></tr></thead><tbody>
+  const q = ($('#famSearch')||{}).value||'', st=($('#famStreetF')||{}).value||'',
+        g=($('#famGenderF')||{}).value||'', ms=($('#famMaritalF')||{}).value||'';
+  const rows = DB.families().filter(f=>familyMatches(f,q,st,g,ms)).sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+  if (!rows.length){ wrap.innerHTML = `<div class="card"><div class="empty"><h3>No matching households</h3><p>Try a different search or filter.</p></div></div>`; return; }
+  wrap.innerHTML = `<div class="table-wrap"><table><thead><tr><th>Family ID</th><th>Household</th><th>Street</th><th>Type</th><th>Members</th><th>Phone</th><th></th></tr></thead><tbody>
     ${rows.map(f=>`<tr>
       <td><span class="mono">${esc(f.id)}</span></td>
-      <td>${esc(f.houseName||'—')}</td>
+      <td>${esc(f.houseName||'—')}${f.houseNo?` <span class="muted small">· ${esc(f.houseNo)}</span>`:''}</td>
+      <td>${esc(streetName(f))}</td>
+      <td><span class="badge gray">${esc(labelOf(HOUSE_TYPES, houseTypeKey(f.houseType))||'Other')}</span></td>
       <td>${(f.members||[]).length}</td>
       <td>${esc(f.phone||'—')}</td>
-      <td class="muted">${esc((f.address||'—').slice(0,34))}${(f.address||'').length>34?'…':''}</td>
       <td style="white-space:nowrap">
         <button class="btn ghost sm" data-act="view-family" data-id="${esc(f.id)}">View</button>
         <button class="btn ghost sm" data-act="edit-family" data-id="${esc(f.id)}">Edit</button>
@@ -371,14 +563,19 @@ function renderFamilyList(){
 }
 
 /* ============================================================
-   FAMILY FORM
+   HOUSEHOLD FORM
    ============================================================ */
-function blankMember(){ return { relation:'', name:'', fatherName:'', motherName:'', gender:'Male', dob:'', education:'', maritalStatus:'Unmarried', children:'', disability:'no', govtScheme:'no' }; }
+function blankMember(){ return { relation:'', name:'', fatherName:'', motherName:'', gender:'Male', dob:'', educationLevel:'', sector:'', religious:'', maritalStatus:'Unmarried', children:'', disability:'no', govtScheme:'no' }; }
 function blankDraft(){
-  return { id:null, houseName:'', houseNo:'', address:'', phone:'', notes:'',
+  return { id:null, houseName:'', houseNo:'', street:'', houseType:'moulding', address:'', phone:'', notes:'',
     members:[ blankMember() ],
     docs: Object.fromEntries(DOC_TYPES.map(d=>[d[0],'no'])),
     custom: Array.from({length:CUSTOM_DOCS}, ()=>({label:'', value:'no'})) };
+}
+function streetOptions(current){
+  const streets = Array.from(new Set(DB.families().map(streetName).filter(x=>x && x!=='Unassigned'))).sort();
+  if (current && !streets.includes(current)) streets.push(current);
+  return streets.map(s=>`<option value="${esc(s)}"></option>`).join('');
 }
 
 function viewFamilyForm(){
@@ -386,23 +583,30 @@ function viewFamilyForm(){
   const d = state.draft;
   const editing = !!d.id;
   return `
-    <div class="page-head"><div><h1>${editing?'Edit Family':'Add Family'}</h1><p>${editing?'Update the household record.':'Fill the household details, then add each member.'}</p></div>
+    <div class="page-head"><div><h1>${editing?'Edit Household':'Add Household'}</h1><p>${editing?'Update this household record.':'Fill the household details, then add each member.'}</p></div>
       <button class="btn ghost sm" data-act="goto" data-view="families">← Back</button></div>
     <form id="famForm">
       <div class="card">
-        <div class="sec-title" style="margin-top:0">Household details</div>
+        <div class="sec-title" style="margin-top:0">1 · Location &amp; housing</div>
         <div class="grid g2">
-          <div class="field"><label>Family / House name *</label><input class="inp" data-field="houseName" value="${esc(d.houseName)}" placeholder="e.g. Abdul Rahman" /></div>
+          <div class="field"><label>Street name *</label><input class="inp" data-field="street" list="streetList" value="${esc(d.street)}" placeholder="e.g. Masjid Road" />
+            <datalist id="streetList">${streetOptions(d.street)}</datalist></div>
           <div class="field"><label>House number</label><input class="inp" data-field="houseNo" value="${esc(d.houseNo)}" placeholder="e.g. 12-B" /></div>
         </div>
-        <div class="grid g2" style="margin-top:12px">
-          <div class="field"><label>Phone number</label><input class="inp" data-field="phone" inputmode="numeric" value="${esc(d.phone)}" placeholder="10-digit mobile" /></div>
-          <div class="field"><label>Address</label><input class="inp" data-field="address" value="${esc(d.address)}" placeholder="Street / mohalla" /></div>
+        <div class="field" style="margin-top:12px"><label>House type</label>
+          <div class="seg seg-wrap" data-hfield="houseType">
+            ${HOUSE_TYPES.map(([k,l])=>`<button type="button" data-v="${k}" class="${(d.houseType||'moulding')===k?'on':''}">${esc(l)}</button>`).join('')}
+          </div>
         </div>
+        <div class="grid g2" style="margin-top:12px">
+          <div class="field"><label>Household / head name *</label><input class="inp" data-field="houseName" value="${esc(d.houseName)}" placeholder="e.g. Abdul Rahman" /></div>
+          <div class="field"><label>Phone number</label><input class="inp" data-field="phone" inputmode="numeric" value="${esc(d.phone)}" placeholder="10-digit mobile" /></div>
+        </div>
+        <div class="field" style="margin-top:12px"><label>Address / landmark</label><input class="inp" data-field="address" value="${esc(d.address)}" placeholder="Mohalla, gali, landmark" /></div>
         <div class="field" style="margin-top:12px"><label>Notes (optional)</label><textarea class="inp" data-field="notes" placeholder="Any remark about this household">${esc(d.notes)}</textarea></div>
       </div>
 
-      <div class="sec-title">Members</div>
+      <div class="sec-title">2 · Members</div>
       <div id="membersWrap"></div>
       <button type="button" class="btn ghost sm" data-act="add-member">+ Add member</button>
 
@@ -436,10 +640,12 @@ function docRow(label, value, key, _x){
 }
 function renderMembers(){
   const wrap = $('#membersWrap'); if(!wrap) return;
-  wrap.innerHTML = state.draft.members.map((m,i)=>`
+  wrap.innerHTML = state.draft.members.map((m,i)=>{
+    const edu = eduKey(m);
+    return `
     <div class="member-card">
       <div class="member-head">
-        <span class="idx">Member ${i+1}</span>
+        <span class="idx">Member ${i+1}${m.name?' · '+esc(m.name):''}</span>
         ${state.draft.members.length>1 ? `<button type="button" class="btn ghost sm" data-act="remove-member" data-idx="${i}" style="color:var(--danger)">Remove</button>` : ''}
       </div>
       <div class="member-grid">
@@ -447,15 +653,20 @@ function renderMembers(){
         <div class="field"><label>Relation to head</label><input class="inp" data-field="m.relation" data-idx="${i}" value="${esc(m.relation)}" placeholder="Self / Wife / Son…" /></div>
         <div class="field"><label>Gender</label><select class="inp" data-field="m.gender" data-idx="${i}">${GENDERS.map(g=>`<option ${m.gender===g?'selected':''}>${g}</option>`).join('')}</select></div>
         <div class="field"><label>Date of birth</label><input class="inp" type="date" data-field="m.dob" data-idx="${i}" value="${esc(m.dob)}" /></div>
-        <div class="field"><label>Education</label><input class="inp" data-field="m.education" data-idx="${i}" value="${esc(m.education)}" placeholder="e.g. 10th / Graduate" /></div>
         <div class="field"><label>Marital status</label><select class="inp" data-field="m.maritalStatus" data-idx="${i}">${MARITAL.map(x=>`<option ${m.maritalStatus===x?'selected':''}>${x}</option>`).join('')}</select></div>
         <div class="field"><label>Number of children</label><input class="inp" inputmode="numeric" data-field="m.children" data-idx="${i}" value="${esc(m.children)}" /></div>
+        <div class="field"><label>Education</label><select class="inp" data-field="m.educationLevel" data-idx="${i}">
+          <option value="">— not set —</option>${EDU.map(([k,l])=>`<option value="${k}" ${edu===k?'selected':''}>${esc(l)}</option>`).join('')}</select></div>
+        <div class="field"><label>Work / profession</label><select class="inp" data-field="m.sector" data-idx="${i}">
+          <option value="">— not set —</option>${SECTOR.map(([k,l])=>`<option value="${k}" ${m.sector===k?'selected':''}>${esc(l)}</option>`).join('')}</select></div>
+        <div class="field"><label>Deeni taleem</label><select class="inp" data-field="m.religious" data-idx="${i}">
+          ${DEENI.map(([k,l])=>`<option value="${k}" ${(m.religious||'')===k?'selected':''}>${esc(l)}</option>`).join('')}</select></div>
         <div class="field"><label>Father name</label><input class="inp" data-field="m.fatherName" data-idx="${i}" value="${esc(m.fatherName)}" /></div>
         <div class="field"><label>Mother name</label><input class="inp" data-field="m.motherName" data-idx="${i}" value="${esc(m.motherName)}" /></div>
-        <div class="field"><label>Disability</label><div class="field-yn">${segYN('m.disability', i, m.disability)}</div></div>
+        <div class="field"><label>Physically challenged</label><div class="field-yn">${segYN('m.disability', i, m.disability)}</div></div>
         <div class="field"><label>Govt. scheme</label><div class="field-yn">${segYN('m.govtScheme', i, m.govtScheme)}</div></div>
       </div>
-    </div>`).join('');
+    </div>`; }).join('');
 }
 function segYN(field, idx, value){
   return `<div class="seg" data-mfield="${field}" data-idx="${idx}">
@@ -464,17 +675,20 @@ function segYN(field, idx, value){
 }
 
 /* ============================================================
-   FAMILY DETAIL
+   HOUSEHOLD DETAIL
    ============================================================ */
 function viewFamilyDetail(id){
   const f = DB.families().find(x=>x.id===id);
-  if (!f) return `<div class="empty"><h3>Family not found</h3><p>It may have been deleted.</p><button class="btn ghost" data-act="goto" data-view="families" style="margin-top:14px">← Back</button></div>`;
+  if (!f) return `<div class="empty"><h3>Household not found</h3><p>It may have been deleted.</p><button class="btn ghost" data-act="goto" data-view="families" style="margin-top:14px">← Back</button></div>`;
   const u = currentUser();
   const canEdit = u.role!=='family';
   const docsYes = DOC_TYPES.filter(([k])=>f.docs && f.docs[k]==='yes').map(([,l])=>l);
   const customYes = (f.custom||[]).filter(c=>c.label && c.value==='yes').map(c=>c.label);
+  const members = f.members||[];
+  const men = members.filter(m=>m.gender==='Male').length;
+  const women = members.filter(m=>m.gender==='Female').length;
   return `
-    <div class="page-head"><div><h1>${esc(f.houseName||'Family')}</h1><p>Created ${fmtDate(f.createdAt ? new Date(f.createdAt).toISOString() : '')} · ${(f.members||[]).length} member(s)</p></div>
+    <div class="page-head"><div><h1>${esc(f.houseName||'Household')}</h1><p>${esc(streetName(f))}${f.houseNo?' · House '+esc(f.houseNo):''} · ${members.length} member(s)</p></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn ghost sm" data-act="print-family" data-id="${esc(f.id)}">⎙ PDF</button>
         <button class="btn ghost sm" data-act="goto" data-view="families">← Back</button>
@@ -485,24 +699,27 @@ function viewFamilyDetail(id){
       <div class="qr-panel">
         <div class="qr-box" id="qrBox"></div>
         <div><div class="muted small">FAMILY ID</div><div class="fid">${esc(f.id)}</div>
-        <div class="muted small" style="margin-top:6px">Scan to view this family's record</div></div>
+        <div class="muted small" style="margin-top:6px">Scan to view this household's record</div></div>
       </div>
-      <div style="min-width:220px">
+      <div style="min-width:240px;flex:1">
         <div class="kv">
+          <div class="row"><span>Street</span><span>${esc(streetName(f))}</span></div>
           <div class="row"><span>House no.</span><span>${esc(f.houseNo||'—')}</span></div>
+          <div class="row"><span>House type</span><span>${esc(labelOf(HOUSE_TYPES, houseTypeKey(f.houseType)))}</span></div>
           <div class="row"><span>Phone</span><span>${esc(f.phone||'—')}</span></div>
           <div class="row"><span>Address</span><span>${esc(f.address||'—')}</span></div>
-          <div class="row"><span>Total members</span><span>${(f.members||[]).length}</span></div>
+          <div class="row"><span>Members</span><span>${members.length} · ${men} men · ${women} women</span></div>
         </div>
       </div>
     </div>
 
     <div class="sec-title">Members</div>
-    <div class="table-wrap"><table><thead><tr><th>#</th><th>Name</th><th>Relation</th><th>Gender</th><th>Age</th><th>Education</th><th>Marital</th><th>Children</th><th>Disability</th><th>Scheme</th></tr></thead><tbody>
-      ${(f.members||[]).map((m,i)=>{ const a=ageFromDob(m.dob); return `<tr>
+    <div class="table-wrap"><table><thead><tr><th>#</th><th>Name</th><th>Relation</th><th>Gender</th><th>Age</th><th>Education</th><th>Work</th><th>Deeni</th><th>Marital</th><th>Challenged</th></tr></thead><tbody>
+      ${members.map((m,i)=>{ const a=ageFromDob(m.dob); return `<tr>
         <td>${i+1}</td><td>${esc(m.name||'—')}</td><td>${esc(m.relation||'—')}</td><td>${esc(m.gender||'—')}</td>
-        <td>${a===null?'—':a}</td><td>${esc(m.education||'—')}</td><td>${esc(m.maritalStatus||'—')}</td><td>${esc(m.children||'0')}</td>
-        <td>${m.disability==='yes'?'Yes':'No'}</td><td>${m.govtScheme==='yes'?'Yes':'No'}</td></tr>`; }).join('')}
+        <td>${a===null?'—':a}</td><td>${esc(EDU_LABEL[eduKey(m)]||m.education||'—')}</td><td>${esc(SECTOR_LABEL[m.sector]||'—')}</td>
+        <td>${esc(DEENI_LABEL[m.religious]||'—')}</td><td>${esc(m.maritalStatus||'—')}</td>
+        <td>${m.disability==='yes'?'Yes':'No'}</td></tr>`; }).join('')}
     </tbody></table></div>
 
     <div class="sec-title">Documents held</div>
@@ -602,8 +819,8 @@ function viewSettings(){
 
     ${u.role==='super'?`<div class="card" style="margin-top:16px;border-color:var(--danger-brd)">
       <div class="sec-title" style="margin-top:0;color:var(--danger)">Danger zone</div>
-      <p class="muted small" style="margin-bottom:12px">Deletes all family records on this device. Logins are kept.</p>
-      <button class="btn danger sm" data-act="clear-data">Erase all family records</button>
+      <p class="muted small" style="margin-bottom:12px">Deletes all household records on this device. Logins are kept.</p>
+      <button class="btn danger sm" data-act="clear-data">Erase all household records</button>
     </div>`:''}`;
 }
 
@@ -613,7 +830,7 @@ function viewSettings(){
 function viewMyFamily(){
   const u = currentUser();
   const f = DB.families().find(x=>x.id===u.familyId);
-  if (!f) return `<div class="empty"><h3>No record linked</h3><p>Your login is not linked to a family record yet. Please contact the committee.</p></div>`;
+  if (!f) return `<div class="empty"><h3>No record linked</h3><p>Your login is not linked to a household record yet. Please contact the committee.</p></div>`;
   return viewFamilyDetail(f.id);
 }
 
@@ -626,28 +843,30 @@ document.addEventListener('click', (e)=>{
   const id = el.dataset.id;
 
   if (act==='toggle-theme') { toggleTheme(); const b=$('#themeBtn2'); if(b) b.textContent = document.documentElement.getAttribute('data-theme')==='night'?'☾ Night':'☀ Day'; return; }
-  if (act==='goto'){ if (el.dataset.view==='add') state.draft=blankDraft(); go(el.dataset.view); return; }
+  if (act==='goto'){ if (el.dataset.view==='add'){ state.draft=blankDraft(); go(el.dataset.view); } else go(el.dataset.view, el.dataset.street||null); return; }
   if (act==='logout'){ clearSession(); state.draft=null; renderAuth(); return; }
   if (act==='load-sample'){ loadSample(); enterApp(); go('dashboard'); toast('Sample data loaded'); return; }
-  if (act==='clear-data'){ if(confirm('Erase ALL family records on this device? This cannot be undone.')){ DB.setFamilies([]); DB.setSeq(0); toast('All family records erased'); go('dashboard'); } return; }
+  if (act==='clear-data'){ if(confirm('Erase ALL household records on this device? This cannot be undone.')){ DB.setFamilies([]); DB.setSeq(0); toast('All household records erased'); go('dashboard'); } return; }
   if (act==='export-excel'){ exportExcel(); return; }
-  if (act==='print-all'){ printFamilies(DB.families(), 'All Families'); return; }
+  if (act==='print-all'){ printFamilies(DB.families(), 'All Households'); return; }
   if (act==='print-family'){ const f=DB.families().find(x=>x.id===id); if(f) printFamilies([f], f.houseName||f.id); return; }
   if (act==='backup-json'){ backupJSON(); return; }
   if (act==='view-family'){ go('detail', id); return; }
-  if (act==='edit-family'){ const f=DB.families().find(x=>x.id===id); if(f){ state.draft = JSON.parse(JSON.stringify(f)); state.draft.docs = Object.assign(Object.fromEntries(DOC_TYPES.map(d=>[d[0],'no'])), state.draft.docs||{}); state.draft.custom = padCustom(state.draft.custom); go('add', id); } return; }
-  if (act==='del-family'){ if(confirm('Delete this family record permanently?')){ DB.setFamilies(DB.families().filter(f=>f.id!==id)); toast('Family deleted'); go('families'); } return; }
+  if (act==='edit-family'){ const f=DB.families().find(x=>x.id===id); if(f){ state.draft = JSON.parse(JSON.stringify(f)); state.draft.docs = Object.assign(Object.fromEntries(DOC_TYPES.map(d=>[d[0],'no'])), state.draft.docs||{}); state.draft.custom = padCustom(state.draft.custom); if(!state.draft.houseType) state.draft.houseType='moulding'; go('add', id); } return; }
+  if (act==='del-family'){ if(confirm('Delete this household record permanently?')){ DB.setFamilies(DB.families().filter(f=>f.id!==id)); toast('Household deleted'); go('families'); } return; }
   if (act==='del-user'){ if(confirm('Delete this login?')){ DB.setUsers(DB.users().filter(u=>u.id!==id)); toast('Login deleted'); go('users'); } return; }
   if (act==='add-member'){ state.draft.members.push(blankMember()); renderMembers(); return; }
   if (act==='remove-member'){ state.draft.members.splice(+el.dataset.idx,1); renderMembers(); return; }
 });
 
-// document yes/no + member inline updates
+// segmented controls (documents, house type, member yes/no)
 document.addEventListener('click', (e)=>{
   const seg = e.target.closest('.seg'); if(!seg || !state.draft) return;
   const btn = e.target.closest('button[data-v]'); if(!btn) return;
   const v = btn.dataset.v;
-  if (seg.dataset.doc){
+  if (seg.dataset.hfield){
+    state.draft[seg.dataset.hfield] = v;
+  } else if (seg.dataset.doc){
     const key = seg.dataset.doc;
     if (key.startsWith('custom:')){ const i = +key.split(':')[1]; state.draft.custom[i].value = v; }
     else state.draft.docs[key] = v;
@@ -665,8 +884,16 @@ function applyField(el){
   if (f.startsWith('m.')){ const i = +el.dataset.idx; state.draft.members[i][f.slice(2)] = el.value; return; }
   state.draft[f] = el.value;
 }
-document.addEventListener('input', (e)=>{ const el=e.target; if(el.dataset&&el.dataset.field){ applyField(el); return; } if(el.id==='famSearch') renderFamilyList(); });
-document.addEventListener('change', (e)=>{ const el=e.target; if(el.dataset&&el.dataset.field){ applyField(el); return; } if(el.id==='famGenderF'||el.id==='famMaritalF') renderFamilyList(); });
+document.addEventListener('input', (e)=>{
+  const el=e.target;
+  if(el.dataset&&el.dataset.field){ applyField(el); if(el.dataset.field==='m.name'){ const h=el.closest('.member-card')&&el.closest('.member-card').querySelector('.idx'); if(h) h.textContent='Member '+(+el.dataset.idx+1)+' · '+el.value; } return; }
+  if(el.id==='famSearch') renderFamilyList();
+});
+document.addEventListener('change', (e)=>{
+  const el=e.target;
+  if(el.dataset&&el.dataset.field){ applyField(el); return; }
+  if(el.id==='famGenderF'||el.id==='famMaritalF'||el.id==='famStreetF') renderFamilyList();
+});
 
 // form submissions
 document.addEventListener('submit', async (e)=>{
@@ -705,17 +932,20 @@ function renderQR(el, text){
 }
 
 /* ============================================================
-   SAVE FAMILY
+   SAVE HOUSEHOLD
    ============================================================ */
-async function saveFamily(){
+function saveFamily(){
   const d = state.draft, u = currentUser();
   const alertBox = $('#formAlert');
   const fail = (msg)=>{ if(alertBox) alertBox.innerHTML='<div class="alert err">'+esc(msg)+'</div>'; window.scrollTo({top:0,behavior:'smooth'}); };
-  if (!d.houseName.trim()) return fail('Family / House name is required.');
+  if (!String(d.street||'').trim()) return fail('Street name is required (section 1).');
+  if (!String(d.houseName||'').trim()) return fail('Household / head name is required.');
   const members = d.members.filter(m=> (m.name||'').trim());
   if (!members.length) return fail('Add at least one member with a name.');
   if (d.phone && !/^[0-9+\-\s]{6,15}$/.test(d.phone)) return fail('Phone number looks invalid.');
 
+  d.street = d.street.trim();
+  d.houseType = d.houseType || 'moulding';
   d.members = members;
   const fams = DB.families();
   if (d.id){
@@ -731,7 +961,7 @@ async function saveFamily(){
   DB.setFamilies(fams);
   const wasNew = !state.param;
   state.draft = null;
-  toast(wasNew ? 'Family saved — ID generated' : 'Changes saved');
+  toast(wasNew ? 'Household saved — ID generated' : 'Changes saved');
   go('detail', d.id);
 }
 function nextFamilyId(){ const n=DB.seq()+1; DB.setSeq(n); return PREFIX+'-'+new Date().getFullYear()+'-'+pad(n,6); }
@@ -769,14 +999,53 @@ async function addFamilyLogin(form){
    ============================================================ */
 function collectRows(){
   const rows=[]; DB.families().forEach(f=>(f.members||[]).forEach(m=>{
+    const edu = eduKey(m);
     rows.push({
-      'Family ID':f.id, 'House Name':f.houseName||'', 'House No':f.houseNo||'', 'Address':f.address||'', 'Phone':f.phone||'',
+      'Family ID':f.id, 'Street':streetName(f), 'House No':f.houseNo||'', 'House Type':labelOf(HOUSE_TYPES, houseTypeKey(f.houseType)),
+      'Household':f.houseName||'', 'Address':f.address||'', 'Phone':f.phone||'',
       'Member Name':m.name||'', 'Relation':m.relation||'', 'Gender':m.gender||'', 'DOB':m.dob||'', 'Age':(ageFromDob(m.dob)??''),
-      'Education':m.education||'', 'Marital Status':m.maritalStatus||'', 'Children':m.children||'', 'Father Name':m.fatherName||'', 'Mother Name':m.motherName||'',
-      'Disability':m.disability||'', 'Govt Scheme':m.govtScheme||''
+      'Education Level':EDU_LABEL[edu]||m.education||'', 'Work Sector':SECTOR_LABEL[m.sector]||'', 'Deeni Taleem':DEENI_LABEL[m.religious]||'',
+      'Marital Status':m.maritalStatus||'', 'Children':m.children||'', 'Father Name':m.fatherName||'', 'Mother Name':m.motherName||'',
+      'Physically Challenged':m.disability||'', 'Govt Scheme':m.govtScheme||''
     });
   }));
   return rows;
+}
+function summaryRows(){
+  const s = computeStats();
+  return [
+    ['1 · Location & Housing','Total streets', s.streets.length],
+    ['1 · Location & Housing','Total houses', s.houses],
+    ['1 · Location & Housing','Moulding houses', s.houseTypes.moulding],
+    ['1 · Location & Housing','Cement sheet houses', s.houseTypes.cement],
+    ['2 · Family & Demographics','Total families', s.families],
+    ['2 · Family & Demographics','Total population', s.pop],
+    ['2 · Family & Demographics','Children (under 18)', s.children],
+    ['2 · Family & Demographics','Men', s.men.total],
+    ['2 · Family & Demographics','Men — married', s.men.married],
+    ['2 · Family & Demographics','Men — unmarried', s.men.unmarried],
+    ['2 · Family & Demographics','Men — physically challenged', s.men.disabled],
+    ['2 · Family & Demographics','Women', s.women.total],
+    ['2 · Family & Demographics','Women — married', s.women.married],
+    ['2 · Family & Demographics','Women — unmarried', s.women.unmarried],
+    ['2 · Family & Demographics','Women — physically challenged', s.women.disabled],
+    ['2 · Family & Demographics','Women — widow', s.women.widow],
+    ['3 · Education','Total students', s.students.total],
+    ['3 · Education','Primary students', s.students.primary],
+    ['3 · Education','Higher secondary students', s.students.higher_secondary],
+    ['3 · Education','College students', s.students.college],
+    ['3 · Education','Madarsa students', s.students.madarsa],
+    ['4 · Professional','Men — private sector', s.work.men.private],
+    ['4 · Professional','Men — government sector', s.work.men.government],
+    ['4 · Professional','Men — business', s.work.men.business],
+    ['4 · Professional','Women — private sector', s.work.women.private],
+    ['4 · Professional','Women — government sector', s.work.women.government],
+    ['4 · Professional','Women — business', s.work.women.business],
+    ['5 · Religious Education','Men Aalim', s.deeni.menAalim],
+    ['5 · Religious Education','Men Hafiz', s.deeni.menHafiz],
+    ['5 · Religious Education','Women Aalim', s.deeni.womenAalim],
+    ['5 · Religious Education','Women Hafiz', s.deeni.womenHafiz]
+  ].map(([group,metric,value])=>({ Group:group, Metric:metric, Total:value }));
 }
 function exportExcel(){
   if (typeof XLSX === 'undefined'){ toast('Excel library not loaded (need internet once)','err'); return; }
@@ -784,39 +1053,48 @@ function exportExcel(){
   if (!rows.length){ toast('No data to export','err'); return; }
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), 'Members');
-  // family sheet
   const famRows = DB.families().map(f=>({
-    'Family ID':f.id,'House Name':f.houseName||'','House No':f.houseNo||'','Address':f.address||'','Phone':f.phone||'',
+    'Family ID':f.id,'Street':streetName(f),'House No':f.houseNo||'','House Type':labelOf(HOUSE_TYPES, houseTypeKey(f.houseType)),
+    'Household':f.houseName||'','Phone':f.phone||'','Address':f.address||'',
     'Members':(f.members||[]).length,
+    'Men':(f.members||[]).filter(m=>m.gender==='Male').length,
+    'Women':(f.members||[]).filter(m=>m.gender==='Female').length,
     'Docs (Yes)':DOC_TYPES.filter(([k])=>f.docs&&f.docs[k]==='yes').map(([,l])=>l).join(', ')
   }));
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(famRows), 'Families');
-  // summary
-  const s = computeStats();
-  const sumRows = Object.entries({ 'Total Houses':s.houses,'Men':s.men,'Women':s.women,'Children':s.children,'Married':s.married,'Unmarried':s.unmarried,'Widow':s.widow,'Disability':s.disability,'Govt Scheme':s.scheme }).map(([k,v])=>({Metric:k,Total:v}));
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(sumRows), 'Summary');
-  XLSX.writeFile(wb, 'masjid-kidmat-records-'+todayStr()+'.xlsx');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(famRows), 'Households');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summaryRows()), 'Survey Summary');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(computeStats().streets.map(st=>({
+    'Street':st.name,'Houses':st.houses,'Moulding':st.moulding,'Cement sheet':st.cement,'Other':st.other
+  }))), 'Streets');
+  XLSX.writeFile(wb, 'masjid-survey-'+todayStr()+'.xlsx');
   toast('Excel file downloaded');
 }
 function backupJSON(){
   const data = { org:CFG.ORG_NAME, exportedAt:new Date().toISOString(), families:DB.families(), users:DB.users().map(u=>({id:u.id,role:u.role,name:u.name,phone:u.phone,familyId:u.familyId})) };
   const blob = new Blob([JSON.stringify(data,null,2)], {type:'application/json'});
-  const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='masjid-kidmat-backup-'+todayStr()+'.json'; a.click(); URL.revokeObjectURL(a.href);
+  const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='masjid-survey-backup-'+todayStr()+'.json'; a.click(); URL.revokeObjectURL(a.href);
   toast('Backup downloaded');
 }
 function printFamilies(fams, title){
   if (!fams.length){ toast('Nothing to print','err'); return; }
   const s = computeStats();
-  const head = `<h1>${esc(CFG.ORG_NAME||'Masjid e Mohammadi')} — ${esc(title)}</h1>
-    <div class="pmeta">${esc(CFG.ORG_SUB||'Masjid Kidmat Committee')} · printed ${new Date().toLocaleDateString('en-GB')}
-    ${title==='All Families'?` · Houses: ${s.houses} · Men: ${s.men} · Women: ${s.women} · Children: ${s.children} · Married: ${s.married} · Unmarried: ${s.unmarried} · Widow: ${s.widow} · Disability: ${s.disability} · Scheme: ${s.scheme}`:''}</div>`;
+  const head = `<h1>${esc(CFG.ORG_NAME||'Masjid - E- Mohammadiy')} — ${esc(title)}</h1>
+    <div class="pmeta">${esc(CFG.ORG_SUB||'Khidmath Committee')} · printed ${new Date().toLocaleDateString('en-GB')}</div>
+    ${title==='All Households'?`
+    <div class="psum">
+      <b>1 · Location &amp; Housing</b> — streets ${s.streets.length} · houses ${s.houses} · moulding ${s.houseTypes.moulding} · cement sheet ${s.houseTypes.cement}<br>
+      <b>2 · Family &amp; Demographics</b> — families ${s.families} · population ${s.pop} · children ${s.children} · men ${s.men.total} (married ${s.men.married}, unmarried ${s.men.unmarried}, challenged ${s.men.disabled}) · women ${s.women.total} (married ${s.women.married}, unmarried ${s.women.unmarried}, challenged ${s.women.disabled}, widow ${s.women.widow})<br>
+      <b>3 · Education</b> — students ${s.students.total} · primary ${s.students.primary} · higher secondary ${s.students.higher_secondary} · college ${s.students.college} · madarsa ${s.students.madarsa}<br>
+      <b>4 · Professional</b> — men: private ${s.work.men.private}, govt ${s.work.men.government}, business ${s.work.men.business} · women: private ${s.work.women.private}, govt ${s.work.women.government}, business ${s.work.women.business}<br>
+      <b>5 · Religious Education</b> — men aalim ${s.deeni.menAalim}, hafiz ${s.deeni.menHafiz} · women aalim ${s.deeni.womenAalim}, hafiz ${s.deeni.womenHafiz}
+    </div>`:''}`;
   const body = fams.map(f=>{
     const docs = DOC_TYPES.filter(([k])=>f.docs&&f.docs[k]==='yes').map(([,l])=>l).concat((f.custom||[]).filter(c=>c.label&&c.value==='yes').map(c=>c.label));
     return `<div class="pcard">
-      <h2>${esc(f.houseName||'Family')} — ${esc(f.id)}</h2>
-      <div class="pmeta">House No: ${esc(f.houseNo||'—')} · Phone: ${esc(f.phone||'—')} · Address: ${esc(f.address||'—')}</div>
-      <table><thead><tr><th>#</th><th>Name</th><th>Relation</th><th>Gender</th><th>Age</th><th>Education</th><th>Marital</th><th>Children</th></tr></thead><tbody>
-      ${(f.members||[]).map((m,i)=>{const a=ageFromDob(m.dob);return `<tr><td>${i+1}</td><td>${esc(m.name||'')}</td><td>${esc(m.relation||'')}</td><td>${esc(m.gender||'')}</td><td>${a===null?'':a}</td><td>${esc(m.education||'')}</td><td>${esc(m.maritalStatus||'')}</td><td>${esc(m.children||'')}</td></tr>`;}).join('')}
+      <h2>${esc(f.houseName||'Household')} — ${esc(f.id)}</h2>
+      <div class="pmeta">Street: ${esc(streetName(f))} · House No: ${esc(f.houseNo||'—')} · Type: ${esc(labelOf(HOUSE_TYPES, houseTypeKey(f.houseType)))} · Phone: ${esc(f.phone||'—')} · Address: ${esc(f.address||'—')}</div>
+      <table><thead><tr><th>#</th><th>Name</th><th>Relation</th><th>Gender</th><th>Age</th><th>Education</th><th>Work</th><th>Deeni</th><th>Marital</th><th>Challenged</th></tr></thead><tbody>
+      ${(f.members||[]).map((m,i)=>{const a=ageFromDob(m.dob);return `<tr><td>${i+1}</td><td>${esc(m.name||'')}</td><td>${esc(m.relation||'')}</td><td>${esc(m.gender||'')}</td><td>${a===null?'':a}</td><td>${esc(EDU_LABEL[eduKey(m)]||m.education||'')}</td><td>${esc(SECTOR_LABEL[m.sector]||'')}</td><td>${esc(DEENI_LABEL[m.religious]||'')}</td><td>${esc(m.maritalStatus||'')}</td><td>${m.disability==='yes'?'Yes':'No'}</td></tr>`;}).join('')}
       </tbody></table>
       <div class="pmeta" style="margin-top:6pt">Documents: ${docs.length?esc(docs.join(', ')):'—'}</div>
     </div>`;
@@ -829,23 +1107,43 @@ function printFamilies(fams, title){
    SAMPLE DATA
    ============================================================ */
 function loadSample(){
-  if (DB.families().length && !confirm('Add sample families on top of existing data?')) return;
+  if (DB.families().length && !confirm('Add sample households on top of existing data?')) return;
+  const M = (relation,name,gender,dob,marital,edu,sector,religious,opt)=>{
+    const o = opt||{};
+    return { relation, name, gender, dob, maritalStatus:marital, educationLevel:edu, sector:sector||'', religious:religious||'',
+      children:o.children||'0', fatherName:o.father||'', motherName:o.mother||'', disability:o.disability||'no', govtScheme:o.scheme||'no' };
+  };
   const sample = [
-    { houseName:'Abdul Rahman', houseNo:'12-B', phone:'9876543210', address:'Masjid Road, Block A',
-      members:[ {relation:'Self',name:'Abdul Rahman',gender:'Male',dob:'1979-04-12',education:'Graduate',maritalStatus:'Married',children:'3',fatherName:'Mohd Yusuf',motherName:'Ayesha Bibi',disability:'no',govtScheme:'yes'},
-                {relation:'Wife',name:'Fatima Begum',gender:'Female',dob:'1984-08-20',education:'10th',maritalStatus:'Married',children:'3',fatherName:'Ibrahim',motherName:'Khatija',disability:'no',govtScheme:'no'},
-                {relation:'Son',name:'Imran Khan',gender:'Male',dob:'2011-02-05',education:'8th',maritalStatus:'Unmarried',children:'0',fatherName:'Abdul Rahman',motherName:'Fatima Begum',disability:'no',govtScheme:'no'} ] },
-    { houseName:'Sayeed Ahmed', houseNo:'45', phone:'9812345678', address:'Nala Road, Block C',
-      members:[ {relation:'Self',name:'Sayeed Ahmed',gender:'Male',dob:'1965-11-01',education:'12th',maritalStatus:'Widower',children:'2',fatherName:'Late Karim',motherName:'Rahima',disability:'yes',govtScheme:'yes'},
-                {relation:'Daughter',name:'Sana Ahmed',gender:'Female',dob:'2009-06-18',education:'9th',maritalStatus:'Unmarried',children:'0',fatherName:'Sayeed Ahmed',motherName:'Nasreen',disability:'no',govtScheme:'yes'} ] },
-    { houseName:'Mohd Salim', houseNo:'7-A', phone:'9822001100', address:'Idgah Lane, Block B',
-      members:[ {relation:'Self',name:'Mohd Salim',gender:'Male',dob:'1988-01-30',education:'Graduate',maritalStatus:'Married',children:'1',fatherName:'Abdul Karim',motherName:'Shabana',disability:'no',govtScheme:'no'},
-                {relation:'Wife',name:'Rukhsana',gender:'Female',dob:'1990-09-09',education:'12th',maritalStatus:'Married',children:'1',fatherName:'Yusuf',motherName:'Zubeida',disability:'no',govtScheme:'no'} ] },
-    { houseName:'Ismail Sheikh', houseNo:'88', phone:'9867891234', address:'Canal Side, Block A',
-      members:[ {relation:'Self',name:'Ismail Sheikh',gender:'Male',dob:'1972-03-15',education:'10th',maritalStatus:'Married',children:'4',fatherName:'Rasheed',motherName:'Hameeda',disability:'no',govtScheme:'yes'},
-                {relation:'Wife',name:'Naseem Bano',gender:'Female',dob:'1976-12-25',education:'8th',maritalStatus:'Married',children:'4',fatherName:'Anwar',motherName:'Salma',disability:'yes',govtScheme:'yes'} ] },
-    { houseName:'Rizwan Ali', houseNo:'23', phone:'9800012345', address:'Station Road, Block D',
-      members:[ {relation:'Self',name:'Rizwan Ali',gender:'Male',dob:'1995-07-07',education:'Post-Graduate',maritalStatus:'Unmarried',children:'0',fatherName:'Shakeel',motherName:'Farida',disability:'no',govtScheme:'no'} ] }
+    { houseName:'Abdul Rahman', houseNo:'12-B', street:'Masjid Road', houseType:'moulding', phone:'9876543210', address:'Masjid Road, Block A',
+      members:[ M('Self','Abdul Rahman','Male','1979-04-12','Married','college','business','', {children:'3',father:'Mohd Yusuf',mother:'Ayesha Bibi',scheme:'yes'}),
+                M('Wife','Fatima Begum','Female','1984-08-20','Married','higher_secondary','none','', {children:'3',father:'Ibrahim',mother:'Khatija'}),
+                M('Son','Imran Khan','Male','2011-02-05','Unmarried','primary','', '', {father:'Abdul Rahman',mother:'Fatima Begum'}),
+                M('Daughter','Ayesha Khan','Female','2014-09-11','Unmarried','primary','', 'hafiz', {father:'Abdul Rahman',mother:'Fatima Begum'}) ] },
+    { houseName:'Sayeed Ahmed', houseNo:'45', street:'Nala Road', houseType:'cement', phone:'9812345678', address:'Nala Road, Block C',
+      members:[ M('Self','Sayeed Ahmed','Male','1965-11-01','Widower','higher_secondary','private','', {children:'2',father:'Late Karim',mother:'Rahima',disability:'yes',scheme:'yes'}),
+                M('Daughter','Sana Ahmed','Female','2009-06-18','Unmarried','higher_secondary','', '', {father:'Sayeed Ahmed',mother:'Nasreen',scheme:'yes'}) ] },
+    { houseName:'Mohd Salim', houseNo:'7-A', street:'Idgah Lane', houseType:'moulding', phone:'9822001100', address:'Idgah Lane, Block B',
+      members:[ M('Self','Mohd Salim','Male','1988-01-30','Married','college','private','aalim', {children:'1',father:'Abdul Karim',mother:'Shabana'}),
+                M('Wife','Rukhsana','Female','1990-09-09','Married','higher_secondary','business','', {children:'1',father:'Yusuf',mother:'Zubeida'}),
+                M('Son','Zaid Salim','Male','2016-03-21','Unmarried','primary','','', {father:'Mohd Salim',mother:'Rukhsana'}) ] },
+    { houseName:'Ismail Sheikh', houseNo:'88', street:'Masjid Road', houseType:'cement', phone:'9867891234', address:'Masjid Road, Block A',
+      members:[ M('Self','Ismail Sheikh','Male','1972-03-15','Married','primary','business','', {children:'4',father:'Rasheed',mother:'Hameeda',scheme:'yes'}),
+                M('Wife','Naseem Bano','Female','1976-12-25','Married','primary','none','', {children:'4',father:'Anwar',mother:'Salma',disability:'yes',scheme:'yes'}),
+                M('Son','Faizan Sheikh','Male','2004-05-02','Unmarried','college','','hafiz', {father:'Ismail Sheikh',mother:'Naseem Bano'}),
+                M('Daughter','Mehjabeen','Female','2007-01-19','Unmarried','higher_secondary','','', {father:'Ismail Sheikh',mother:'Naseem Bano'}) ] },
+    { houseName:'Rizwan Ali', houseNo:'23', street:'Nala Road', houseType:'moulding', phone:'9800012345', address:'Nala Road, Block D',
+      members:[ M('Self','Rizwan Ali','Male','1995-07-07','Unmarried','college','private','', {father:'Shakeel',mother:'Farida'}) ] },
+    { houseName:'Hafiz Noor Alam', houseNo:'5', street:'Madarsa Gali', houseType:'moulding', phone:'9833001122', address:'Madarsa Gali, near masjid',
+      members:[ M('Self','Noor Alam','Male','1983-02-14','Married','madarsa','', 'both', {children:'2',father:'Siraj',mother:'Amina'}),
+                M('Wife','Shabnam','Female','1987-10-30','Married','madarsa','none','aalim', {children:'2',father:'Ismail',mother:'Razia'}),
+                M('Daughter','Hafsa','Female','2013-12-08','Unmarried','madarsa','', 'hafiz', {father:'Noor Alam',mother:'Shabnam'}) ] },
+    { houseName:'Shakeel Ahmed', houseNo:'31', street:'Idgah Lane', houseType:'other', phone:'9845009988', address:'Idgah Lane, Block B',
+      members:[ M('Self','Shakeel Ahmed','Male','1969-06-09','Married','primary','government','', {children:'2',father:'Yaqoob',mother:'Sakina',scheme:'yes'}),
+                M('Wife','Farida','Female','1974-04-17','Married','primary','none','', {children:'2',father:'Rauf',mother:'Noorjahan'}),
+                M('Son','Arif','Male','2001-08-25','Unmarried','college','private','', {father:'Shakeel Ahmed',mother:'Farida'}) ] },
+    { houseName:'Yusuf Khan', houseNo:'64', street:'Masjid Road', houseType:'moulding', phone:'9898987676', address:'Masjid Road, Block A',
+      members:[ M('Self','Yusuf Khan','Male','1990-11-11','Married','higher_secondary','private','', {children:'0',father:'Latif',mother:'Saira'}),
+                M('Wife','Afsana','Female','1993-03-03','Married','college','government','', {father:'Naeem',mother:'Rukhsar'}) ] }
   ];
   const fams = DB.families();
   sample.forEach((s,i)=>{

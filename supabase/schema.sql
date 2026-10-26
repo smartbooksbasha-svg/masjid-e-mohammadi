@@ -1,5 +1,5 @@
 -- ============================================================
---  Masjid e Mohammadi · Kidmat Committee — Family Records
+--  Masjid - E- Mohammadiy · Khidmath Committee — Mohalla Survey
 --  Supabase schema (Postgres)  ·  SECURE allowlist design
 -- ------------------------------------------------------------
 --  HOW TO USE
@@ -23,6 +23,8 @@ create table if not exists public.families (
   id          text primary key,              -- MEMC-2026-000001
   house_name  text not null default '',
   house_no    text default '',
+  street      text default '',
+  house_type  text default 'moulding',   -- moulding | cement | other
   address     text default '',
   phone       text default '',
   notes       text default '',
@@ -42,7 +44,10 @@ create table if not exists public.members (
   mother_name    text default '',
   gender         text default '',
   dob            date,
-  education      text default '',
+  education      text default '',          -- legacy free text
+  education_level text default '',         -- primary | higher_secondary | college | madarsa | none
+  sector          text default '',         -- private | government | business | none
+  religious       text default '',         -- aalim | hafiz | both
   marital_status text default '',
   children       text default '',
   disability     text default 'no',
@@ -50,6 +55,13 @@ create table if not exists public.members (
   created_at     timestamptz not null default now()
 );
 create index if not exists members_family_id_idx on public.members(family_id);
+
+-- survey fields for existing installs (safe to re-run)
+alter table public.families add column if not exists street     text default '';
+alter table public.families add column if not exists house_type text default 'moulding';
+alter table public.members  add column if not exists education_level text default '';
+alter table public.members  add column if not exists sector          text default '';
+alter table public.members  add column if not exists religious       text default '';
 
 -- allowlist of app logins.  user_id stays NULL until the person
 -- sets their password (signs up) and CLAIMS the row.

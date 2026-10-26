@@ -1,8 +1,8 @@
-/* Service worker — offline app shell for Masjid Kidmat Records.
+/* Service worker — offline app shell for Mohalla Survey.
    Strategy: network-first for app files (so updates are picked up
    immediately), falling back to cache when offline. Cross-origin
    requests (fonts, CDN libs) pass straight through. */
-const CACHE = 'memc-app-v1';
+const CACHE = 'memc-app-v2';
 const SHELL = [
   './', './index.html', './styles.css', './app.js', './config.js',
   './manifest.webmanifest',

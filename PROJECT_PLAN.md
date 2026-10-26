@@ -1,4 +1,4 @@
-# PROJECT PLAN — "Masjid e Mohammadi by Masjid Kidmat Committee"
+# PROJECT PLAN — Masjid - E- Mohammadiy · Khidmath Committee Survey
 
 **What:** Mohalla family-records website — har ghar/person ka data safely
 save, dashboard counts, Family ID + QR, 3-role login, PDF/Excel export.
@@ -70,3 +70,13 @@ save, dashboard counts, Family ID + QR, 3-role login, PDF/Excel export.
 - [x] **UI language: English** (language switcher possible later).
 - [x] **OTP: deferred** — demo/on-screen OTP placeholder for now; real SMS
       (MSG91/Twilio) baad me decide.
+
+## v2 — Survey upgrade (2026-10-26)
+
+- [x] Shan ka 5-section survey plan → data model (street/house type,
+      education level, work sector, deeni taleem)
+- [x] Dashboard rebuilt: 5 group cards + street-wise table + KPI row
+- [x] Household form + member fields extended; legacy migration on read
+- [x] Detail view, Excel (4 sheets), PDF summary updated
+- [x] jsdom smoke test rewritten — 56/56 green
+- [ ] Real contact numbers / Supabase keys still open

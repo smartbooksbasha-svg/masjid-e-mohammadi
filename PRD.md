@@ -1,5 +1,5 @@
 # PRD — Masjid e Mohammadi · Masjid Kidmat Committee Family Records
-_v1.0 (final draft) — 2026-10-09 · locked decisions baked in_
+_v1.1 — 2026-10-26 · v2 adds the 5-section mohalla survey_
 
 ## 1. Product vision
 Masjid-e-Mohammadi (mohalla) ki **Kidmat Committee** ke liye ek safe digital
@@ -68,3 +68,27 @@ real SMS OTP (deferred).
 ## 9. Success metrics
 Family entry < 2 min · dashboard counts exactly match raw data · export opens
 in Excel & PDF viewer · all 3 role permission tests pass.
+
+
+## 10. v2 — Mohalla Survey upgrade (2026-10-26)
+
+Shan ka survey plan hi data model ban gaya. Har household record me:
+
+1. **Location & Housing** — street name, house number, house type
+   (moulding / cement sheet / other).
+2. **Family & Demographics** — total families, men (married / unmarried /
+   physically challenged), women (married / unmarried / physically
+   challenged / widow), children under 18.
+3. **Education** — students split: primary, higher secondary, college,
+   madarsa.
+4. **Professional** — men & women × private sector / government / business.
+5. **Religious Education** — Aalim & Hafiz, men and women separately.
+
+Dashboard in 5 numbered group cards + a street-wise table (street → houses →
+moulding / cement sheet / other) + KPI row (streets · houses · families ·
+population). Click a street row → filtered household list.
+
+Exports: Excel = Members / Households / Survey Summary / Streets sheets;
+PDF print = 5-section summary block + per-household member tables.
+Legacy records stay readable (street → "Unassigned", free-text education
+inferred into a level).
