@@ -703,11 +703,11 @@ function renderShell(){
 }
 
 function go(view, param){
-  const ADMIN_ONLY = ['add','users','settings'];
+  const ADMIN_ONLY = ['add','users','settings','families','detail','masjid'];
   if (ADMIN_ONLY.includes(view) && !isAdmin()){ toast('Ye page sirf admin ke liye hai','err'); view='dashboard'; }
   state.view = view; state.param = param||null;
   closeNav();
-  const titles = { dashboard:'Survey Dashboard', families:'Households', add:(state.param?'Edit Household':'Add Household'), detail:'Household Record', users:'Admins', settings:'Settings', masjid:'Masjid Profile' };
+  const titles = { dashboard:'Survey Dashboard', families:'Households', add:(state.param?'Edit Household':'Add Household'), detail:'Household Record', users:'Admins', settings:'Settings', masjid:'Masjid Profile', cat:'Survey Category' };
   $('#pageTitle').textContent = titles[view] || 'Survey Dashboard';
   let html='';
   if (view==='dashboard') html = viewDashboard();
@@ -717,6 +717,7 @@ function go(view, param){
   else if (view==='users') html = viewUsers();
   else if (view==='settings') html = viewSettings();
   else if (view==='masjid') html = viewMasjid();
+  else if (view==='cat') html = viewCat(state.param);
   $('#content').innerHTML = html;
   $$('#nav .nav-item').forEach(a=>a.classList.toggle('active', a.dataset.view===view || (view==='detail'&&a.dataset.view==='families')||(view==='add'&&a.dataset.view==='add')));
   afterRender(view);
@@ -919,12 +920,10 @@ function grpHead(no, title, sub){
   return `<header class="grp-head" data-act="grp-toggle" data-g="${no}" title="Click to open full details"><span class="grp-caret">▾</span><span class="grp-no">${no}</span><div><h2>${esc(title)}</h2><p>${esc(sub)}</p></div><span class="grp-caret">▾</span></header>`;
 }
 
-function viewDashboard(){
-  const s = computeStats();
-  const u = currentUser();
+function masjidHero(){
   const mj = masjidData();
   const photos = Array.isArray(mj.photos) ? mj.photos.slice(0,6) : [];
-  const heroBlock = `
+  return `
     <section class="masjid-hero">
       <div class="mh-grid">
         <div class="mh-photos">
@@ -947,6 +946,82 @@ function viewDashboard(){
         </div>
       </div>
     </section>`;
+}
+
+
+const CATS = [
+  [1,'Location & Housing','Ghar, raste aur makan ki qism'],
+  [2,'Family & Demographics','Ghar walon ki ginti, umar aur halat'],
+  [3,'Education','Padhne wale bachche aur students'],
+  [4,'Occupations','Kaam ke hisaab se ginti'],
+  [5,'Religious Education','Aalim aur Hafiz'],
+  [6,'Documents & Govt. Schemes','Documents aur scheme ka hisaab']
+];
+
+function catTile(n, title, sub, s){
+  const val = n===1 ? s.houses : n===2 ? s.families : n===3 ? s.students.total : n===4 ? s.employed : n===5 ? (s.deeni.menAalim+s.deeni.menHafiz+s.deeni.womenAalim+s.deeni.womenHafiz) : s.scheme.applied;
+  const unit = n===1 ? 'ghar' : n===2 ? 'families' : n===3 ? 'students' : n===4 ? 'log kaam par' : n===5 ? 'aalim / hafiz' : 'scheme li';
+  return `<button class="cat-tile" type="button" data-act="goto" data-view="cat" data-param="${n}">
+    <span class="ct-no">${n}</span>
+    <span class="ct-body"><b>${esc(title)}</b><span class="ct-sub">${esc(sub)}</span></span>
+    <span class="ct-val"><b>${val}</b><span>${esc(unit)}</span></span>
+    <span class="ct-arrow">→</span>
+  </button>`;
+}
+
+function publicDashboard(){
+  const s = computeStats();
+  return `
+    ${masjidHero()}
+    <div class="sec-title">Survey — 6 categories</div>
+    <p class="muted small" style="margin:-6px 0 12px">Sirf totals public hain. Har ghar ki zaati tafseel sirf committee admin ke paas rehti hai.</p>
+    <div class="cat-grid">${CATS.map(([n,t,sub])=>catTile(n,t,sub,s)).join('')}</div>
+    ${aboutContactBlock(masjidData())}`;
+}
+
+function viewCat(param){
+  const n = Number(param) || 1;
+  const s = computeStats();
+  const cat = CATS.find(c=>c[0]===n) || CATS[0];
+  const back = `<button class="btn ghost sm" type="button" data-act="goto" data-view="dashboard">← Dashboard</button>`;
+  const tbl = (cols, rows) => rows.length ? `<div class="table-wrap small-table" style="margin-top:14px"><table><thead><tr>${cols.map(c=>`<th>${esc(c)}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table></div>` : '';
+  let metrics = '', extra = '';
+
+  if (n===1){
+    metrics = [['Total streets',s.streets.length],['Total houses',s.houses],['Moulding (concrete)',s.houseTypes.moulding],['Cement sheet',s.houseTypes.cement],['Palm leaf',s.houseTypes.palm],['Other / kachcha',s.houseTypes.other]].map(([l,v])=>metric(l,v)).join('');
+    extra = tbl(['Street','Houses','Moulding','Cement','Palm','Other'], s.streets.map(st=>`<tr><td><b>${esc(st.name)}</b></td><td>${st.houses}</td><td>${st.moulding}</td><td>${st.cement}</td><td>${st.palm}</td><td>${st.other}</td></tr>`));
+  }
+  if (n===2){
+    metrics = [['Total families',s.families],['Total population',s.pop],['Men',s.men.total],['Women',s.women.total],['Children (under 18)',s.children],['Married (men+women)',s.men.married+s.women.married],['Unmarried (men+women)',s.men.unmarried+s.women.unmarried],['Widow',s.women.widow],['Physically challenged',s.men.disabled+s.women.disabled]].map(([l,v])=>metric(l,v)).join('');
+  }
+  if (n===3){
+    metrics = [['Total students',s.students.total],['Primary',s.students.primary],['Higher secondary',s.students.higher_secondary],['College',s.students.college],['Madarsa',s.students.madarsa]].map(([l,v])=>metric(l,v)).join('');
+  }
+  if (n===4){
+    metrics = [['Members with a job',s.employed],['Different occupations',s.occupationNames]].map(([l,v])=>metric(l,v)).join('');
+    extra = tbl(['Occupation','Men','Women','Total'], s.occupations.map(o=>`<tr><td><b>${esc(o.name)}</b></td><td>${o.men}</td><td>${o.women}</td><td><b>${o.total}</b></td></tr>`));
+  }
+  if (n===5){
+    metrics = [['Aalim (men)',s.deeni.menAalim],['Hafiz (men)',s.deeni.menHafiz],['Aalim (women)',s.deeni.womenAalim],['Hafiz (women)',s.deeni.womenHafiz]].map(([l,v])=>metric(l,v)).join('');
+  }
+  if (n===6){
+    metrics = [['Members with all basic documents',s.membersWithAllDocs],['Members with no basic document',s.membersWithNoDocs],['Scheme applied',s.scheme.applied],['Scheme not applied',s.scheme.notApplied]].map(([l,v])=>metric(l,v)).join('');
+    extra = tbl(['Document','Have','Don\'t have'], BASIC_DOCS.map(([k,l])=>`<tr><td>${esc(l)}</td><td><b>${s.docs[k]}</b></td><td>${Math.max(0,s.pop-s.docs[k])}</td></tr>`))
+      + tbl(['Scheme','Members'], SCHEMES.filter(([k])=>k!=='other').map(([k,l])=>`<tr><td>${esc(l)}</td><td><b>${s.scheme.counts[k]||0}</b></td></tr>`).concat(s.scheme.byName.map(([nm,c])=>`<tr><td>${esc(nm)}</td><td><b>${c}</b></td></tr>`)));
+  }
+
+  return `<div class="page-head"><div><h1>${esc(cat[1])}</h1><p>${esc(cat[2])} — public totals</p></div><div class="ph-actions">${back}</div></div>
+    <div class="card"><div class="metrics cols2">${metrics}</div>${extra}</div>
+    <p class="muted small" style="margin-top:14px">Har ghar ki zaati tafseel (naam, umar, documents, schemes) sirf admin login ke andar hai.</p>`;
+}
+
+function viewDashboard(){
+  if (!isAdmin()) return publicDashboard();
+  const s = computeStats();
+  const u = currentUser();
+  const mj = masjidData();
+  const photos = Array.isArray(mj.photos) ? mj.photos.slice(0,6) : [];
+  const heroBlock = masjidHero();
   const kpis = [
     [icSmall('<path d="M4 20V8l8-4 8 4v12"/><path d="M9 20v-6h6v6"/>'), s.streets.length, 'Total streets'],
     [icSmall('<path d="M3 9.5 12 3l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/>'), s.houses, 'Total houses'],
@@ -1553,7 +1628,7 @@ document.addEventListener('click', (e)=>{
   if (ADMIN_ACTS.includes(act) && !isAdmin()){ toast('Ye sirf admin kar sakta hai','err'); return; }
 
   if (act==='toggle-theme') { toggleTheme(); const b=$('#themeBtn2'); if(b) b.textContent = document.documentElement.getAttribute('data-theme')==='night'?'☾ Night':'☀ Day'; return; }
-  if (act==='goto'){ if (el.dataset.view==='add'){ state.draft=blankDraft(); go(el.dataset.view); } else go(el.dataset.view, el.dataset.street||null); return; }
+  if (act==='goto'){ if (el.dataset.view==='add'){ state.draft=blankDraft(); go(el.dataset.view); } else go(el.dataset.view, el.dataset.param || el.dataset.street || null); return; }
   if (act==='auth-check'){ cloudLinkCheck(); return; }
   if (act==='magic-login'){
     const f = $('#loginForm');
