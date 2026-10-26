@@ -75,3 +75,5 @@ v2 survey upgrade: 5-section dashboard + extended household/member form +
 Excel sheets (Members / Households / Survey Summary / Streets) + PDF summary.
 Smoke test 56/56 green.
 Open: wire Supabase keys; real OTP SMS later.
+- Note: login IDs/passwords live only in the browser localStorage — no
+  password-reset flow yet (forgotten password = add reset or clear data).
