@@ -7,7 +7,7 @@
 /* ---------------- config / constants ---------------- */
 const CFG = window.APP_CONFIG || {};
 const PREFIX = CFG.FAMILY_ID_PREFIX || 'MEMC';
-const LS = { users:'memc_users', families:'memc_families', seq:'memc_seq', session:'memc_session', theme:'memc_theme', seeded:'memc_seeded' };
+const LS = { users:'memc_users', families:'memc_families', seq:'memc_seq', session:'memc_session', theme:'memc_theme', seeded:'memc_seeded', masjid:'memc_masjid' };
 
 const DOC_TYPES = [
   ['aadhaar','Aadhaar Card'], ['pan','PAN Card'], ['passport','Passport'],
@@ -25,7 +25,17 @@ const MARITAL = ['Unmarried','Married','Widow','Widower','Divorced'];
 const HOUSE_TYPES = [
   ['moulding','Moulding (concrete)'],
   ['cement','Cement sheet'],
+  ['palm','Palm leaf'],
   ['other','Other / kachcha']
+];
+
+/* basic government documents — counted per member */
+const BASIC_DOCS = [
+  ['aadhaar','Aadhaar'],
+  ['ration','Ration'],
+  ['voter','Voter ID'],
+  ['bpl','BPL / Ayushman'],
+  ['bank','Bank passbook']
 ];
 const EDU = [
   ['primary','Primary (1-8)'],
@@ -98,7 +108,9 @@ const DB = {
   seq(){ return parseInt(localStorage.getItem(LS.seq)||'0',10)||0; },
   setSeq(n){ localStorage.setItem(LS.seq, String(n)); },
   seeded(){ return localStorage.getItem(LS.seeded)==='1'; },
-  setSeeded(){ localStorage.setItem(LS.seeded,'1'); }
+  setSeeded(){ localStorage.setItem(LS.seeded,'1'); },
+  masjid(){ try{ return JSON.parse(localStorage.getItem(LS.masjid)||'null') || null; }catch(e){ return null; } },
+  setMasjid(v){ localStorage.setItem(LS.masjid, JSON.stringify(v)); }
 };
 
 function getSession(){ try{ return JSON.parse(localStorage.getItem(LS.session)||'null'); }catch(e){ return null; } }
@@ -127,6 +139,8 @@ const ICON = {
   users:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
   gear:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
   home:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5 12 3l9 6.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>',
+  mosque:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2c2.5 2.4 4 4.2 4 6a4 4 0 0 1-8 0c0-1.8 1.5-3.6 4-6z"/><path d="M4 21v-6a8 8 0 0 1 16 0v6"/><path d="M9 21v-4a3 3 0 0 1 6 0v4"/><path d="M2 21h20"/></svg>',
+  doc:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>',
   out:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>'
 };
 
@@ -261,8 +275,8 @@ function enterApp(){
 
 function navItems(){
   const u = currentUser(); if(!u) return [];
-  if (u.role==='family') return [ ['myfamily','My Family',ICON.home], ['settings','Settings',ICON.gear] ];
-  const items = [ ['dashboard','Dashboard',ICON.dash], ['families','Households',ICON.list], ['add','Add Household',ICON.plus] ];
+  if (u.role==='family') return [ ['myfamily','My Family',ICON.home], ['masjid','Masjid Profile',ICON.mosque], ['settings','Settings',ICON.gear] ];
+  const items = [ ['dashboard','Dashboard',ICON.dash], ['families','Households',ICON.list], ['add','Add Household',ICON.plus], ['masjid','Masjid Profile',ICON.mosque] ];
   if (u.role==='super') items.push(['users','Users',ICON.users]);
   items.push(['settings','Settings',ICON.gear]);
   return items;
@@ -281,10 +295,10 @@ function renderShell(){
 
 function go(view, param){
   const u = currentUser(); if(!u){ renderAuth(); return; }
-  if (u.role==='family' && !['myfamily','settings'].includes(view)) view='myfamily';
+  if (u.role==='family' && !['myfamily','settings','masjid'].includes(view)) view='myfamily';
   state.view = view; state.param = param||null;
   closeNav();
-  const titles = { dashboard:'Survey Dashboard', families:'Households', add:(state.param?'Edit Household':'Add Household'), detail:'Household Record', users:'Users', settings:'Settings', myfamily:'My Family' };
+  const titles = { dashboard:'Survey Dashboard', families:'Households', add:(state.param?'Edit Household':'Add Household'), detail:'Household Record', users:'Users', settings:'Settings', myfamily:'My Family', masjid:'Masjid Profile' };
   $('#pageTitle').textContent = titles[view] || 'Survey Dashboard';
   let html='';
   if (view==='dashboard') html = viewDashboard();
@@ -294,6 +308,7 @@ function go(view, param){
   else if (view==='users') html = viewUsers();
   else if (view==='settings') html = viewSettings();
   else if (view==='myfamily') html = viewMyFamily();
+  else if (view==='masjid') html = viewMasjid();
   $('#content').innerHTML = html;
   $$('#nav .nav-item').forEach(a=>a.classList.toggle('active', a.dataset.view===view || (view==='detail'&&a.dataset.view==='families')||(view==='add'&&a.dataset.view==='add')));
   afterRender(view);
@@ -308,6 +323,7 @@ function houseTypeKey(t){
   const v = String(t||'').toLowerCase();
   if (v.includes('mould') || v.includes('concrete') || v.includes('rcc')) return 'moulding';
   if (v.includes('cement') || v.includes('sheet') || v.includes('tin')) return 'cement';
+  if (v.includes('palm') || v.includes('leaf') || v.includes('khaprail') || v.includes('thatch')) return 'palm';
   return 'other';
 }
 function streetName(f){ return (String(f.street||'').trim()) || 'Unassigned'; }
@@ -318,7 +334,7 @@ function computeStats(){
     houses: fams.length,
     families: fams.length,
     streets: [],
-    houseTypes: { moulding:0, cement:0, other:0 },
+    houseTypes: { moulding:0, cement:0, palm:0, other:0 },
     men:   { total:0, married:0, unmarried:0, disabled:0 },
     women: { total:0, married:0, unmarried:0, disabled:0, widow:0 },
     others: 0,
@@ -326,13 +342,18 @@ function computeStats(){
     pop: 0,
     students: { total:0, primary:0, higher_secondary:0, college:0, madarsa:0 },
     work: { men:{private:0,government:0,business:0}, women:{private:0,government:0,business:0} },
-    deeni: { menAalim:0, menHafiz:0, womenAalim:0, womenHafiz:0 }
+    deeni: { menAalim:0, menHafiz:0, womenAalim:0, womenHafiz:0 },
+    docs: Object.fromEntries(BASIC_DOCS.map(([k])=>[k,0])),
+    membersWithAllDocs: 0,
+    membersWithNoDocs: 0,
+    scheme: { applied:0, notApplied:0, byName:[] }
   };
   const streetMap = new Map();
+  const schemeMap = new Map();
 
   fams.forEach(f=>{
     const name = streetName(f);
-    if (!streetMap.has(name)) streetMap.set(name, { name, houses:0, moulding:0, cement:0, other:0 });
+    if (!streetMap.has(name)) streetMap.set(name, { name, houses:0, moulding:0, cement:0, palm:0, other:0 });
     const st = streetMap.get(name);
     st.houses++;
 
@@ -372,6 +393,20 @@ function computeStats(){
         s.work[key][sec]++;
       }
 
+      // basic government documents held by this member
+      const md = m.docs || {};
+      let have = 0;
+      BASIC_DOCS.forEach(([k])=>{ if (md[k]==='yes'){ s.docs[k]++; have++; } });
+      if (have === BASIC_DOCS.length) s.membersWithAllDocs++;
+      if (have === 0) s.membersWithNoDocs++;
+
+      // government scheme applied
+      if (m.govtScheme==='yes'){
+        s.scheme.applied++;
+        const nm = String(m.schemeName||'').trim();
+        if (nm) schemeMap.set(nm, (schemeMap.get(nm)||0) + 1);
+      } else s.scheme.notApplied++;
+
       const dn = (m.religious||'').toLowerCase();
       const isF = g==='female';
       if (dn==='aalim' || dn==='both'){ if (isF) s.deeni.womenAalim++; else s.deeni.menAalim++; }
@@ -380,6 +415,7 @@ function computeStats(){
   });
 
   s.streets = Array.from(streetMap.values()).sort((a,b)=> a.name.localeCompare(b.name));
+  s.scheme.byName = Array.from(schemeMap.entries()).sort((a,b)=> b[1]-a[1]);
   return s;
 }
 
@@ -406,10 +442,10 @@ function viewDashboard(){
   ];
 
   const streetRows = s.streets.length ? `
-    <div class="table-wrap street-table" style="margin-top:14px"><table><thead><tr><th>Street name</th><th>Houses</th><th>Moulding</th><th>Cement sheet</th><th>Other</th></tr></thead><tbody>
+    <div class="table-wrap street-table" style="margin-top:14px"><table><thead><tr><th>Street name</th><th>Houses</th><th>Moulding</th><th>Cement sheet</th><th>Palm leaf</th><th>Other</th></tr></thead><tbody>
       ${s.streets.map(st=>`<tr data-act="goto" data-view="families" data-street="${esc(st.name)}" class="clickable">
-        <td><b>${esc(st.name)}</b></td><td>${st.houses}</td><td>${st.moulding}</td><td>${st.cement}</td><td>${st.other}</td></tr>`).join('')}
-      <tr class="totals"><td>Total</td><td>${s.houses}</td><td>${s.houseTypes.moulding}</td><td>${s.houseTypes.cement}</td><td>${s.houseTypes.other}</td></tr>
+        <td><b>${esc(st.name)}</b></td><td>${st.houses}</td><td>${st.moulding}</td><td>${st.cement}</td><td>${st.palm}</td><td>${st.other}</td></tr>`).join('')}
+      <tr class="totals"><td>Total</td><td>${s.houses}</td><td>${s.houseTypes.moulding}</td><td>${s.houseTypes.cement}</td><td>${s.houseTypes.palm}</td><td>${s.houseTypes.other}</td></tr>
     </tbody></table></div>` : `<p class="muted small" style="margin-top:12px">No streets yet — street names appear here as households are added.</p>`;
 
   const empty = s.houses ? '' : `<div class="empty" style="margin-top:18px"><div class="big">🕌</div><h3>No households surveyed yet</h3><p>Add the first household, ya sample data load karke dashboard dekh lo.</p>
@@ -435,6 +471,8 @@ function viewDashboard(){
           ${metric('Total houses', s.houses)}
           ${metric('Moulding (house type)', s.houseTypes.moulding)}
           ${metric('Cement sheet (house type)', s.houseTypes.cement)}
+          ${metric('Palm leaf (house type)', s.houseTypes.palm)}
+          ${metric('Other / kachcha (house type)', s.houseTypes.other)}
         </div>
         ${streetRows}
       </section>
@@ -501,6 +539,22 @@ function viewDashboard(){
           ${metric('Total Aalim & Hafiz (men + women)', s.deeni.menAalim + s.deeni.menHafiz + s.deeni.womenAalim + s.deeni.womenHafiz, {hi:true})}
         </div>
       </section>
+
+      <section class="grp wide">
+        ${grpHead(6,'Documents & Govt. Schemes','Kitne logon ke paas documents hain · kitne ne scheme li')}
+        <div class="metrics cols2">
+          ${metric('Members with all basic documents', s.membersWithAllDocs)}
+          ${metric('Members with no basic document', s.membersWithNoDocs)}
+          ${metric('Scheme applied', s.scheme.applied)}
+          ${metric('Scheme not applied', s.scheme.notApplied)}
+        </div>
+        <div class="table-wrap small-table" style="margin-top:14px"><table>
+          <thead><tr><th>Document</th><th>Have</th><th>Don't have</th></tr></thead><tbody>
+          ${BASIC_DOCS.map(([k,l])=>`<tr><td>${esc(l)}</td><td><b>${s.docs[k]}</b></td><td>${Math.max(0, s.pop - s.docs[k])}</td></tr>`).join('')}
+          </tbody></table></div>
+        ${s.scheme.byName.length ? `<div class="sec-title" style="margin:16px 0 4px;font-size:.88rem">Scheme-wise count</div>
+          <div class="metrics cols2">${s.scheme.byName.map(([nm,n])=>metric(esc(nm), n)).join('')}</div>` : ''}
+      </section>
     </div>`;
 }
 
@@ -565,9 +619,9 @@ function renderFamilyList(){
 /* ============================================================
    HOUSEHOLD FORM
    ============================================================ */
-function blankMember(){ return { relation:'', name:'', fatherName:'', motherName:'', gender:'Male', dob:'', educationLevel:'', sector:'', religious:'', maritalStatus:'Unmarried', children:'', disability:'no', govtScheme:'no' }; }
+function blankMember(){ return { relation:'', name:'', fatherName:'', motherName:'', gender:'Male', dob:'', educationLevel:'', sector:'', religious:'', maritalStatus:'Unmarried', children:'', disability:'no', govtScheme:'no', schemeName:'', docs:{} }; }
 function blankDraft(){
-  return { id:null, houseName:'', houseNo:'', street:'', houseType:'moulding', address:'', phone:'', notes:'',
+  return { id:null, customId:'', houseName:'', houseNo:'', street:'', houseType:'moulding', address:'', phone:'', notes:'',
     members:[ blankMember() ],
     docs: Object.fromEntries(DOC_TYPES.map(d=>[d[0],'no'])),
     custom: Array.from({length:CUSTOM_DOCS}, ()=>({label:'', value:'no'})) };
@@ -601,6 +655,13 @@ function viewFamilyForm(){
         <div class="grid g2" style="margin-top:12px">
           <div class="field"><label>Household / head name *</label><input class="inp" data-field="houseName" value="${esc(d.houseName)}" placeholder="e.g. Abdul Rahman" /></div>
           <div class="field"><label>Phone number</label><input class="inp" data-field="phone" inputmode="numeric" value="${esc(d.phone)}" placeholder="10-digit mobile" /></div>
+        </div>
+        <div class="field" style="margin-top:12px">
+          <label>Family ID ${editing?'':'<span class="hint" style="font-weight:400">— optional, khali chhodo to auto banega</span>'}</label>
+          ${editing
+            ? `<input class="inp" value="${esc(d.id)}" readonly />`
+            : `<input class="inp" data-field="customId" value="${esc(d.customId||'')}" placeholder="Auto: ${esc(previewFamilyId())}" />
+               <span class="hint">Apna ID likhna ho to likho (jaise MEMC-2026-000101), warna system khud de dega. QR isi ID ka banega.</span>`}
         </div>
         <div class="field" style="margin-top:12px"><label>Address / landmark</label><input class="inp" data-field="address" value="${esc(d.address)}" placeholder="Mohalla, gali, landmark" /></div>
         <div class="field" style="margin-top:12px"><label>Notes (optional)</label><textarea class="inp" data-field="notes" placeholder="Any remark about this household">${esc(d.notes)}</textarea></div>
@@ -663,8 +724,15 @@ function renderMembers(){
           ${DEENI.map(([k,l])=>`<option value="${k}" ${(m.religious||'')===k?'selected':''}>${esc(l)}</option>`).join('')}</select></div>
         <div class="field"><label>Father name</label><input class="inp" data-field="m.fatherName" data-idx="${i}" value="${esc(m.fatherName)}" /></div>
         <div class="field"><label>Mother name</label><input class="inp" data-field="m.motherName" data-idx="${i}" value="${esc(m.motherName)}" /></div>
+        <div class="field" style="grid-column:1/-1"><label>Basic government documents</label>
+          <div class="doc-pills" data-mdocs data-idx="${i}">
+            ${BASIC_DOCS.map(([k,l])=>`<button type="button" data-doc-key="${k}" class="${m.docs&&m.docs[k]==='yes'?'on':''}">${esc(l)}</button>`).join('')}
+          </div>
+          <span class="hint">Tap karke on/off karo — jo document jiske paas hai.</span>
+        </div>
         <div class="field"><label>Physically challenged</label><div class="field-yn">${segYN('m.disability', i, m.disability)}</div></div>
-        <div class="field"><label>Govt. scheme</label><div class="field-yn">${segYN('m.govtScheme', i, m.govtScheme)}</div></div>
+        <div class="field"><label>Govt. scheme applied</label><div class="field-yn">${segYN('m.govtScheme', i, m.govtScheme)}</div></div>
+        <div class="field"><label>Scheme name / details</label><input class="inp" data-field="m.schemeName" data-idx="${i}" value="${esc(m.schemeName||'')}" placeholder="e.g. PM Awas, Ayushman, Ujjwala" /></div>
       </div>
     </div>`; }).join('');
 }
@@ -714,11 +782,13 @@ function viewFamilyDetail(id){
     </div>
 
     <div class="sec-title">Members</div>
-    <div class="table-wrap"><table><thead><tr><th>#</th><th>Name</th><th>Relation</th><th>Gender</th><th>Age</th><th>Education</th><th>Work</th><th>Deeni</th><th>Marital</th><th>Challenged</th></tr></thead><tbody>
-      ${members.map((m,i)=>{ const a=ageFromDob(m.dob); return `<tr>
+    <div class="table-wrap"><table><thead><tr><th>#</th><th>Name</th><th>Relation</th><th>Gender</th><th>Age</th><th>Education</th><th>Work</th><th>Deeni</th><th>Marital</th><th>Docs</th><th>Scheme</th><th>Challenged</th></tr></thead><tbody>
+      ${members.map((m,i)=>{ const a=ageFromDob(m.dob); const md=m.docs||{}; const dc=BASIC_DOCS.filter(([k])=>md[k]==='yes').length; return `<tr>
         <td>${i+1}</td><td>${esc(m.name||'—')}</td><td>${esc(m.relation||'—')}</td><td>${esc(m.gender||'—')}</td>
         <td>${a===null?'—':a}</td><td>${esc(EDU_LABEL[eduKey(m)]||m.education||'—')}</td><td>${esc(SECTOR_LABEL[m.sector]||'—')}</td>
         <td>${esc(DEENI_LABEL[m.religious]||'—')}</td><td>${esc(m.maritalStatus||'—')}</td>
+        <td><span class="badge ${dc===BASIC_DOCS.length?'':'gray'}">${dc}/${BASIC_DOCS.length}</span></td>
+        <td>${m.govtScheme==='yes' ? esc(m.schemeName||'Yes') : '<span class="muted">No</span>'}</td>
         <td>${m.disability==='yes'?'Yes':'No'}</td></tr>`; }).join('')}
     </tbody></table></div>
 
@@ -778,6 +848,70 @@ function viewUsers(){
 /* ============================================================
    SETTINGS
    ============================================================ */
+/* ============================== MASJID PROFILE ============================== */
+const MASJID_FIELDS = [
+  ['name','Masjid ka naam','e.g. Masjid - E- Mohammadiy'],
+  ['established','Qayam saal','e.g. 1985'],
+  ['address','Pura pata','Mohalla, shehar, pincode'],
+  ['phone','Rabta number','10-digit mobile'],
+  ['imam','Imam sahab ka naam',''],
+  ['muazzin','Muazzin ka naam',''],
+  ['area','Raqba (sq ft / gaj)',''],
+  ['capacity','Namazi capacity',''],
+  ['rooms','Kamre / halls',''],
+  ['madrasa','Madrasa / maktab','e.g. 60 bachche, 3 ustad'],
+  ['waqf','Waqf / registration no.',''],
+  ['bank','Bank / account detail',''],
+];
+
+function masjidData(){
+  const m = DB.masjid() || {};
+  return Object.assign({ photos: [] }, m);
+}
+
+function viewMasjid(){
+  const u = currentUser();
+  const canEdit = u.role !== 'family';
+  const m = masjidData();
+  return `
+  <div class="page-head"><div><h1>Masjid Profile</h1><p>Masjid ki tafseel, imam/muazzin, tasveerein — report ke saath print hoti hain.</p></div></div>
+  <div class="card">
+    <div class="card-h"><div><h3>Masjid Profile</h3><div class="hint">Masjid ki poori tafseel aur tasveerein — survey report ke saath chhapti hain.</div></div>
+      ${canEdit?'<span class="badge">Editable</span>':'<span class="badge gray">View only</span>'}</div>
+    <div class="grid g2" style="margin-top:12px">
+      ${MASJID_FIELDS.map(([k,l,ph])=>`<div class="field"><label>${esc(l)}</label>
+        <input class="inp" data-mj="${k}" value="${esc(m[k]||'')}" placeholder="${esc(ph||'')}" ${canEdit?'':'readonly'} /></div>`).join('')}
+    </div>
+    <div class="field" style="margin-top:12px"><label>Note / khaas baat</label>
+      <textarea class="inp" rows="2" data-mj="note" ${canEdit?'':'readonly'} placeholder="Tareekh, khidmat, koi khaas baat">${esc(m.note||'')}</textarea></div>
+    ${canEdit?'<div style="margin-top:14px"><button class="btn primary" data-act="saveMasjid">Save masjid details</button></div>':''}
+  </div>
+
+  <div class="card">
+    <div class="card-h"><div><h3>Masjid ki tasveerein</h3><div class="hint">${m.photos.length}/6 photo · har photo phone me hi save hoti hai</div></div>
+      ${canEdit?'<span class="badge">Max 6</span>':''}</div>
+    <div class="photo-grid" style="margin-top:12px">
+      ${m.photos.length ? m.photos.map((src,i)=>`<div class="photo"><img src="${esc(src)}" alt="Masjid photo ${i+1}" />
+        ${canEdit?`<button class="photo-x" data-act="delPhoto" data-i="${i}" title="Remove">×</button>`:''}</div>`).join('')
+        : '<div class="photo empty">Abhi koi photo nahi</div>'}
+      ${canEdit && m.photos.length<6 ? `<label class="photo add">
+        <input type="file" accept="image/*" data-act="masjidPhoto" hidden />
+        <span>+ Photo</span><span class="hint">Gallery se chuno</span></label>`:''}
+    </div>
+    ${canEdit?'<div class="hint" style="margin-top:10px">Photo apne aap chhoti (compress) ho jati hai, isliye data bhi kam jagah leta hai.</div>':''}
+  </div>`;
+}
+
+async function compressImage(file, maxSide = 1100, quality = 0.72){
+  const dataUrl = await new Promise((res,rej)=>{ const r=new FileReader(); r.onload=()=>res(r.result); r.onerror=rej; r.readAsDataURL(file); });
+  const img = await new Promise((res,rej)=>{ const im=new Image(); im.onload=()=>res(im); im.onerror=rej; im.src=dataUrl; });
+  const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+  const w = Math.round(img.width*scale), h = Math.round(img.height*scale);
+  const c = document.createElement('canvas'); c.width=w; c.height=h;
+  const ctx = c.getContext('2d'); ctx.drawImage(img,0,0,w,h);
+  return c.toDataURL('image/jpeg', quality);
+}
+
 function viewSettings(){
   const u = currentUser();
   const cloudOn = !!(CFG.SUPABASE_URL && CFG.SUPABASE_ANON_KEY);
@@ -854,9 +988,43 @@ document.addEventListener('click', (e)=>{
   if (act==='view-family'){ go('detail', id); return; }
   if (act==='edit-family'){ const f=DB.families().find(x=>x.id===id); if(f){ state.draft = JSON.parse(JSON.stringify(f)); state.draft.docs = Object.assign(Object.fromEntries(DOC_TYPES.map(d=>[d[0],'no'])), state.draft.docs||{}); state.draft.custom = padCustom(state.draft.custom); if(!state.draft.houseType) state.draft.houseType='moulding'; go('add', id); } return; }
   if (act==='del-family'){ if(confirm('Delete this household record permanently?')){ DB.setFamilies(DB.families().filter(f=>f.id!==id)); toast('Household deleted'); go('families'); } return; }
+  if (act==='saveMasjid'){
+    const m = masjidData();
+    document.querySelectorAll('[data-mj]').forEach(el=>{ m[el.dataset.mj] = el.value.trim(); });
+    m.updatedAt = Date.now(); m.updatedBy = currentUser().id;
+    try { DB.setMasjid(m); } catch(err){ toast('Save nahi hua — storage bhar gaya. Kuch photos hata ke dobara koshish karo.','err'); return; }
+    toast('Masjid details save ho gayi'); go(state.view, state.param); return;
+  }
+  if (act==='delPhoto'){
+    const m = masjidData();
+    m.photos.splice(+el.dataset.i,1);
+    DB.setMasjid(m); toast('Photo hata di'); go(state.view, state.param); return;
+  }
   if (act==='del-user'){ if(confirm('Delete this login?')){ DB.setUsers(DB.users().filter(u=>u.id!==id)); toast('Login deleted'); go('users'); } return; }
   if (act==='add-member'){ state.draft.members.push(blankMember()); renderMembers(); return; }
   if (act==='remove-member'){ state.draft.members.splice(+el.dataset.idx,1); renderMembers(); return; }
+});
+
+// masjid photo upload
+document.addEventListener('change', async (e)=>{
+  const inp = e.target.closest('[data-act="masjidPhoto"]'); if(!inp || !inp.files || !inp.files[0]) return;
+  const m = masjidData();
+  try{
+    const src = await compressImage(inp.files[0]);
+    m.photos = (m.photos||[]).concat([src]).slice(0,6);
+    DB.setMasjid(m); toast('Photo add ho gayi'); go(state.view, state.param);
+  }catch(err){ toast('Photo add nahi hui — dusri image try karo'); }
+});
+
+// per-member document pills (tap to toggle)
+document.addEventListener('click', (e)=>{
+  const pill = e.target.closest('[data-doc-key]'); if(!pill || !state.draft) return;
+  const wrap = pill.closest('[data-mdocs]'); if(!wrap) return;
+  const i = +wrap.dataset.idx, key = pill.dataset.docKey;
+  const m = state.draft.members[i]; if(!m) return;
+  m.docs = m.docs || {};
+  m.docs[key] = m.docs[key]==='yes' ? 'no' : 'yes';
+  pill.classList.toggle('on', m.docs[key]==='yes');
 });
 
 // segmented controls (documents, house type, member yes/no)
@@ -953,7 +1121,14 @@ function saveFamily(){
     d.updatedAt = Date.now();
     if (i>=0) fams[i]=d; else fams.push(d);
   } else {
-    d.id = nextFamilyId();
+    const custom = String(d.customId||'').trim().toUpperCase();
+    if (custom){
+      if (!/^[A-Z0-9\-_/]{3,32}$/.test(custom)) return fail('Family ID me sirf letters, numbers, - _ / chalega (3-32 characters).');
+      if (fams.some(f=>f.id.toUpperCase()===custom)) return fail('Ye Family ID pehle se kisi ghar ke paas hai — koi aur do.');
+      d.id = custom;
+    } else {
+      d.id = nextFamilyId();
+    }
     d.createdAt = Date.now();
     d.createdBy = u.id;
     fams.push(d);
@@ -964,6 +1139,7 @@ function saveFamily(){
   toast(wasNew ? 'Household saved — ID generated' : 'Changes saved');
   go('detail', d.id);
 }
+function previewFamilyId(){ return PREFIX+'-'+new Date().getFullYear()+'-'+pad(DB.seq()+1,6); }
 function nextFamilyId(){ const n=DB.seq()+1; DB.setSeq(n); return PREFIX+'-'+new Date().getFullYear()+'-'+pad(n,6); }
 function padCustom(custom){
   const arr = Array.isArray(custom) ? custom.slice(0,CUSTOM_DOCS) : [];
@@ -1006,7 +1182,9 @@ function collectRows(){
       'Member Name':m.name||'', 'Relation':m.relation||'', 'Gender':m.gender||'', 'DOB':m.dob||'', 'Age':(ageFromDob(m.dob)??''),
       'Education Level':EDU_LABEL[edu]||m.education||'', 'Work Sector':SECTOR_LABEL[m.sector]||'', 'Deeni Taleem':DEENI_LABEL[m.religious]||'',
       'Marital Status':m.maritalStatus||'', 'Children':m.children||'', 'Father Name':m.fatherName||'', 'Mother Name':m.motherName||'',
-      'Physically Challenged':m.disability||'', 'Govt Scheme':m.govtScheme||''
+      'Physically Challenged':m.disability||'', 'Govt Scheme':m.govtScheme==='yes'?'Yes':'No', 'Scheme Name':m.schemeName||'',
+      ...Object.fromEntries(BASIC_DOCS.map(([k,l])=>['Doc: '+l, (m.docs&&m.docs[k]==='yes')?'Yes':'No'])),
+      'Docs Count':BASIC_DOCS.filter(([k])=>m.docs&&m.docs[k]==='yes').length+'/'+BASIC_DOCS.length
     });
   }));
   return rows;
@@ -1018,6 +1196,7 @@ function summaryRows(){
     ['1 · Location & Housing','Total houses', s.houses],
     ['1 · Location & Housing','Moulding houses', s.houseTypes.moulding],
     ['1 · Location & Housing','Cement sheet houses', s.houseTypes.cement],
+    ['1 · Location & Housing','Palm leaf houses', s.houseTypes.palm],
     ['2 · Family & Demographics','Total families', s.families],
     ['2 · Family & Demographics','Total population', s.pop],
     ['2 · Family & Demographics','Children (under 18)', s.children],
@@ -1044,7 +1223,13 @@ function summaryRows(){
     ['5 · Religious Education','Men Aalim', s.deeni.menAalim],
     ['5 · Religious Education','Men Hafiz', s.deeni.menHafiz],
     ['5 · Religious Education','Women Aalim', s.deeni.womenAalim],
-    ['5 · Religious Education','Women Hafiz', s.deeni.womenHafiz]
+    ['5 · Religious Education','Women Hafiz', s.deeni.womenHafiz],
+    ['6 · Documents & Schemes','Members with all basic documents', s.membersWithAllDocs],
+    ['6 · Documents & Schemes','Members with no basic document', s.membersWithNoDocs],
+    ['6 · Documents & Schemes','Scheme applied', s.scheme.applied],
+    ['6 · Documents & Schemes','Scheme not applied', s.scheme.notApplied],
+    ...BASIC_DOCS.map(([k,l])=>['6 · Documents & Schemes','Have '+l, s.docs[k]]),
+    ...s.scheme.byName.map(([nm,n])=>['6 · Documents & Schemes','Scheme: '+nm, n])
   ].map(([group,metric,value])=>({ Group:group, Metric:metric, Total:value }));
 }
 function exportExcel(){
@@ -1064,16 +1249,27 @@ function exportExcel(){
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(famRows), 'Households');
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summaryRows()), 'Survey Summary');
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(computeStats().streets.map(st=>({
-    'Street':st.name,'Houses':st.houses,'Moulding':st.moulding,'Cement sheet':st.cement,'Other':st.other
+    'Street':st.name,'Houses':st.houses,'Moulding':st.moulding,'Cement sheet':st.cement,'Palm leaf':st.palm,'Other':st.other
   }))), 'Streets');
+  const mj = masjidData();
+  const mjRows = MASJID_FIELDS.map(([k,l])=>({ Detail:l, Value:mj[k]||'' })).concat([{Detail:'Note',Value:mj.note||''},{Detail:'Photos',Value:(mj.photos||[]).length}]);
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(mjRows), 'Masjid');
   XLSX.writeFile(wb, 'masjid-survey-'+todayStr()+'.xlsx');
   toast('Excel file downloaded');
 }
 function backupJSON(){
-  const data = { org:CFG.ORG_NAME, exportedAt:new Date().toISOString(), families:DB.families(), users:DB.users().map(u=>({id:u.id,role:u.role,name:u.name,phone:u.phone,familyId:u.familyId})) };
+  const data = { org:CFG.ORG_NAME, exportedAt:new Date().toISOString(), families:DB.families(), masjid:DB.masjid(), users:DB.users().map(u=>({id:u.id,role:u.role,name:u.name,phone:u.phone,familyId:u.familyId})) };
   const blob = new Blob([JSON.stringify(data,null,2)], {type:'application/json'});
   const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='masjid-survey-backup-'+todayStr()+'.json'; a.click(); URL.revokeObjectURL(a.href);
   toast('Backup downloaded');
+}
+function mjHead(){
+  const m = masjidData();
+  if (!m.name && !m.address && !m.imam && !(m.photos||[]).length) return '';
+  return `<div class="pmasjid">
+    <b>Masjid:</b> ${esc(m.name||CFG.ORG_NAME||'—')}${m.established?` · est. ${esc(m.established)}`:''}${m.imam?` · Imam: ${esc(m.imam)}`:''}${m.address?`<br>${esc(m.address)}`:''}${m.phone?` · ${esc(m.phone)}`:''}
+    ${(m.photos||[]).length?`<div class="pphotos">${m.photos.map(src=>`<img src="${esc(src)}" />`).join('')}</div>`:''}
+  </div>`;
 }
 function printFamilies(fams, title){
   if (!fams.length){ toast('Nothing to print','err'); return; }
@@ -1082,19 +1278,21 @@ function printFamilies(fams, title){
     <div class="pmeta">${esc(CFG.ORG_SUB||'Khidmath Committee')} · printed ${new Date().toLocaleDateString('en-GB')}</div>
     ${title==='All Households'?`
     <div class="psum">
-      <b>1 · Location &amp; Housing</b> — streets ${s.streets.length} · houses ${s.houses} · moulding ${s.houseTypes.moulding} · cement sheet ${s.houseTypes.cement}<br>
+      <b>1 · Location &amp; Housing</b> — streets ${s.streets.length} · houses ${s.houses} · moulding ${s.houseTypes.moulding} · cement sheet ${s.houseTypes.cement} · palm leaf ${s.houseTypes.palm}<br>
       <b>2 · Family &amp; Demographics</b> — families ${s.families} · population ${s.pop} · children ${s.children} · men ${s.men.total} (married ${s.men.married}, unmarried ${s.men.unmarried}, challenged ${s.men.disabled}) · women ${s.women.total} (married ${s.women.married}, unmarried ${s.women.unmarried}, challenged ${s.women.disabled}, widow ${s.women.widow})<br>
       <b>3 · Education</b> — students ${s.students.total} · primary ${s.students.primary} · higher secondary ${s.students.higher_secondary} · college ${s.students.college} · madarsa ${s.students.madarsa}<br>
       <b>4 · Professional</b> — men: private ${s.work.men.private}, govt ${s.work.men.government}, business ${s.work.men.business} · women: private ${s.work.women.private}, govt ${s.work.women.government}, business ${s.work.women.business}<br>
-      <b>5 · Religious Education</b> — men aalim ${s.deeni.menAalim}, hafiz ${s.deeni.menHafiz} · women aalim ${s.deeni.womenAalim}, hafiz ${s.deeni.womenHafiz}
-    </div>`:''}`;
+      <b>5 · Religious Education</b> — men aalim ${s.deeni.menAalim}, hafiz ${s.deeni.menHafiz} · women aalim ${s.deeni.womenAalim}, hafiz ${s.deeni.womenHafiz}<br>
+      <b>6 · Documents &amp; Schemes</b> — all docs ${s.membersWithAllDocs} · no docs ${s.membersWithNoDocs} · scheme applied ${s.scheme.applied} · not applied ${s.scheme.notApplied}
+    </div>`:''}
+    ${mjHead()}`;
   const body = fams.map(f=>{
     const docs = DOC_TYPES.filter(([k])=>f.docs&&f.docs[k]==='yes').map(([,l])=>l).concat((f.custom||[]).filter(c=>c.label&&c.value==='yes').map(c=>c.label));
     return `<div class="pcard">
       <h2>${esc(f.houseName||'Household')} — ${esc(f.id)}</h2>
       <div class="pmeta">Street: ${esc(streetName(f))} · House No: ${esc(f.houseNo||'—')} · Type: ${esc(labelOf(HOUSE_TYPES, houseTypeKey(f.houseType)))} · Phone: ${esc(f.phone||'—')} · Address: ${esc(f.address||'—')}</div>
-      <table><thead><tr><th>#</th><th>Name</th><th>Relation</th><th>Gender</th><th>Age</th><th>Education</th><th>Work</th><th>Deeni</th><th>Marital</th><th>Challenged</th></tr></thead><tbody>
-      ${(f.members||[]).map((m,i)=>{const a=ageFromDob(m.dob);return `<tr><td>${i+1}</td><td>${esc(m.name||'')}</td><td>${esc(m.relation||'')}</td><td>${esc(m.gender||'')}</td><td>${a===null?'':a}</td><td>${esc(EDU_LABEL[eduKey(m)]||m.education||'')}</td><td>${esc(SECTOR_LABEL[m.sector]||'')}</td><td>${esc(DEENI_LABEL[m.religious]||'')}</td><td>${esc(m.maritalStatus||'')}</td><td>${m.disability==='yes'?'Yes':'No'}</td></tr>`;}).join('')}
+      <table><thead><tr><th>#</th><th>Name</th><th>Relation</th><th>Gender</th><th>Age</th><th>Education</th><th>Work</th><th>Deeni</th><th>Marital</th><th>Docs</th><th>Scheme</th><th>Challenged</th></tr></thead><tbody>
+      ${(f.members||[]).map((m,i)=>{const a=ageFromDob(m.dob);return `<tr><td>${i+1}</td><td>${esc(m.name||'')}</td><td>${esc(m.relation||'')}</td><td>${esc(m.gender||'')}</td><td>${a===null?'':a}</td><td>${esc(EDU_LABEL[eduKey(m)]||m.education||'')}</td><td>${esc(SECTOR_LABEL[m.sector]||'')}</td><td>${esc(DEENI_LABEL[m.religious]||'')}</td><td>${esc(m.maritalStatus||'')}</td><td>${BASIC_DOCS.filter(([k])=>m.docs&&m.docs[k]==='yes').length}/${BASIC_DOCS.length}</td><td>${esc(m.govtScheme==='yes'?(m.schemeName||'Yes'):'No')}</td><td>${m.disability==='yes'?'Yes':'No'}</td></tr>`;}).join('')}
       </tbody></table>
       <div class="pmeta" style="margin-top:6pt">Documents: ${docs.length?esc(docs.join(', ')):'—'}</div>
     </div>`;
@@ -1111,17 +1309,18 @@ function loadSample(){
   const M = (relation,name,gender,dob,marital,edu,sector,religious,opt)=>{
     const o = opt||{};
     return { relation, name, gender, dob, maritalStatus:marital, educationLevel:edu, sector:sector||'', religious:religious||'',
-      children:o.children||'0', fatherName:o.father||'', motherName:o.mother||'', disability:o.disability||'no', govtScheme:o.scheme||'no' };
+      children:o.children||'0', fatherName:o.father||'', motherName:o.mother||'', disability:o.disability||'no',
+      govtScheme:o.scheme||'no', schemeName:o.schemeName||'', docs:o.docs||{} };
   };
   const sample = [
     { houseName:'Abdul Rahman', houseNo:'12-B', street:'Masjid Road', houseType:'moulding', phone:'9876543210', address:'Masjid Road, Block A',
-      members:[ M('Self','Abdul Rahman','Male','1979-04-12','Married','college','business','', {children:'3',father:'Mohd Yusuf',mother:'Ayesha Bibi',scheme:'yes'}),
-                M('Wife','Fatima Begum','Female','1984-08-20','Married','higher_secondary','none','', {children:'3',father:'Ibrahim',mother:'Khatija'}),
-                M('Son','Imran Khan','Male','2011-02-05','Unmarried','primary','', '', {father:'Abdul Rahman',mother:'Fatima Begum'}),
-                M('Daughter','Ayesha Khan','Female','2014-09-11','Unmarried','primary','', 'hafiz', {father:'Abdul Rahman',mother:'Fatima Begum'}) ] },
+      members:[ M('Self','Abdul Rahman','Male','1979-04-12','Married','college','business','', {children:'3',father:'Mohd Yusuf',mother:'Ayesha Bibi',scheme:'yes',schemeName:'PM Awas Yojana',docs:{aadhaar:'yes',ration:'yes',voter:'yes',bpl:'yes',bank:'yes'}}),
+                M('Wife','Fatima Begum','Female','1984-08-20','Married','higher_secondary','none','', {children:'3',father:'Ibrahim',mother:'Khatija',docs:{aadhaar:'yes',ration:'yes',voter:'yes',bpl:'yes',bank:'no'}}),
+                M('Son','Imran Khan','Male','2011-02-05','Unmarried','primary','', '', {father:'Abdul Rahman',mother:'Fatima Begum',docs:{aadhaar:'yes',ration:'yes'}}),
+                M('Daughter','Ayesha Khan','Female','2014-09-11','Unmarried','primary','', 'hafiz', {father:'Abdul Rahman',mother:'Fatima Begum',docs:{aadhaar:'yes'}}) ] },
     { houseName:'Sayeed Ahmed', houseNo:'45', street:'Nala Road', houseType:'cement', phone:'9812345678', address:'Nala Road, Block C',
-      members:[ M('Self','Sayeed Ahmed','Male','1965-11-01','Widower','higher_secondary','private','', {children:'2',father:'Late Karim',mother:'Rahima',disability:'yes',scheme:'yes'}),
-                M('Daughter','Sana Ahmed','Female','2009-06-18','Unmarried','higher_secondary','', '', {father:'Sayeed Ahmed',mother:'Nasreen',scheme:'yes'}) ] },
+      members:[ M('Self','Sayeed Ahmed','Male','1965-11-01','Widower','higher_secondary','private','', {children:'2',father:'Late Karim',mother:'Rahima',disability:'yes',scheme:'yes',schemeName:'Ayushman Bharat',docs:{aadhaar:'yes',ration:'yes',voter:'yes',bpl:'yes'}}),
+                M('Daughter','Sana Ahmed','Female','2009-06-18','Unmarried','higher_secondary','', '', {father:'Sayeed Ahmed',mother:'Nasreen',scheme:'yes',schemeName:'Scholarship',docs:{aadhaar:'yes'}}) ] },
     { houseName:'Mohd Salim', houseNo:'7-A', street:'Idgah Lane', houseType:'moulding', phone:'9822001100', address:'Idgah Lane, Block B',
       members:[ M('Self','Mohd Salim','Male','1988-01-30','Married','college','private','aalim', {children:'1',father:'Abdul Karim',mother:'Shabana'}),
                 M('Wife','Rukhsana','Female','1990-09-09','Married','higher_secondary','business','', {children:'1',father:'Yusuf',mother:'Zubeida'}),
@@ -1137,7 +1336,7 @@ function loadSample(){
       members:[ M('Self','Noor Alam','Male','1983-02-14','Married','madarsa','', 'both', {children:'2',father:'Siraj',mother:'Amina'}),
                 M('Wife','Shabnam','Female','1987-10-30','Married','madarsa','none','aalim', {children:'2',father:'Ismail',mother:'Razia'}),
                 M('Daughter','Hafsa','Female','2013-12-08','Unmarried','madarsa','', 'hafiz', {father:'Noor Alam',mother:'Shabnam'}) ] },
-    { houseName:'Shakeel Ahmed', houseNo:'31', street:'Idgah Lane', houseType:'other', phone:'9845009988', address:'Idgah Lane, Block B',
+    { houseName:'Shakeel Ahmed', houseNo:'31', street:'Idgah Lane', houseType:'palm', phone:'9845009988', address:'Idgah Lane, Block B',
       members:[ M('Self','Shakeel Ahmed','Male','1969-06-09','Married','primary','government','', {children:'2',father:'Yaqoob',mother:'Sakina',scheme:'yes'}),
                 M('Wife','Farida','Female','1974-04-17','Married','primary','none','', {children:'2',father:'Rauf',mother:'Noorjahan'}),
                 M('Son','Arif','Male','2001-08-25','Unmarried','college','private','', {father:'Shakeel Ahmed',mother:'Farida'}) ] },

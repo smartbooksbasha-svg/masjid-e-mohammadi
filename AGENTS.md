@@ -69,11 +69,28 @@ Password = SHA-256 + per-user salt (`crypto.subtle`, fnv fallback).
 - CDN deps loaded with `defer`: qrcode-generator@1.4.4, xlsx@0.18.5.
 - Build ONE screen → test → next. Shan's rule.
 
+## v2.1 additions (2026-10-26)
+- House types now include **Palm leaf** (`palm`) — dashboard metrics + street
+  table column + exports.
+- **Family ID**: edit keeps the ID read-only; new records accept a custom ID
+  (uppercased, `[A-Z0-9-_/]{3,32}`, uniqueness enforced) or auto-generate
+  `MEMC-<year>-<seq>` via `previewFamilyId()`.
+- **Per-member basic documents** (`BASIC_DOCS`: Aadhaar / Ration / Voter /
+  BPL-Ayushman / Bank) — tap pills, stored as `member.docs[key]='yes'|'no'`.
+- **Govt scheme** per member: `govtScheme` + `schemeName`.
+- **Group 6 card** on dashboard: all-docs / no-docs counts, scheme applied vs
+  not, per-document table, scheme-wise counts.
+- **Masjid Profile screen** (`go('masjid')`, storage key `memc_masjid`,
+  `MASJID_FIELDS`): 12 fields + note + up to 6 photos. Photos compressed in
+  the browser (canvas, max 1100px, JPEG .72) before localStorage.
+  Printed on the report header; exported as an Excel `Masjid` sheet.
+- Family role can open Masjid Profile (read-only).
+
 ## State of things (2026-10-26)
 Live: https://smartbooksbasha-svg.github.io/masjid-kidmat-records/
 v2 survey upgrade: 5-section dashboard + extended household/member form +
 Excel sheets (Members / Households / Survey Summary / Streets) + PDF summary.
-Smoke test 56/56 green.
+Smoke test 75/75 green (v2.1).
 Open: wire Supabase keys; real OTP SMS later.
 - Note: login IDs/passwords live only in the browser localStorage — no
   password-reset flow yet (forgotten password = add reset or clear data).

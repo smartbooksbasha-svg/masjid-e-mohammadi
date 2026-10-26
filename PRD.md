@@ -92,3 +92,16 @@ Exports: Excel = Members / Households / Survey Summary / Streets sheets;
 PDF print = 5-section summary block + per-household member tables.
 Legacy records stay readable (street → "Unassigned", free-text education
 inferred into a level).
+
+
+## v2.1 (2026-10-26) — requested additions
+6. **Documents & Govt. Schemes** — per-member YES/NO for the five basic
+   documents (Aadhaar, Ration, Voter, BPL/Ayushman, Bank) with a
+   "how many have it / how many don't" table, plus scheme applied + scheme
+   name, and scheme-wise counts.
+7. **Palm leaf** house type added to section 1 (moulding / cement sheet /
+   palm leaf / other).
+8. **Family ID** — auto-generated, or committee can type its own ID.
+9. **Masjid Profile** — masjid details (name, est. year, address, phone,
+   imam, muazzin, area, capacity, rooms, madrasa, waqf, bank, note) and up
+   to six photos; appears on printed reports + Excel `Masjid` sheet.

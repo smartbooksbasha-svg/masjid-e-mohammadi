@@ -166,3 +166,21 @@ create policy mem_write on public.members for all to authenticated
 --  synthetic addresses like admin@masjid.local, so there is no
 --  inbox to confirm). Auth → Providers → Email → disable confirm.
 -- ============================================================
+
+
+-- ---------- v2.1 additions ----------
+alter table public.members add column if not exists docs jsonb default '{}'::jsonb;
+alter table public.members add column if not exists scheme_name text;
+
+create table if not exists public.masjid (
+  id boolean primary key default true,
+  name text, established text, address text, phone text,
+  imam text, muazzin text, area text, capacity text, rooms text,
+  madrasa text, waqf text, bank text, note text,
+  photos jsonb default '[]'::jsonb,
+  updated_at timestamptz default now()
+);
+alter table public.masjid enable row level security;
+-- read for any authenticated user, write for super/admin only
+drop policy if exists masjid_read on public.masjid;
+create policy masjid_read on public.masjid for select using (auth.role() = 'authenticated');
