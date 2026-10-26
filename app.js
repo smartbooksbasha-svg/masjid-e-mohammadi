@@ -28,6 +28,7 @@ const HOUSE_TYPES = [
   ['palm','Palm leaf'],
   ['other','Other / kachcha']
 ];
+const HOUSE_LABEL = Object.fromEntries(HOUSE_TYPES);
 
 /* basic government documents — counted per member */
 const BASIC_DOCS = [
@@ -854,8 +855,68 @@ function metric(label, val, opts){
   const o = opts||{};
   return `<div class="metric${o.hi?' hi':''}${o.sub?' sub':''}"><span>${label}</span><b>${val}</b></div>`;
 }
+
+function allMembers(){
+  const out=[];
+  DB.families().forEach(f=>(f.members||[]).forEach(m=>{ if (String(m.name||'').trim()) out.push({ m, f }); }));
+  return out;
+}
+
+function groupDetail(no){
+  const s = computeStats();
+  const wrap = (head, rows) => `<div class="grp-more"><div class="gm-head">${esc(head)} <span class="small">(${rows}${rows===1?' row':' rows'})</span></div>
+    <div class="table-wrap">`;
+  const th = (...cols)=>`<thead><tr>${cols.map(c=>`<th>${esc(c)}</th>`).join('')}</tr></thead>`;
+  const rowsHTML = (cols, arr)=>`${th(...cols)}<tbody>${arr.join('')}</tbody>`;
+  const empty = '<div class="grp-more"><div class="gm-empty">Abhi koi record nahi hai.</div></div>';
+
+  if (no === 1){
+    const fams = DB.families();
+    if (!fams.length) return empty;
+    const rows = fams.map(f=>`<tr data-act="detail" data-id="${esc(f.id)}" class="clickable"><td><b>${esc(f.id)}</b></td><td>${esc(f.houseName||'')}</td><td>${esc(f.houseNo||'')}</td><td>${esc(f.street||'')}</td><td>${esc(HOUSE_LABEL[f.houseType]||f.houseType||'')}</td><td>${(f.members||[]).filter(m=>String(m.name||'').trim()).length}</td></tr>`);
+    return `<div class="grp-more"><div class="gm-head">Har ghar — street, house no, type, members</div><div class="table-wrap">${rowsHTML(['Family ID','House name','House no','Street','Type','Members'], rows)}</div></div>`;
+  }
+  if (no === 2){
+    const arr = allMembers(); if (!arr.length) return empty;
+    const rows = arr.map(({m,f})=>{
+      const a = ageFromDob(m.dob);
+      return `<tr class="clickable" data-act="detail" data-id="${esc(f.id)}"><td>${esc(m.name)}</td><td>${esc(f.id)}</td><td>${esc(m.relation||'')}</td><td>${esc(m.gender||'')}</td><td>${a===null?'':a}</td><td>${esc(m.maritalStatus||'')}</td><td>${esc(String(m.children||''))}</td><td>${m.disability==='yes'?'Yes':'—'}</td></tr>`;
+    });
+    return `<div class="grp-more"><div class="gm-head">Har fard — umar, marital status, bachche, disability</div><div class="table-wrap">${rowsHTML(['Name','Family','Relation','Gender','Age','Marital','Children','Disabled'], rows)}</div></div>`;
+  }
+  if (no === 3){
+    const arr = allMembers().filter(({m})=>{ const a = ageFromDob(m.dob); return (m.educationLevel && m.educationLevel!=='none') || (a!==null && a<26 && m.educationLevel); });
+    if (!arr.length) return empty;
+    const rows = arr.map(({m,f})=>`<tr class="clickable" data-act="detail" data-id="${esc(f.id)}"><td>${esc(m.name)}</td><td>${esc(f.id)}</td><td>${esc(EDU_LABEL[eduKey(m)]||m.education||'')}</td><td>${ageFromDob(m.dob)===null?'':ageFromDob(m.dob)}</td></tr>`);
+    return `<div class="grp-more"><div class="gm-head">Padhne wale bachche / students</div><div class="table-wrap">${rowsHTML(['Name','Family','Education','Age'], rows)}</div></div>`;
+  }
+  if (no === 4){
+    const arr = allMembers().filter(({m})=>String(occName(m)||'').trim());
+    if (!arr.length) return empty;
+    const rows = arr.map(({m,f})=>`<tr class="clickable" data-act="detail" data-id="${esc(f.id)}"><td>${esc(m.name)}</td><td>${esc(f.id)}</td><td>${esc(m.gender||'')}</td><td>${esc(occName(m))}</td></tr>`);
+    return `<div class="grp-more"><div class="gm-head">Kaam karne wale log</div><div class="table-wrap">${rowsHTML(['Name','Family','Gender','Occupation'], rows)}</div></div>`;
+  }
+  if (no === 5){
+    const arr = allMembers().filter(({m})=>m.religious && m.religious!=='none');
+    if (!arr.length) return empty;
+    const rows = arr.map(({m,f})=>`<tr class="clickable" data-act="detail" data-id="${esc(f.id)}"><td>${esc(m.name)}</td><td>${esc(f.id)}</td><td>${esc(DEENI_LABEL[m.religious]||'')}</td></tr>`);
+    return `<div class="grp-more"><div class="gm-head">Aalim / Hafiz</div><div class="table-wrap">${rowsHTML(['Name','Family','Deeni taleem'], rows)}</div></div>`;
+  }
+  if (no === 6){
+    const arr = allMembers().filter(({m})=>memberSchemes(m).length || DOC_KEYS_HAS(m));
+    if (!arr.length) return empty;
+    const rows = arr.map(({m,f})=>{
+      const docs = BASIC_DOCS.filter(([k])=>m.docs && m.docs[k]==='yes').map(([,l])=>l).join(', ');
+      return `<tr class="clickable" data-act="detail" data-id="${esc(f.id)}"><td>${esc(m.name)}</td><td>${esc(f.id)}</td><td>${esc(memberSchemes(m).join(', ')||'—')}</td><td class="small">${esc(docs||'—')}</td></tr>`;
+    });
+    return `<div class="grp-more"><div class="gm-head">Scheme aur documents wale members</div><div class="table-wrap">${rowsHTML(['Name','Family','Schemes','Documents'], rows)}</div></div>`;
+  }
+  return '';
+}
+function DOC_KEYS_HAS(m){ return BASIC_DOCS.some(([k])=>m.docs && m.docs[k]==='yes'); }
+
 function grpHead(no, title, sub){
-  return `<header class="grp-head"><span class="grp-no">${no}</span><div><h2>${esc(title)}</h2><p>${esc(sub)}</p></div></header>`;
+  return `<header class="grp-head" data-act="grp-toggle" data-g="${no}" title="Click to open full details"><span class="grp-caret">▾</span><span class="grp-no">${no}</span><div><h2>${esc(title)}</h2><p>${esc(sub)}</p></div><span class="grp-caret">▾</span></header>`;
 }
 
 function viewDashboard(){
@@ -919,7 +980,7 @@ function viewDashboard(){
     ${empty}
 
     <div class="grp-grid">
-      <section class="grp wide">
+      <section class="grp wide" data-g="1" data-act="grp-toggle">
         ${grpHead(1,'Location & Housing','Ghar aur raste ki details')}
         <div class="metrics cols2">
           ${metric('Total streets', s.streets.length)}
@@ -932,7 +993,7 @@ function viewDashboard(){
         ${streetRows}
       </section>
 
-      <section class="grp wide">
+      <section class="grp wide" data-g="2" data-act="grp-toggle">
         ${grpHead(2,'Family & Demographics','Ghar walon ki details')}
         <div class="metrics cols2">
           ${metric('Total families', s.families)}
@@ -957,7 +1018,7 @@ function viewDashboard(){
         </div>
       </section>
 
-      <section class="grp">
+      <section class="grp" data-g="3" data-act="grp-toggle">
         ${grpHead(3,'Education','Total child / students')}
         <div class="metrics">
           ${metric('Total students', s.students.total, {hi:true})}
@@ -968,7 +1029,7 @@ function viewDashboard(){
         </div>
       </section>
 
-      <section class="grp wide">
+      <section class="grp wide" data-g="4" data-act="grp-toggle">
         ${grpHead(4,'Occupations','Kaam ke hisaab se ginti — plumber, electrician, painter, helper…')}
         <div class="metrics cols2">
           ${metric('Members with a job', s.employed, {hi:true})}
@@ -980,7 +1041,7 @@ function viewDashboard(){
           </tbody></table></div>` : `<p class="muted small" style="margin-top:12px">Abhi kisi ka occupation nahi bhara — member form me "Kaam / occupation" likho (jaise Plumber).</p>`}
       </section>
 
-      <section class="grp wide">
+      <section class="grp wide" data-g="5" data-act="grp-toggle">
         ${grpHead(5,'Religious Education','Deeni taleem — Aalim & Hafiz')}
         <div class="metrics cols2">
           ${metric('Men Aalim', s.deeni.menAalim)}
@@ -993,7 +1054,7 @@ function viewDashboard(){
         </div>
       </section>
 
-      <section class="grp wide">
+      <section class="grp wide" data-g="6" data-act="grp-toggle">
         ${grpHead(6,'Documents & Govt. Schemes','Kitne logon ke paas documents hain · kitne ne scheme li')}
         <div class="metrics cols2">
           ${metric('Members with all basic documents', s.membersWithAllDocs)}
@@ -1461,6 +1522,13 @@ document.addEventListener('click', (e)=>{
       pending = { kind:'login', email };
       renderLinkSent();
     })();
+    return;
+  }
+  if (act==='grp-toggle'){
+    const sec = el.closest('.grp'); if (!sec) return;
+    if (!sec.dataset.filled){ sec.insertAdjacentHTML('beforeend', groupDetail(Number(sec.dataset.g)||0)); sec.dataset.filled='1'; }
+    sec.classList.toggle('open');
+    if (sec.classList.contains('open')) sec.scrollIntoView({ behavior:'smooth', block:'start' });
     return;
   }
   if (act==='photo'){ const src = el.dataset.src; if (src) openPhoto(src); return; }

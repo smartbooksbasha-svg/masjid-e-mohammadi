@@ -403,3 +403,17 @@ td .mono{font-family:var(--font-display);font-weight:600;color:var(--accent)}
 .lb img{max-width:100%;max-height:100%;border-radius:16px;box-shadow:0 24px 60px rgba(0,0,0,.5)}
 .lb-x{position:absolute;top:14px;right:16px;width:40px;height:40px;border-radius:999px;border:1px solid rgba(255,255,255,.25);
   background:rgba(0,0,0,.4);color:#fff;font-size:1.4rem;line-height:1;cursor:pointer}
+
+
+/* ---------- dashboard category expand ---------- */
+.grp-head{cursor:pointer;position:relative;padding-right:34px}
+.grp-caret{position:absolute;right:14px;top:50%;transform:translateY(-50%);color:var(--muted);
+  font-size:.9rem;transition:transform .25s ease}
+.grp.open .grp-caret{transform:translateY(-50%) rotate(180deg);color:var(--accent)}
+.grp.open{box-shadow:0 18px 40px -28px rgba(0,0,0,.5)}
+.grp-more{margin-top:14px;display:none}
+.grp.open .grp-more{display:block;animation:gmIn .28s ease both}
+@keyframes gmIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.gm-head{font-size:.78rem;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);
+  font-weight:700;margin:0 0 8px}
+.gm-empty{padding:14px;border:1px dashed var(--line);border-radius:12px;color:var(--muted);font-size:.85rem}
