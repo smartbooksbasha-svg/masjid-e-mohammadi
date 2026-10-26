@@ -349,7 +349,13 @@ function renderRegister(){
       const c = await CLOUD.get();
       if (!c){ alertBox.innerHTML='<div class="alert err">Cloud connect nahi hua.</div>'; return; }
       const { error } = await c.auth.signUp({ email, password: pass, options:{ data:{ name, phone }, emailRedirectTo: location.origin + location.pathname } });
-      if (error){ alertBox.innerHTML='<div class="alert err">'+esc(error.message)+'</div>'; return; }
+      if (error){
+        const m = String(error.message||'');
+        if (/already registered|already exists/i.test(m))
+          alertBox.innerHTML='<div class="alert err">Ye email pehle se registered hai. <b>Forgot password / ID?</b> par jao → email par link aayega → click karke password set karo, phir login.</div>';
+        else alertBox.innerHTML='<div class="alert err">'+esc(m)+'</div>';
+        return;
+      }
       pending = { kind:'register', email, name, phone };
       renderLinkSent(); return;
     }
