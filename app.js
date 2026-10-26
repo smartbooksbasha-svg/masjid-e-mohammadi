@@ -650,13 +650,19 @@ function enterApp(){
   }
 }
 
+function openPhoto(src){
+  const d = document.createElement('div');
+  d.className = 'lb';
+  d.innerHTML = `<img src="${esc(src)}" alt="Masjid photo" /><button class="lb-x" type="button" aria-label="Close">×</button>`;
+  d.addEventListener('click', ()=>d.remove());
+  document.body.appendChild(d);
+}
+
 function navItems(){
-  const items = [ ['dashboard','Dashboard',ICON.dash], ['families','Households',ICON.list], ['masjid','Masjid Profile',ICON.mosque] ];
-  if (isAdmin()){
-    items.splice(2,0,['add','Add Household',ICON.plus]);
-    items.push(['users','Admins',ICON.users], ['settings','Settings',ICON.gear]);
-  }
-  return items;
+  if (!isAdmin()) return [ ['dashboard','Dashboard',ICON.dash] ];
+  return [ ['dashboard','Dashboard',ICON.dash], ['families','Households',ICON.list],
+           ['add','Add Household',ICON.plus], ['masjid','Masjid Profile',ICON.mosque],
+           ['users','Admins',ICON.users], ['settings','Settings',ICON.gear] ];
 }
 
 function renderShell(){
@@ -841,6 +847,31 @@ function grpHead(no, title, sub){
 function viewDashboard(){
   const s = computeStats();
   const u = currentUser();
+  const mj = masjidData();
+  const photos = Array.isArray(mj.photos) ? mj.photos.slice(0,6) : [];
+  const heroBlock = `
+    <section class="masjid-hero">
+      <div class="mh-grid">
+        <div class="mh-photos">
+          ${photos.length ? photos.map((p,i)=>`<button class="mh-photo ${i===0?'lead':''}" type="button" data-act="photo" data-src="${esc(p.src||p)}"><img src="${esc(p.src||p)}" alt="Masjid photo ${i+1}" loading="lazy" /></button>`).join('')
+            : `<div class="mh-empty"><span class="mh-crescent">☾</span><b>Masjid photos</b><span>Admin login karke Masjid Profile me photos add hongi.</span></div>`}
+        </div>
+        <div class="mh-text">
+          <div class="mh-kicker">${esc(CFG.ORG_SUB||'Khidmath Committee')}</div>
+          <h2>${esc(mj.name || CFG.ORG_NAME || 'Masjid e Mohammadi')}</h2>
+          <p class="mh-desc">${esc(mj.note || 'Mohalla ka survey — har ghar, har fard, taleem, kaam aur deeni khidmat ka hisaab ek jagah.')}</p>
+          <div class="mh-meta">
+            ${mj.established?`<span><b>Qayam</b> ${esc(mj.established)}</span>`:''}
+            ${mj.address?`<span><b>Pata</b> ${esc(mj.address)}</span>`:''}
+            ${mj.imam?`<span><b>Imam</b> ${esc(mj.imam)}</span>`:''}
+            ${mj.area?`<span><b>Raqba</b> ${esc(mj.area)}</span>`:''}
+            ${mj.capacity?`<span><b>Capacity</b> ${esc(mj.capacity)}</span>`:''}
+          </div>
+          ${isAdmin()?`<button class="btn ghost sm" type="button" data-act="goto" data-view="masjid">Masjid profile edit karo</button>`
+                    :`<button class="btn sm" type="button" data-act="open-auth">Admin login</button>`}
+        </div>
+      </div>
+    </section>`;
   const kpis = [
     [icSmall('<path d="M4 20V8l8-4 8 4v12"/><path d="M9 20v-6h6v6"/>'), s.streets.length, 'Total streets'],
     [icSmall('<path d="M3 9.5 12 3l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/>'), s.houses, 'Total houses'],
@@ -860,7 +891,8 @@ function viewDashboard(){
      ${isAdmin() ? '<button class="btn" data-act="goto" data-view="add">Add first household</button>' : ''}
      <button class="btn ghost" data-act="load-sample">Load sample data</button></div></div>`;
 
-  return `
+  return `${heroBlock}
+
     <div class="page-head"><div><h1>Survey Dashboard</h1><p>Mohalla ke ghar, raste aur logon ka poora hisaab — live totals.</p></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         ${isAdmin()
@@ -1401,6 +1433,7 @@ document.addEventListener('click', (e)=>{
   if (act==='toggle-theme') { toggleTheme(); const b=$('#themeBtn2'); if(b) b.textContent = document.documentElement.getAttribute('data-theme')==='night'?'☾ Night':'☀ Day'; return; }
   if (act==='goto'){ if (el.dataset.view==='add'){ state.draft=blankDraft(); go(el.dataset.view); } else go(el.dataset.view, el.dataset.street||null); return; }
   if (act==='auth-check'){ cloudLinkCheck(); return; }
+  if (act==='photo'){ const src = el.dataset.src; if (src) openPhoto(src); return; }
   if (act==='open-auth'){ openAuth('login'); return; }
   if (act==='close-auth'){ closeAuth(); return; }
   if (act==='auth-tab'){ pending=null; renderAuth(el.dataset.tab||'login'); return; }
