@@ -1,4 +1,4 @@
-# PROJECT PLAN — Masjid - E- Mohammadiy · Khidmath Committee Survey
+# PROJECT PLAN — Masjid e Mohammadi · Khidmath Committee Survey
 
 **What:** Mohalla family-records website — har ghar/person ka data safely
 save, dashboard counts, Family ID + QR, 3-role login, PDF/Excel export.

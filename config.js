@@ -1,5 +1,5 @@
 /* ============================================================
-   App config — Masjid - E- Mohammadiy · Khidmath Committee Survey
+   App config — Masjid e Mohammadi · Khidmath Committee Survey
    ------------------------------------------------------------
    The app runs fully on this device right now (localStorage).
    To turn on REAL cloud storage (multi-device, shared data),
@@ -15,7 +15,7 @@ window.APP_CONFIG = {
   SUPABASE_URL: "https://yipxzbgqtyvfllrpqehs.supabase.co", // Shan ka project (2026-10-26)
   SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlpcHh6YmdxdHl2ZmxscnBxZWhzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMwMjczNjcsImV4cCI6MjEwODYwMzM2N30.7nopVZwAOvi6Wu3g3nM1Chxfwt5AHoaVlgFlgNa9qXM",  // e.g. "eyJhbGciOi..."
   ADMIN_INVITE_CODE: "MEMC-2026",  // naye admin register karne ke liye code (badal lo)
-  ORG_NAME: "Masjid - E- Mohammadiy",
+  ORG_NAME: "Masjid e Mohammadi",
   ORG_SUB: "Khidmath Committee",
   FAMILY_ID_PREFIX: "MEMC"
 };

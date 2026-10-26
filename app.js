@@ -1,5 +1,5 @@
 /* ============================================================
-   Masjid - E- Mohammadiy · Khidmath Committee — Mohalla Survey
+   Masjid e Mohammadi · Khidmath Committee — Mohalla Survey
    Application logic (vanilla JS, local-first + optional Supabase)
    ============================================================ */
 'use strict';
@@ -32,12 +32,14 @@ const HOUSE_TYPES = [
 /* basic government documents — counted per member */
 const BASIC_DOCS = [
   ['aadhaar','Aadhaar'],
-  ['ration','Ration card'],
+  ['pan','PAN card'],
+  ['passbook','Bank passbook'],
   ['voter','Voter ID'],
-  ['bpl','BPL / Ayushman'],
-  ['bank','Bank passbook'],
+  ['birth','Birth certificate'],
   ['passport','Passport'],
-  ['kapidu','TN Kapidu Thittam card']
+  ['tc','School TC'],
+  ['smartcard','Smart card'],
+  ['kapidu','Kapidu Thittam card'],
 ];
 const EDU = [
   ['primary','Primary (1-8)'],
@@ -219,7 +221,7 @@ function isEmail(v){ return /^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(String(v||'').t
 
 function authCard(inner){
   return `<div class="auth-wrap"><div class="auth-card">
-    <div class="auth-brand"><span class="crest">M</span><div><div class="t">${esc(CFG.ORG_NAME||'Masjid - E- Mohammadiy')}</div><div class="s">${esc(CFG.ORG_SUB||'Khidmath Committee')}</div></div></div>
+    <div class="auth-brand"><span class="crest">M</span><div><div class="t">${esc(CFG.ORG_NAME||'Masjid e Mohammadi')}</div><div class="s">${esc(CFG.ORG_SUB||'Khidmath Committee')}</div></div></div>
     ${inner}
     <button class="btn ghost block" type="button" data-act="close-auth" style="margin-top:10px">← Public dashboard</button>
   </div></div>`;
@@ -1275,7 +1277,7 @@ function viewUsers(){
    ============================================================ */
 /* ============================== MASJID PROFILE ============================== */
 const MASJID_FIELDS = [
-  ['name','Masjid ka naam','e.g. Masjid - E- Mohammadiy'],
+  ['name','Masjid ka naam','e.g. Masjid e Mohammadi'],
   ['established','Qayam saal','e.g. 1985'],
   ['address','Pura pata','Mohalla, shehar, pincode'],
   ['phone','Rabta number','10-digit mobile'],
@@ -1725,7 +1727,7 @@ function mjHead(){
 function printFamilies(fams, title){
   if (!fams.length){ toast('Nothing to print','err'); return; }
   const s = computeStats();
-  const head = `<h1>${esc(CFG.ORG_NAME||'Masjid - E- Mohammadiy')} — ${esc(title)}</h1>
+  const head = `<h1>${esc(CFG.ORG_NAME||'Masjid e Mohammadi')} — ${esc(title)}</h1>
     <div class="pmeta">${esc(CFG.ORG_SUB||'Khidmath Committee')} · printed ${new Date().toLocaleDateString('en-GB')}</div>
     ${title==='All Households'?`
     <div class="psum">

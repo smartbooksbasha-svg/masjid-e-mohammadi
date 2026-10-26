@@ -1,5 +1,5 @@
 -- ============================================================
---  Masjid - E- Mohammadiy · Khidmath Committee — Mohalla Survey
+--  Masjid e Mohammadi · Khidmath Committee — Mohalla Survey
 --  Supabase schema v3  ·  SINGLE ADMIN + PUBLIC READ
 -- ------------------------------------------------------------
 --  HOW TO USE

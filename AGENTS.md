@@ -1,7 +1,7 @@
-# AGENTS.md — Masjid - E- Mohammadiy · Khidmath Committee Survey
+# AGENTS.md — Masjid e Mohammadi · Khidmath Committee Survey
 
 ## What this is
-Mohalla **survey / records web app** for Masjid - E- Mohammadiy (Khidmath
+Mohalla **survey / records web app** for Masjid e Mohammadi (Khidmath
 Committee). One household record = section 1 (street, house no, house type)
 + members (section 2 demographics, 3 education, 4 profession, 5 deeni
 taleem). Dashboard totals follow Shan's 5-section survey plan exactly.
