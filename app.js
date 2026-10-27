@@ -1511,7 +1511,9 @@ function viewDashboard(){
     <div class="page-head"><div><h1>Survey Dashboard</h1><p>Complete survey of households, streets and members — live totals.</p></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         ${isAdmin()
-          ? `<button class="btn ghost sm" data-act="export-excel">${ICON.dl} Excel</button>
+          ? `<button class="btn sm" data-act="goto" data-view="add">${ICON.plus} Add Household</button>
+             <button class="btn ghost sm" data-act="goto" data-view="find">${ICON.search} Find family</button>
+             <button class="btn ghost sm" data-act="export-excel">${ICON.dl} Excel</button>
              <button class="btn ghost sm" data-act="print-all">${ICON.print} PDF / Print</button>`
           : `<span class="badge gray">Public view · read only</span>`}
       </div></div>
