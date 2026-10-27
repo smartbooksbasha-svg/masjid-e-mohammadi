@@ -176,3 +176,12 @@ Open: wire Supabase keys; real OTP SMS later.
   `masjid-survey-backup-<date>-<HHMM>.json`; last upload meta `memc_drive`
   (token sirf memory me, refresh nahi — 1 ghante baad silent re-auth try hota hai).
 - Drive OFF hai jab tak Client ID khaali hai — UI setup guide dikhata hai, crash nahi.
+
+## Drive enabled (2026-10-27, v21)
+- `config.js → GOOGLE_CLIENT_ID` = committee's OAuth **Web application** client
+  (project no. `206058317618`). Public by design (not a secret).
+- Google Cloud side MUST have: Authorized JavaScript origin
+  `https://smartbooksbasha-svg.github.io` + OAuth consent screen test user
+  (Shan ka Gmail). Warna connect par `origin_mismatch` / `access_denied`.
+- sw cache `memc-app-v21`. Smoke 134/134 (harness GOOGLE_CLIENT_ID blank karke
+  offline path + runtime-enabled path dono test karta hai).

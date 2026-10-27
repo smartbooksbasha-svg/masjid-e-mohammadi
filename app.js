@@ -155,7 +155,23 @@ const DB = {
 };
 
 function getSession(){ try{ return JSON.parse(localStorage.getItem(LS.session)||'null'); }catch(e){ return null; } }
-function setSession(s){ localStorage.setItem(LS.session, JSON.stringify(s)); }
+function setSession(s){
+  localStorage.setItem(LS.session, JSON.stringify(s));
+  if (!s || s.kind !== 'admin' || !s.email) return;
+  const e = String(s.email).toLowerCase();
+  /* pehla login = owner (agar owner set nahi hai) */
+  try { if (!localStorage.getItem('memc_owner')) setOwnerEmail(e); } catch(x){}
+  /* temporary password sirf pehli baar ke liye — login hote hi hata do */
+  try {
+    const admins = DB.admins(); let ch = false;
+    admins.forEach(a=>{
+      if (String(a.email||'').toLowerCase() === e && a.tempPass){
+        delete a.tempPass; a.firstLoginAt = a.firstLoginAt || Date.now(); ch = true;
+      }
+    });
+    if (ch) DB.setAdmins(admins);
+  } catch(x){}
+}
 function clearSession(){ localStorage.removeItem(LS.session); }
 
 /* ---------- optional cloud (Supabase) ---------- */
@@ -177,9 +193,10 @@ function currentUser(){
   const s = getSession();
   if (!s || s.kind !== 'admin' || !s.email) return null;
   const a = DB.admins().find(x=>String(x.email).toLowerCase()===String(s.email).toLowerCase());
-  return a ? { id:a.email, email:a.email, name:a.name||a.email, role:'admin' } : null;
+  if (!a || adminStatus(a) !== 'active') return null;
+  return { id:a.email, email:a.email, name:a.name||a.email, role:'admin', userId:a.userId||'', owner:String(a.email).toLowerCase()===ownerEmail() };
 }
-function isAdmin(){ return !!currentUser(); }
+function isAdmin(){ migrateAdmins(); return !!currentUser(); }
 
 /* ---------------- theme ---------------- */
 function applyTheme(t){ document.documentElement.setAttribute('data-theme', t); localStorage.setItem(LS.theme, t);
@@ -216,6 +233,45 @@ function adminByEmail(email){
   const e = String(email||'').trim().toLowerCase();
   return DB.admins().find(a=>String(a.email||'').toLowerCase()===e) || null;
 }
+/* ---------- admin accounts: owner approval + auto user ID ---------- */
+function adminStatus(a){ return (a && a.status) || 'active'; }
+function activeAdmins(){ return DB.admins().filter(a=>adminStatus(a)==='active'); }
+function pendingAdmins(){ return DB.admins().filter(a=>adminStatus(a)==='pending'); }
+function ownerEmail(){
+  let o = ''; try { o = String(localStorage.getItem('memc_owner')||''); } catch(e){}
+  if (!o){ const a = DB.admins()[0]; o = a ? String(a.email||'') : ''; }
+  return o.toLowerCase();
+}
+function setOwnerEmail(e){ try { localStorage.setItem('memc_owner', String(e||'').toLowerCase()); } catch(x){} }
+function isOwner(){
+  const u = currentUser(); if (!u) return false;
+  return String(u.email).toLowerCase() === ownerEmail();
+}
+function genUserId(){
+  let n = 1;
+  DB.admins().forEach(a=>{ const m = String(a.userId||'').match(/(\d+)$/); if (m) n = Math.max(n, Number(m[1]) + 1); });
+  return 'ADM-' + new Date().getFullYear() + '-' + pad(n, 4);
+}
+function genTempPass(){
+  const U='ABCDEFGHJKLMNPQRSTUVWXYZ', L='abcdefghijkmnpqrstuvwxyz', D='23456789';
+  const pick=(s,n)=>Array.from({length:n},()=>s[Math.floor(Math.random()*s.length)]).join('');
+  return pick(U,2) + pick(L,4) + pick(D,3);
+}
+function findAdminByIdentifier(v){
+  const s = String(v||'').trim(); if (!s) return null;
+  if (s.includes('@')) return adminByEmail(s);
+  return DB.admins().find(a=>String(a.userId||'').toUpperCase() === s.toUpperCase()) || null;
+}
+function credsMailto(rec){
+  const owner = ownerEmail() || 'owner';
+  const sub = 'New admin request — ' + (rec.name||rec.email);
+  const body = 'Masjid e Mohammadi · Mohalla Survey\n\n'
+    + 'Naya admin request aaya hai. Approve karne ke baad hi usko access milega.\n\n'
+    + 'Naam: ' + (rec.name||'—') + '\nEmail: ' + rec.email + '\nMobile: ' + (rec.phone||'—') + '\n'
+    + 'User ID: ' + rec.userId + '\nTemporary password: ' + (rec.tempPass||'(approve ke baad)') + '\n\n'
+    + 'App → Admins → Pending requests → Approve.\n';
+  return 'mailto:' + encodeURIComponent(owner) + '?subject=' + encodeURIComponent(sub) + '&body=' + encodeURIComponent(body);
+}
 function mailMode(){ return CLOUD.enabled() ? 'cloud' : 'demo'; }
 function newCode(){ return String(100000 + Math.floor(Math.random()*900000)); }
 function isEmail(v){ return /^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(String(v||'').trim()); }
@@ -230,7 +286,7 @@ function authCard(inner){
 function authTabs(active){
   return `<div class="role-tabs" id="authTabs">
     <button data-tab="login" class="${active==='login'?'active':''}">Login</button>
-    <button data-tab="register" class="${active==='register'?'active':''}">Register</button>
+    <button data-tab="register" class="${active==='register'?'active':''}">${DB.admins().length ? 'Request access' : 'Register'}</button>
     <button data-tab="forgot" class="${active==='forgot'?'active':''}">Forgot</button>
   </div>`;
 }
@@ -261,7 +317,8 @@ function renderLogin(){
     <p class="lead">Sirf committee admin ke liye. Baaki sab public dashboard dekh sakte hain.</p>
     ${authTabs('login')}
     <form id="loginForm">
-      <div class="field"><label>Email ID</label><input class="inp" name="email" type="email" required autocomplete="username" placeholder="admin@example.com" /></div>
+      <div class="field"><label>User ID / Email</label><input class="inp" name="email" type="text" required autocomplete="username" placeholder="ADM-2026-0001 ya admin@example.com" />
+        <span class="hint">Owner ne jo User ID di hai (ya registered email) — dono chalega</span></div>
       <div class="field"><label>Password</label><input class="inp" name="pass" type="password" required autocomplete="current-password" /></div>
       <div class="field"><label>Captcha — answer the sum</label>
         <div class="captcha-box"><div class="captcha-q" id="captchaQ"></div><button type="button" class="icon-btn" id="captchaReload" aria-label="New captcha">↻</button></div>
@@ -272,7 +329,7 @@ function renderLogin(){
       <button class="btn ghost block" type="button" data-act="magic-login" style="margin-top:8px">Email link se login (password ke bina)</button>
       <div style="display:flex;gap:8px;justify-content:space-between;margin-top:12px;flex-wrap:wrap">
         <button class="linklike" type="button" data-act="auth-tab" data-tab="forgot">Forgot password / ID?</button>
-        <button class="linklike" type="button" data-act="auth-tab" data-tab="register">Create admin</button>
+        <button class="linklike" type="button" data-act="auth-tab" data-tab="register">${DB.admins().length ? 'Request admin access' : 'Create first admin'}</button>
       </div>
     </form>`);
 
@@ -284,9 +341,14 @@ function renderLogin(){
   $('#loginForm').addEventListener('submit', async (e)=>{
     e.preventDefault();
     const E = e.target.elements, alertBox = $('#loginAlert');
-    const email = E.email.value.trim().toLowerCase(), pass = E.pass.value;
+    const ident = E.email.value.trim(), pass = E.pass.value;
     if (parseInt(E.captcha.value,10) !== capA+capB){ alertBox.innerHTML='<div class="alert err">Captcha answer is wrong.</div>'; newCaptcha(); E.captcha.value=''; return; }
-    if (!isEmail(email)){ alertBox.innerHTML='<div class="alert err">Email ID theek nahi lag rahi.</div>'; return; }
+    const found = findAdminByIdentifier(ident);
+    if (!found && !isEmail(ident)){ alertBox.innerHTML='<div class="alert err">User ID / email galat lag raha hai.</div>'; return; }
+    if (found && adminStatus(found) === 'pending'){
+      alertBox.innerHTML='<div class="alert err">Ye account abhi <b>approval pending</b> hai. Owner approve karega tabhi login hoga — thodi der baad try karo.</div>'; return;
+    }
+    const email = found ? String(found.email).toLowerCase() : ident.toLowerCase();
 
     if (mailMode() === 'cloud'){
       const c = await CLOUD.get();
@@ -312,9 +374,55 @@ function renderLogin(){
   });
 }
 
+/* ---------------- public "request access" (self-register band) ---------------- */
+function renderRequestAccess(){
+  const owner = ownerEmail();
+  $('#authScreen').innerHTML = authCard(`
+    <h1>Request admin access</h1>
+    <p class="lead">Public se koi khud admin nahi ban sakta. Request owner ko jaati hai — approve hone par login ID milti hai.</p>
+    ${authTabs('register')}
+    <form id="reqForm">
+      <div class="field"><label>Full name</label><input class="inp" name="name" required placeholder="e.g. Abdul Rahman" /></div>
+      <div class="grid g2">
+        <div class="field"><label>Email ID</label><input class="inp" name="email" type="email" required placeholder="name@example.com" /></div>
+        <div class="field"><label>Mobile</label><input class="inp" name="phone" inputmode="numeric" /></div>
+      </div>
+      <div id="reqAlert"></div>
+      <div class="alert info small">Login ID aur password app khud banayegi. Approve hone ke baad owner tumhe bhej dega.</div>
+      <button class="btn block" type="submit">Request bhejo</button>
+    </form>`);
+
+  $('#reqForm').addEventListener('submit', async (e)=>{
+    e.preventDefault();
+    const E = e.target.elements, alertBox = $('#reqAlert');
+    const out = await createAdminRequest(E.name.value, E.email.value, E.phone.value, 'public-request');
+    if (out.error){ alertBox.innerHTML='<div class="alert err">'+esc(out.error)+'</div>'; return; }
+    renderRequestSent(out.rec);
+  });
+}
+
+function renderRequestSent(rec){
+  const mail = credsMailto(rec);
+  $('#authScreen').innerHTML = authCard(`
+    <h1>Request bhej diya</h1>
+    <p class="lead"><b>${esc(rec.name)}</b> (${esc(rec.email)}) ki request owner ke paas hai${ownerEmail()?` — <b>${esc(ownerEmail())}</b>`:''}.</p>
+    <div class="alert info">Approve hone ke baad owner tumhe <b>User ID</b> aur <b>temporary password</b> bhejega. Tabhi login hoga — password khud set karne ki zaroorat nahi.</div>
+    <div class="kv" style="margin-top:10px">
+      <div class="row"><span>User ID</span><span class="mono">${esc(rec.userId)}</span></div>
+      <div class="row"><span>Status</span><span class="badge gray">Approval pending</span></div>
+    </div>
+    <p class="muted small" style="margin-top:10px">Owner ko request email/WhatsApp par bhejni hai? Ye button dabao.</p>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <a class="btn" href="${esc(mail)}">✉ Owner ko email bhejo</a>
+      <a class="btn ghost" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent('Masjid Survey admin request\nNaam: '+rec.name+'\nEmail: '+rec.email+'\nUser ID: '+rec.userId)}">WhatsApp</a>
+      <button class="btn ghost" data-act="auth-cancel">Login par jao</button>
+    </div>`);
+}
+
 /* ---------------- register ---------------- */
 function renderRegister(){
   const first = DB.admins().length === 0;
+  if (!first) return renderRequestAccess();
   $('#authScreen').innerHTML = authCard(`
     <h1>${first?'Create the first admin':'Create another admin'}</h1>
     <p class="lead">${first ? 'Pehla admin account banao — email par 6-digit code aayega.' : 'Naya admin banane ke liye committee ka invite code chahiye.'}</p>
@@ -344,10 +452,6 @@ function renderRegister(){
     if (adminByEmail(email)){ alertBox.innerHTML='<div class="alert err">Ye email pehle se admin hai — login karo.</div>'; return; }
     if (pass !== pass2){ alertBox.innerHTML='<div class="alert err">Passwords match nahi kar rahe.</div>'; return; }
     if (pass.length < 6){ alertBox.innerHTML='<div class="alert err">Password kam se kam 6 characters ka ho.</div>'; return; }
-    if (DB.admins().length){
-      const code = (CFG.ADMIN_INVITE_CODE||'').trim().toUpperCase();
-      if (!code || E.invite.value.trim().toUpperCase() !== code){ alertBox.innerHTML='<div class="alert err">Invite code galat hai.</div>'; return; }
-    }
 
     if (mailMode() === 'cloud'){
       const c = await CLOUD.get();
@@ -370,6 +474,15 @@ function renderRegister(){
   });
 }
 
+
+/* app_users me approved row hai ya nahi (owner ne add kiya ho) */
+async function cloudIsListed(email){
+  try {
+    const c = await CLOUD.get(); if (!c) return false;
+    const { data } = await c.from('app_users').select('id').eq('id', String(email).toLowerCase()).limit(1);
+    return !!(data && data.length);
+  } catch(e){ return false; }
+}
 
 /* Supabase side: logged-in auth user ko app_users (admin) me claim karo */
 async function cloudClaimAdmin(email, name, phone){
@@ -1466,35 +1579,71 @@ function viewFamilyDetail(id){
 function viewUsers(){
   if (!isAdmin()) return `<div class="empty"><h3>Admins only</h3><p>Ye page sirf admin ke liye hai.</p></div>`;
   const me = currentUser();
+  const owner = ownerEmail();
   const admins = DB.admins();
+  const pend = admins.filter(a=>adminStatus(a)==='pending');
+  const active = admins.filter(a=>adminStatus(a)==='active');
+  const creds = state.newCreds;
   return `
-    <div class="page-head"><div><h1>Admins</h1><p>Committee admin accounts — sab ke paas poora add/edit access hota hai.</p></div></div>
+    <div class="page-head"><div><h1>Admins</h1><p>Naya admin pehle <b>request</b> banta hai — owner approve karega tabhi login chalega.</p></div></div>
 
-    <div class="card">
-      <div class="sec-title" style="margin-top:0">Invite code for new admins</div>
-      <div class="kv"><div class="row"><span>Invite code</span><span class="mono">${esc(CFG.ADMIN_INVITE_CODE||'—')}</span></div></div>
-      <p class="muted small" style="margin-top:8px">Naya admin <b>Register</b> page par ye code daal ke apna account bana sakta hai. Code badalna ho to <span class="mono">config.js</span> → <span class="mono">ADMIN_INVITE_CODE</span>.</p>
-    </div>
+    ${creds ? `<div class="card" style="border-color:var(--accent)">
+      <div class="card-h"><div><h3>Naye admin ka login — owner ko bhejo</h3>
+        <div class="hint">App ne khud banaya hai. Ye details sirf naye admin ko do, kisi aur ko nahi.</div></div></div>
+      <div class="kv" style="margin-top:10px">
+        <div class="row"><span>Naam</span><span>${esc(creds.name)}</span></div>
+        <div class="row"><span>User ID (login)</span><span class="mono"><b>${esc(creds.userId)}</b></span></div>
+        <div class="row"><span>Temporary password</span><span class="mono"><b>${esc(creds.tempPass)}</b></span></div>
+        <div class="row"><span>Email</span><span class="mono">${esc(creds.email)}</span></div>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px">
+        <a class="btn sm" href="${esc(creds.mail)}">✉ Email owner ko bhejo</a>
+        <a class="btn ghost sm" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent('Masjid Survey admin login\nUser ID: '+creds.userId+'\nPassword: '+creds.tempPass)}">WhatsApp</a>
+        <button class="btn ghost sm" data-act="copy-creds">Copy karo</button>
+        <button class="btn ghost sm" data-act="close-creds">Band karo</button>
+      </div>
+      <p class="muted small" style="margin-top:8px">Approve karne ke baad hi ye login kaam karega — pehle "Pending requests" me Approve dabao.</p>
+    </div>` : ''}
 
     <div class="card" style="margin-top:16px">
-      <div class="sec-title" style="margin-top:0">Add admin directly</div>
-      <form id="addAdminForm" class="grid g3">
-        <div class="field"><label>Name</label><input class="inp" name="name" required /></div>
-        <div class="field"><label>Email ID</label><input class="inp" name="email" type="email" required /></div>
-        <div class="field"><label>Mobile</label><input class="inp" name="phone" inputmode="numeric" /></div>
-        <div class="field"><label>Password</label><input class="inp" name="pass" type="password" required minlength="6" /></div>
-        <div class="field" style="justify-content:flex-end"><button class="btn" type="submit">Add admin</button></div>
-      </form>
+      <div class="card-h"><div><h3>Pending requests</h3><div class="hint">Owner approve karega tabhi access milega</div></div>
+        <span class="badge ${pend.length?'':'gray'}">${pend.length}</span></div>
+      ${pend.length ? `<div class="table-wrap" style="margin-top:12px"><table><thead><tr><th>User ID</th><th>Name</th><th>Email</th><th>Mobile</th><th>Requested</th><th></th></tr></thead><tbody>
+        ${pend.map(a=>`<tr>
+          <td class="mono"><b>${esc(a.userId||'—')}</b></td><td>${esc(a.name||'—')}</td>
+          <td class="mono">${esc(a.email)}</td><td>${esc(a.phone||'—')}</td>
+          <td>${fmtDate(a.createdAt ? new Date(a.createdAt).toISOString() : '')}</td>
+          <td>${isOwner()
+            ? `<button class="btn sm" data-act="approve-admin" data-id="${esc(a.userId||a.email)}">Approve</button>
+               <button class="btn ghost sm" data-act="reject-admin" data-id="${esc(a.userId||a.email)}" style="color:var(--danger)">Reject</button>`
+            : '<span class="badge gray">Owner approval baaki</span>'}</td>
+        </tr>`).join('')}
+      </tbody></table></div>
+      ${pend.some(a=>a.tempPass)?`<p class="muted small" style="margin-top:8px">Temporary password: ${esc(pend.filter(a=>a.tempPass).map(a=>a.userId+' → '+a.tempPass).join(' · '))}</p>`:''}`
+      : '<p class="muted small" style="margin-top:10px">Koi pending request nahi.</p>'}
     </div>
 
-    <div class="sec-title">All admins</div>
-    <div class="table-wrap"><table><thead><tr><th>Email (login ID)</th><th>Name</th><th>Mobile</th><th>Added</th><th></th></tr></thead><tbody>
-      ${admins.map(a=>`<tr>
-        <td><span class="mono">${esc(a.email)}</span></td><td>${esc(a.name||'—')}</td><td>${esc(a.phone||'—')}</td>
+    ${isOwner() ? `<div class="card" style="margin-top:16px">
+      <div class="sec-title" style="margin-top:0">Naya admin request banao</div>
+      <form id="addAdminForm" class="grid g3">
+        <div class="field"><label>Name</label><input class="inp" name="name" required /></div>
+        <div class="field"><label>Email ID</label><input class="inp" name="email" type="email" required /><span class="hint">Isi email par login confirm hoga</span></div>
+        <div class="field"><label>Mobile</label><input class="inp" name="phone" inputmode="numeric" /></div>
+        <div class="field" style="justify-content:flex-end"><button class="btn" type="submit">Create request</button></div>
+      </form>
+      <p class="muted small" style="margin-top:6px">Login ID aur password app khud banayegi — tumhe kuch sochna nahi.</p>
+    </div>` : `<div class="card" style="margin-top:16px"><p class="muted small" style="margin:0">Naya admin sirf owner add kar sakta hai. Owner: <b>${esc(owner||'—')}</b></p></div>`}
+
+    <div class="sec-title">Active admins (${active.length})</div>
+    <div class="table-wrap"><table><thead><tr><th>User ID</th><th>Email (login)</th><th>Name</th><th>Mobile</th><th>Added</th><th></th></tr></thead><tbody>
+      ${active.map(a=>`<tr>
+        <td class="mono">${esc(a.userId||'—')}</td><td class="mono">${esc(a.email)}</td><td>${esc(a.name||'—')}</td><td>${esc(a.phone||'—')}</td>
         <td>${fmtDate(a.createdAt ? new Date(a.createdAt).toISOString() : '')}</td>
         <td>${String(a.email).toLowerCase()===String(me.email).toLowerCase()
-          ? '<span class="badge">You</span>'
-          : `<button class="btn ghost sm" data-act="del-admin" data-id="${esc(a.email)}" style="color:var(--danger)">Remove</button>`}</td>
+          ? '<span class="badge">You</span>' + (String(a.email).toLowerCase()===owner ? ' <span class="badge">Owner</span>' : '')
+          : (isOwner()
+              ? `<button class="btn ghost sm" data-act="del-admin" data-id="${esc(a.email)}" style="color:var(--danger)">Remove</button>`
+              : '<span class="muted small">—</span>')}</td>
       </tr>`).join('')}
     </tbody></table></div>`;
 }
@@ -1606,6 +1755,11 @@ const I18N = {
     'Survey data sirf committee ke records ke liye · public view read-only':'Survey data is for committee records only · public view is read-only',
     'Sirf committee admin ke liye. Baaki sab public dashboard dekh sakte hain.':'For committee admin only. Everyone else can view the public dashboard.',
     'Email ID':'Email ID',
+    'User ID / Email':'User ID / Email',
+    'Request access':'Request access',
+    'Request admin access':'Request admin access',
+    'Create first admin':'Create first admin',
+    'Login ID ya registered email — dono chalega':'User ID or registered email — both work',
     'Password':'Password',
     'Captcha — answer the sum':'Captcha — answer the sum',
     'Answer':'Answer',
@@ -1724,6 +1878,11 @@ const I18N = {
     'Survey data sirf committee ke records ke liye · public view read-only':'தரவு குழு பதிவுகளுக்கு மட்டும் · பொது பார்வை படிக்க மட்டும்',
     'Sirf committee admin ke liye. Baaki sab public dashboard dekh sakte hain.':'குழு நிர்வாகிக்கு மட்டும். மற்ற அனைவரும் பொது டாஷ்போர்டைப் பார்க்கலாம்.',
     'Email ID':'மின்னஞ்சல் ஐடி',
+    'User ID / Email':'பயனர் ஐடி / மின்னஞ்சல்',
+    'Request access':'அனுமதி கேள்',
+    'Request admin access':'நிர்வாக அனுமதி கேள்',
+    'Create first admin':'முதல் நிர்வாகி உருவாக்கு',
+    'Login ID ya registered email — dono chalega':'பயனர் ஐடி அல்லது பதிவு மின்னஞ்சல் — இரண்டும் செல்லும்',
     'Password':'கடவுச்சொல்',
     'Captcha — answer the sum':'கேப்ட்சா — கூட்டலுக்கு பதில் சொல்லுங்கள்',
     'Answer':'பதில்',
@@ -1942,8 +2101,15 @@ function viewSettings(){
     <div class="card" style="margin-top:16px">
       <div class="sec-title" style="margin-top:0">Account</div>
       <div class="kv"><div class="row"><span>Name</span><span>${esc(u.name||'—')}</span></div>
-        <div class="row"><span>Login ID (email)</span><span class="mono">${esc(u.email)}</span></div>
-        <div class="row"><span>Role</span><span>Admin — full edit</span></div></div>
+        <div class="row"><span>User ID</span><span class="mono">${esc(u.userId||'—')}</span></div>
+        <div class="row"><span>Login email</span><span class="mono">${esc(u.email)}</span></div>
+        <div class="row"><span>Role</span><span>${u.owner?'Owner — approvals bhi':'Admin — full edit'}</span></div>
+        <div class="row"><span>Owner (approval email)</span><span class="mono">${esc(ownerEmail()||'—')}</span></div></div>
+      ${isOwner()?`<form id="ownerForm" class="grid g2" style="margin-top:14px">
+        <div class="field"><label>Approval email (owner)</label><input class="inp" name="owner" type="email" value="${esc(ownerEmail())}" />
+          <span class="hint">Naye admin ki request + credentials isi email par jaayengi</span></div>
+        <div class="field" style="justify-content:flex-end"><button class="btn sm" type="submit">Save</button></div>
+      </form>`:''}
       <button class="btn danger sm" data-act="admin-logout" style="margin-top:16px">Log out</button>
     </div>
 
@@ -1961,7 +2127,7 @@ document.addEventListener('click', (e)=>{
   const el = e.target.closest('[data-act]'); if(!el) return;
   const act = el.dataset.act;
   const id = el.dataset.id;
-  const ADMIN_ACTS = ['load-sample','clear-data','export-excel','print-all','backup-json','restore-json','drive-connect','drive-backup','edit-family','del-family','del-admin','saveMasjid','delPhoto','print-family'];
+  const ADMIN_ACTS = ['load-sample','clear-data','export-excel','print-all','backup-json','restore-json','drive-connect','drive-backup','edit-family','del-family','del-admin','saveMasjid','delPhoto','print-family','approve-admin','reject-admin','close-creds','copy-creds'];
   if (ADMIN_ACTS.includes(act) && !isAdmin()){ toast('Ye sirf admin kar sakta hai','err'); return; }
 
   if (act==='toggle-theme') { toggleTheme(); const b=$('#themeBtn2'); if(b) b.textContent = document.documentElement.getAttribute('data-theme')==='night'?'☾ Night':'☀ Day'; return; }
@@ -1998,6 +2164,7 @@ document.addEventListener('click', (e)=>{
   if (act==='admin-logout'){ clearSession(); state.draft=null; toast('Log out ho gaya'); renderShell(); go('dashboard'); return; }
   if (act==='logout'){ clearSession(); state.draft=null; renderShell(); go('dashboard'); return; }
   if (act==='del-admin'){
+    if (!isOwner()){ toast('Sirf owner admin hata sakta hai','err'); return; }
     const me = currentUser();
     if (String(id).toLowerCase()===String(me.email).toLowerCase()){ toast('Apna account nahi hata sakte','err'); return; }
     if (DB.admins().length <= 1){ toast('Kam se kam ek admin rehna chahiye','err'); return; }
@@ -2012,6 +2179,40 @@ document.addEventListener('click', (e)=>{
   if (act==='print-family'){ const f=DB.families().find(x=>x.id===id); if(f) printFamilies([f], f.houseName||f.id); return; }
   if (act==='backup-json'){ backupJSON(); return; }
   if (act==='restore-json'){ const inp=$('#restoreFile'); if(inp){ inp.value=''; inp.click(); } return; }
+  if (act==='approve-admin'){
+    if (!isOwner()){ toast('Sirf owner approve kar sakta hai','err'); return; }
+    const admins = DB.admins();
+    const a = admins.find(x=>String(x.userId||'').toLowerCase()===String(id).toLowerCase() || String(x.email).toLowerCase()===String(id).toLowerCase());
+    if (!a){ toast('Request nahi mili','err'); return; }
+    a.status = 'active'; a.approvedAt = Date.now(); a.approvedBy = currentUser().email;
+    DB.setAdmins(admins);
+    const creds = { userId:a.userId, tempPass:a.tempPass||'', name:a.name, email:a.email };
+    if (CLOUD.enabled() && a.tempPass){
+      (async ()=>{ try {
+        const c = await CLOUD.get();
+        const { data } = await c.auth.signUp({ email:a.email, password:a.tempPass, options:{ data:{ name:a.name, phone:a.phone }, emailRedirectTo: location.origin + location.pathname } });
+        /* owner approve karta hai = app_users me row owner banata hai (RLS: sirf admin likh sakta hai) */
+        const uid = data && data.user && data.user.id;
+        if (uid) await c.from('app_users').upsert({ id:a.email, user_id:uid, role:'admin', name:a.name||'', phone:a.phone||'' });
+      } catch(e){} })();
+    }
+    state.newCreds = Object.assign(creds, { mail: credsMailto(a) });
+    toast('Admin approve ho gaya — credentials usko bhej do','ok');
+    go('users'); return;
+  }
+  if (act==='reject-admin'){
+    if (!isOwner()){ toast('Sirf owner reject kar sakta hai','err'); return; }
+    const admins = DB.admins().filter(x=>String(x.userId||'').toLowerCase()!==String(id).toLowerCase() && String(x.email).toLowerCase()!==String(id).toLowerCase());
+    DB.setAdmins(admins); toast('Request reject ho gayi'); go('users'); return;
+  }
+  if (act==='close-creds'){ state.newCreds = null; go('users'); return; }
+  if (act==='copy-creds'){
+    const c = state.newCreds || {};
+    const txt = 'User ID: ' + (c.userId||'') + '\nPassword: ' + (c.tempPass||'') + '\nLogin: ' + location.href;
+    try { navigator.clipboard.writeText(txt); toast('Copy ho gaya'); }
+    catch(e){ toast('Copy nahi hua — haath se likh lo','err'); }
+    return;
+  }
   if (act==='drive-connect'){ driveConnect(); return; }
   if (act==='drive-backup'){ backupToDrive(); return; }
   if (act==='view-family'){ go('detail', id); return; }
@@ -2112,6 +2313,11 @@ document.addEventListener('submit', async (e)=>{
   const form = e.target;
   if (form.id==='famForm'){ e.preventDefault(); saveFamily(); }
   else if (form.id==='addAdminForm'){ e.preventDefault(); await addAdmin(form); }
+  else if (form.id==='ownerForm'){ e.preventDefault();
+    if (!isOwner()) { toast('Sirf owner badal sakta hai','err'); return; }
+    const v = String(form.elements.owner.value||'').trim().toLowerCase();
+    if (!isEmail(v)) { toast('Valid email daalo','err'); return; }
+    setOwnerEmail(v); toast('Owner email save ho gaya'); go('settings'); }
 });
 
 // hamburger
@@ -2200,26 +2406,32 @@ function padCustom(custom){
 /* ============================================================
    USERS create
    ============================================================ */
+/* ek hi jagah se admin request banti hai — owner form aur public "request access" dono */
+async function createAdminRequest(name, email, phone, requestedBy){
+  email = String(email||'').trim().toLowerCase();
+  if (!isEmail(email)) return { error:'Valid email ID daalo' };
+  if (adminByEmail(email)) return { error:'Ye email pehle se admin hai' };
+  const userId = genUserId();
+  const tempPass = genTempPass();
+  const salt = uid();
+  const rec = {
+    email, name:String(name||'').trim() || email.split('@')[0], phone:String(phone||'').trim(),
+    userId, status:'pending', salt, passHash: await hashPass(tempPass, salt), tempPass,
+    createdAt:Date.now(), verified:false, requestedBy: requestedBy || 'public'
+  };
+  const admins = DB.admins(); admins.push(rec); DB.setAdmins(admins);
+  return { rec };
+}
+
 async function addAdmin(form){
   const E = form.elements;
-  const name = E.name.value.trim(), email = E.email.value.trim().toLowerCase();
-  const phone = E.phone.value.trim(), pass = E.pass.value;
-  if (!isEmail(email)){ toast('Valid email ID daalo','err'); return; }
-  if (adminByEmail(email)){ toast('Ye email pehle se admin hai','err'); return; }
-  if (pass.length < 6){ toast('Password kam se kam 6 characters','err'); return; }
-
-  if (CLOUD.enabled()){
-    const c = await CLOUD.get();
-    if (!c){ toast('Cloud connect nahi hua','err'); return; }
-    const { error } = await c.auth.signUp({ email, password: pass, options:{ data:{ name, phone } } });
-    if (error){ toast(error.message,'err'); return; }
-  } else {
-    const salt = uid();
-    const admins = DB.admins();
-    admins.push({ email, name:name||email, phone, salt, passHash: await hashPass(pass, salt), createdAt:Date.now(), verified:true });
-    DB.setAdmins(admins);
-  }
-  toast('Admin add ho gaya'); go('users');
+  if (!isOwner()){ toast('Sirf owner (pehla admin) naya admin add kar sakta hai','err'); return; }
+  const out = await createAdminRequest(E.name.value, E.email.value, E.phone.value, currentUser().email);
+  if (out.error){ toast(out.error,'err'); return; }
+  const rec = out.rec;
+  state.newCreds = { userId:rec.userId, tempPass:rec.tempPass, name:rec.name, email:rec.email, mail: credsMailto(rec) };
+  toast('Admin request ban gaya — approve karo','ok');
+  go('users');
 }
 
 /* ============================================================
@@ -2653,11 +2865,24 @@ async function cloudAutoLogin(){
     const email = (sess.user.email||'').toLowerCase();
     if (/type=recovery/.test(location.hash)){ pending = { kind:'newpass', email }; openAuth('login'); return renderNewPassword(); }
     if (isAdmin()) return;
+    const local = adminByEmail(email);
+    if (local && adminStatus(local) === 'pending'){
+      await c.auth.signOut(); openAuth('login');
+      setTimeout(()=>{ const b=$('#loginAlert'); if(b) b.innerHTML='<div class="alert err">Ye account abhi <b>approval pending</b> hai — owner approve karega tabhi login hoga.</div>'; }, 40);
+      return;
+    }
+    /* sirf approved admin hi andar aa sakta hai — koi bhi apna Supabase account bana ke nahi */
+    const known = !!local || await cloudIsListed(email);
+    if (!known){
+      await c.auth.signOut(); openAuth('login');
+      setTimeout(()=>{ const b=$('#loginAlert'); if(b) b.innerHTML='<div class="alert err">Ye email approved admin list me nahi hai. “Request access” se owner ko request bhejo.</div>'; }, 40);
+      return;
+    }
     const md = sess.user.user_metadata || {};
     await cloudClaimAdmin(email, md.name||'', md.phone||'');
-    if (!adminByEmail(email)){
+    if (!local){
       const admins = DB.admins();
-      admins.push({ email, name:md.name||email.split('@')[0], phone:md.phone||'', createdAt:Date.now(), verified:true, cloud:true });
+      admins.push({ email, name:md.name||email.split('@')[0], phone:md.phone||'', createdAt:Date.now(), verified:true, cloud:true, status:'active' });
       DB.setAdmins(admins);
     }
     setSession({ kind:'admin', email });
@@ -2665,7 +2890,21 @@ async function cloudAutoLogin(){
   } catch(e){}
 }
 
+/* purane admin records me userId/status bhar do (ek baar) */
+function migrateAdmins(){
+  try {
+    const admins = DB.admins(); let n = 0, ch = false;
+    admins.forEach(a=>{ const m = String(a.userId||'').match(/(\d+)$/); if (m) n = Math.max(n, Number(m[1])); });
+    admins.forEach(a=>{
+      if (!a.userId){ n += 1; a.userId = 'ADM-' + new Date().getFullYear() + '-' + pad(n, 4); ch = true; }
+      if (!a.status){ a.status = 'active'; ch = true; }
+    });
+    if (ch) DB.setAdmins(admins);
+  } catch(e){}
+}
+
 function init(){
+  migrateAdmins();
   /* recovery link se aaya user: naya password set kare */
   try {
     if (/type=recovery/.test(location.hash) && CLOUD.enabled()){
