@@ -2333,20 +2333,59 @@ function printFamilies(fams, title){
     </div>`:''}
     ${mjHead()}`;
   const body = fams.map(f=>{
-    const docs = DOC_TYPES.filter(([k])=>f.docs&&f.docs[k]==='yes').map(([,l])=>l).concat((f.custom||[]).filter(c=>c.label&&c.value==='yes').map(c=>c.label));
+    const mem = f.members || [];
+    const famDocs = DOC_TYPES.filter(([k])=>f.docs&&f.docs[k]==='yes').map(([,l])=>l);
+    const custom = (f.custom||[]).filter(c=>c.label);
+    const males = mem.filter(m=>/^m/i.test(String(m.gender||''))).length;
+    const totalKids = mem.reduce((n,m)=>n + (Number(m.children)||0), 0);
+    const qrText = [f.id, f.houseName, streetName(f)].filter(Boolean).join(' | ');
+    const docList = m => BASIC_DOCS.filter(([k])=>m.docs&&m.docs[k]==='yes').map(([,l])=>l);
+
+    const rows = mem.map((m,i)=>{
+      const a = ageFromDob(m.dob);
+      return `<tr><td>${i+1}</td><td>${esc(m.name||'')}</td><td>${esc(m.relation||'')}</td><td>${esc(m.gender||'')}</td>
+        <td>${a===null?'':a}</td><td>${esc(EDU_LABEL[eduKey(m)]||m.education||'')}</td><td>${esc(occName(m))}</td>
+        <td>${esc(DEENI_LABEL[m.religious]||'')}</td><td>${esc(m.maritalStatus||'')}</td>
+        <td>${docList(m).length}/${BASIC_DOCS.length}</td><td>${esc(memberSchemes(m).join(', '))}</td>
+        <td>${m.disability==='yes'?'Yes':'No'}</td></tr>`;
+    }).join('');
+
+    const memberDetails = mem.map((m,i)=>{
+      const a = ageFromDob(m.dob);
+      const d = docList(m);
+      const sch = memberSchemes(m);
+      return `<li><b>${i+1}. ${esc(m.name||'—')}</b>${m.relation?` (${esc(m.relation)})`:''} — DOB: ${esc(m.dob||'—')}${a!==null?` (${a} yrs)`:''} · Gender: ${esc(m.gender||'—')} · Marital: ${esc(m.maritalStatus||'—')}
+        ${m.fatherName?` · Father: ${esc(m.fatherName)}`:''}${m.motherName?` · Mother: ${esc(m.motherName)}`:''}
+        ${m.children && String(m.children)!=='0'?` · Children: ${esc(m.children)}`:''}
+        ${m.disability==='yes'?` · Challenged: Yes${m.disabilityNote?' ('+esc(m.disabilityNote)+')':''}`:''}
+        <br><span class="psub">Education: ${esc(EDU_LABEL[eduKey(m)]||m.education||'—')} · Occupation: ${esc(occName(m)||'—')} · Deeni: ${esc(DEENI_LABEL[m.religious]||'—')}
+        <br>Documents (${d.length}/${BASIC_DOCS.length}): ${d.length?esc(d.join(', ')):'none'}${sch.length?` · Govt. schemes: ${esc(sch.join(', '))}`:''}${m.schemeName?` · ${esc(m.schemeName)}`:''}</span></li>`;
+    }).join('');
+
     return `<div class="pcard">
-      <h2>${esc(f.houseName||'Household')} — ${esc(f.id)}</h2>
-      <div class="pmeta">Street: ${esc(streetName(f))} · House No: ${esc(f.houseNo||'—')} · Type: ${esc(labelOf(HOUSE_TYPES, houseTypeKey(f.houseType)))} · Phone: ${esc(f.phone||'—')} · Address: ${esc(f.address||'—')}</div>
-      <table><thead><tr><th>#</th><th>Name</th><th>Relation</th><th>Gender</th><th>Age</th><th>Education</th><th>Occupation</th><th>Deeni</th><th>Marital</th><th>Docs</th><th>Schemes</th><th>Challenged</th></tr></thead><tbody>
-      ${(f.members||[]).map((m,i)=>{const a=ageFromDob(m.dob);return `<tr><td>${i+1}</td><td>${esc(m.name||'')}</td><td>${esc(m.relation||'')}</td><td>${esc(m.gender||'')}</td><td>${a===null?'':a}</td><td>${esc(EDU_LABEL[eduKey(m)]||m.education||'')}</td><td>${esc(occName(m))}</td><td>${esc(DEENI_LABEL[m.religious]||'')}</td><td>${esc(m.maritalStatus||'')}</td><td>${BASIC_DOCS.filter(([k])=>m.docs&&m.docs[k]==='yes').length}/${BASIC_DOCS.length}</td><td>${esc(memberSchemes(m).join(', '))}</td><td>${m.disability==='yes'?'Yes':'No'}</td></tr>`;}).join('')}
-      </tbody></table>
-      <div class="pmeta" style="margin-top:6pt">Documents: ${docs.length?esc(docs.join(', ')):'—'}</div>
+      <div class="pchead">
+        <div class="pchead-t">
+          <h2>${esc(f.houseName||'Household')} — ${esc(f.id)}</h2>
+          <div class="pmeta">Family ID: <b>${esc(f.id)}</b> · Street: ${esc(streetName(f))} · House No: ${esc(f.houseNo||'—')} · House type: ${esc(labelOf(HOUSE_TYPES, houseTypeKey(f.houseType)))}</div>
+          <div class="pmeta">Phone: ${esc(f.phone||'—')} · Address: ${esc(f.address||'—')}</div>
+          <div class="pmeta">Members: ${mem.length} (men ${males}, women ${mem.length-males}${totalKids?`, children ${totalKids}`:''}) · Registered: ${f.createdAt?new Date(f.createdAt).toLocaleDateString('en-GB'):'—'}${f.createdBy?' · by '+esc(f.createdBy):''}</div>
+        </div>
+        <div class="pqr"><div class="qr" data-qr="${esc(qrText)}"></div><div class="pqr-cap">${esc(f.id)}</div></div>
+      </div>
+      ${mem.length?`<table><thead><tr><th>#</th><th>Name</th><th>Relation</th><th>Gender</th><th>Age</th><th>Education</th><th>Occupation</th><th>Deeni</th><th>Marital</th><th>Docs</th><th>Schemes</th><th>Challenged</th></tr></thead><tbody>${rows}</tbody></table>
+      <div class="psec-t">Member details</div><ul class="pmem">${memberDetails}</ul>`
+      : '<div class="pmeta">No members recorded.</div>'}
+      <div class="pmeta" style="margin-top:5pt"><b>Family documents:</b> ${famDocs.length?esc(famDocs.join(', ')):'none'}</div>
+      ${custom.length?`<div class="pmeta"><b>Other documents:</b> ${esc(custom.map(c=>c.label+': '+(c.value==='yes'?'Yes':'No')).join(' · '))}</div>`:''}
+      ${f.notes?`<div class="pmeta"><b>Notes:</b> ${esc(f.notes)}</div>`:''}
     </div>`;
   }).join('');
   const yr = new Date().getFullYear();
   const foot = `<div class="pfoot">© ${yr} ${esc(CFG.ORG_NAME||'Masjid e Mohammadi')} · ${esc(CFG.ORG_SUB||'Khidmath Committee')} — All rights reserved. · ${esc(String(title))} report</div>`;
   const area = $('#printArea'); area.innerHTML = head + body + foot;
-  setTimeout(()=>{ window.print(); }, 120);
+  /* har family ka apna QR — Family ID se generate hota hai, isliye print/PDF me bhi aata hai */
+  Array.prototype.forEach.call(area.querySelectorAll('.qr[data-qr]'), el => renderQR(el, el.dataset.qr || ''));
+  setTimeout(()=>{ window.print(); }, 220);
 }
 
 /* ============================================================

@@ -139,3 +139,13 @@ Open: wire Supabase keys; real OTP SMS later.
 - Split mixed text nodes when a label is glued to dynamic text (e.g. category page
   uses `<span>public totals</span>`) — a text node only translates as a whole.
 - sw cache: `memc-app-v17`. QA: jsdom smoke **115/115**.
+
+## v18 — Islamic texture background (2026-10-27)
+- Shan: "website ke background me ek islamic texture". Body ka purana dot-grid hata ke
+  ek **girih lattice** (8-point star tile, 96px) lagaya — data-URI SVG, `--tex` var
+  per theme (day `#0e7c66` @ .16 stroke, night `#3fd0ab` @ .15), no extra request,
+  no build step. Top par soft `--glow` radial.
+- `.masjid-hero::after` me wahi pattern thoda strong (76px) + horizontal mask (left
+  transparent → right visible), `.mh-text` z-index:1. `background-attachment:fixed`
+  jaan-boojh ke nahi (mobile iOS repaint).
+- sw cache `memc-app-v18`. Smoke 115/115.

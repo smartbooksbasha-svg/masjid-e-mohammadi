@@ -485,3 +485,21 @@ td .mono{font-family:var(--font-display);font-weight:600;color:var(--accent)}
   background-position:calc(100% - 14px) 52%,calc(100% - 9px) 52%;background-size:5px 5px,5px 5px;background-repeat:no-repeat}
 .lang-sel:hover{border-color:var(--accent)}
 @media (max-width:560px){.lang-sel{padding:6px 22px 6px 9px;font-size:.72rem}}
+
+/* ---------- per-family PDF page (QR + full details) ---------- */
+.pchead{display:flex;gap:10pt;justify-content:space-between;align-items:flex-start}
+.pchead-t{flex:1;min-width:0}
+.pqr{width:78pt;flex:none;text-align:center}
+.pqr .qr svg{width:78pt;height:78pt;display:block}
+.pqr-cap{font-size:7pt;color:#555;word-break:break-all;margin-top:1pt}
+.psec-t{font-size:9pt;font-weight:700;margin:8pt 0 3pt;color:#1d1d1d}
+.pmem{font-size:8.4pt;line-height:1.5;margin:0 0 0 13pt;padding:0}
+.pmem li{margin-bottom:3pt}
+.pmem .psub{color:#555;font-size:8pt}
+@media print{
+  #printArea .pcard{page-break-inside:auto}
+  #printArea .pchead{page-break-inside:avoid}
+  #printArea .pqr{page-break-inside:avoid}
+  #printArea tr{page-break-inside:avoid}
+  #printArea .pmem li{page-break-inside:avoid}
+}
