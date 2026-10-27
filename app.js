@@ -1074,7 +1074,16 @@ function navItems(){
 
 function renderShell(){
   const u = currentUser();
-  $('#nav').innerHTML = navItems().map(([v,label,ic])=>`<a class="nav-item" data-act="goto" data-view="${v}">${ic}<span>${label}</span></a>`).join('');
+  $('#nav').innerHTML = navItems().map(([v,label,ic])=>`<a class="nav-item" data-act="goto" data-view="${v}" href="javascript:void(0)">${ic}<span>${label}</span></a>`).join('');
+  // Direct click handlers for nav items (backup for delegation)
+  $$('#nav .nav-item').forEach(a=>{
+    a.addEventListener('click', (e)=>{
+      e.preventDefault();
+      const v = a.dataset.view;
+      if (v==='add'){ state.draft=blankDraft(); go(v); } else go(v);
+      closeNav();
+    });
+  });
   const logo = DB.logo();
   const brand = document.querySelector('.sb-brand');
   if(brand){
@@ -3714,6 +3723,11 @@ function init(){
     if (sel){ sel.value = LANG; sel.addEventListener('change', ()=> setLang(sel.value)); }
   } catch(e){}
   // Don't auto-login on refresh - always show public dashboard first
+  // Backup burger handler
+  try {
+    const b = $('#burger');
+    if (b){ b.onclick = ()=>{ const s=$('#sidebar'); const sc=$('#scrimNav'); if(s) s.classList.add('open'); if(sc) sc.classList.add('show'); }; }
+  } catch(e){}
   enterApp();   // public dashboard pehle — login optional
   // cloudAutoLogin() disabled - prevents auto-login on refresh
   try { new MutationObserver(()=>translateSoon()).observe(document.body, { childList:true, subtree:true }); } catch(e){}
