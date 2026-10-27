@@ -1074,16 +1074,7 @@ function navItems(){
 
 function renderShell(){
   const u = currentUser();
-  $('#nav').innerHTML = navItems().map(([v,label,ic])=>`<a class="nav-item" data-act="goto" data-view="${v}" href="javascript:void(0)">${ic}<span>${label}</span></a>`).join('');
-  // Direct click handlers for nav items (backup for delegation)
-  $$('#nav .nav-item').forEach(a=>{
-    a.addEventListener('click', (e)=>{
-      e.preventDefault();
-      const v = a.dataset.view;
-      if (v==='add'){ state.draft=blankDraft(); go(v); } else go(v);
-      closeNav();
-    });
-  });
+  $('#nav').innerHTML = navItems().map(([v,label,ic])=>`<a class="nav-item" data-view="${v}" onclick="if('${v}'==='add'){state.draft=blankDraft();}go('${v}');closeNav();return false;" href="javascript:void(0)">${ic}<span>${label}</span></a>`).join('');
   const logo = DB.logo();
   const brand = document.querySelector('.sb-brand');
   if(brand){
