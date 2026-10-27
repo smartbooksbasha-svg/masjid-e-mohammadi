@@ -570,3 +570,7 @@ a:focus-visible,summary:focus-visible,[tabindex]:focus-visible{outline:2px solid
 .foot-logout svg{width:15px;height:15px}
 .foot-logout:hover{background:var(--danger-bg);border-color:var(--danger-brd)}
 @media (max-width:560px){ #logoutBtn{display:grid} }
+
+/* find family */
+.qr-video{width:100%;max-width:320px;border-radius:14px;border:1px solid var(--line);margin-top:12px;background:#000}
+#findResult .table-wrap{overflow:auto}

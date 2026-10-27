@@ -264,6 +264,8 @@ function toast(msg, type){
 
 /* ---------------- caption helper icons (inline SVG) ---------------- */
 const ICON = {
+  search:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>',
+  camera:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>',
   exit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>',
   dash:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>',
   list:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="3.5" cy="6" r="1"/><circle cx="3.5" cy="12" r="1"/><circle cx="3.5" cy="18" r="1"/></svg>',
@@ -941,8 +943,16 @@ function enterApp(){
   const a = $('#authScreen'); if (a) a.classList.add('hidden');
   $('#appScreen').classList.remove('hidden');
   renderShell();
-  if (!state.view || state.view==='myfamily') state.view = 'dashboard';
-  go(state.view, state.param);
+  /* admin QR link: #qedit=FAMILY-ID → seedha edit */
+  if (state._qedit && isAdmin()){
+    const id = state._qedit; state._qedit=null;
+    const f = DB.families().find(x=>x.id===id);
+    if (f){ state.draft = JSON.parse(JSON.stringify(f)); go('add'); }
+    else { if (!state.view || state.view==='myfamily') state.view = 'dashboard'; go(state.view, state.param); }
+  } else {
+    if (!state.view || state.view==='myfamily') state.view = 'dashboard';
+    go(state.view, state.param);
+  }
   if (SYNC.on() && !cloudPulled){
     cloudPulled = true;
     const job = isAdmin() ? SYNC.pull() : SYNC.pullPublic();
@@ -959,9 +969,9 @@ function openPhoto(src){
 }
 
 function navItems(){
-  if (!isAdmin()) return [ ['dashboard','Dashboard',ICON.dash] ];
+  if (!isAdmin()) return [ ['dashboard','Dashboard',ICON.dash], ['find','Find family',ICON.search] ];
   return [ ['dashboard','Dashboard',ICON.dash], ['families','Households',ICON.list],
-           ['add','Add Household',ICON.plus], ['masjid','Masjid Profile',ICON.mosque],
+           ['add','Add Household',ICON.plus], ['find','Find family',ICON.search], ['masjid','Masjid Profile',ICON.mosque],
            ['users','Admins',ICON.users], ['settings','Settings',ICON.gear] ];
 }
 
@@ -994,13 +1004,14 @@ function go(view, param){
   if (ADMIN_ONLY.includes(view) && !isAdmin()){ toast('Ye page sirf admin ke liye hai','err'); view='dashboard'; }
   state.view = view; state.param = param||null;
   closeNav();
-  const titles = { dashboard:'Survey Dashboard', families:'Households', add:(state.param?'Edit Household':'Add Household'), detail:'Household Record', users:'Admins', settings:'Settings', masjid:'Masjid Profile', cat:'Survey Category' };
+  const titles = { dashboard:'Survey Dashboard', families:'Households', add:(state.param?'Edit Household':'Add Household'), detail:'Household Record', find:'Find family', users:'Admins', settings:'Settings', masjid:'Masjid Profile', cat:'Survey Category' };
   $('#pageTitle').textContent = titles[view] || 'Survey Dashboard';
   let html='';
   if (view==='dashboard') html = viewDashboard();
   else if (view==='families') html = viewFamilies();
   else if (view==='add') html = viewFamilyForm();
   else if (view==='detail') html = viewFamilyDetail(state.param);
+  else if (view==='find') html = viewFind();
   else if (view==='users') html = viewUsers();
   else if (view==='settings') html = viewSettings();
   else if (view==='masjid') html = viewMasjid();
@@ -2339,6 +2350,8 @@ document.addEventListener('click', (e)=>{
   const ADMIN_ACTS = ['load-sample','clear-data','export-excel','print-all','backup-json','restore-json','drive-connect','drive-backup','edit-family','del-family','del-admin','saveMasjid','delPhoto','print-family','approve-admin','reject-admin','close-creds','copy-creds','publish-public'];
   if (ADMIN_ACTS.includes(act) && !isAdmin()){ toast('Ye sirf admin kar sakta hai','err'); return; }
 
+  if (act==='scan-qr'){ startQrScan(); return; }
+
   if (act==='toggle-theme') { toggleTheme(); const b=$('#themeBtn2'); if(b){ const t=document.documentElement.getAttribute('data-theme'); b.innerHTML = themeIcon(t) + (t==='night'?' Night':' Day'); } return; }
   if (act==='goto'){ if (el.dataset.view==='add'){ state.draft=blankDraft(); go(el.dataset.view); } else go(el.dataset.view, el.dataset.param || el.dataset.street || null); return; }
   if (act==='auth-check'){ cloudLinkCheck(); return; }
@@ -2549,8 +2562,22 @@ document.addEventListener('DOMContentLoaded', ()=>{
 /* ---------------- render side-effects ---------------- */
 function afterRender(view){
   if (view==='add' && state.draft){ renderMembers(); }
-  if (view==='detail'){ const f=DB.families().find(x=>x.id===state.param); const box=$('#qrBox'); if(f&&box) renderQR(box, f.id + ' | ' + (f.houseName||'')); }
+  if (view==='detail'){ const f=DB.families().find(x=>x.id===state.param); const box=$('#qrBox'); if(f&&box){
+    try {
+      const url = location.origin + location.pathname + '#qedit=' + encodeURIComponent(f.id);
+      renderQR(box, url);
+    } catch(e){ renderQR(box, f.id + ' | ' + (f.houseName||'')); }
+  }}
   if (view==='families'){ renderFamilyList(); }
+  if (view==='find'){
+    const pf = $('#findPhoneForm');
+    if (pf){ pf.onsubmit = null; pf.addEventListener('submit',e=>{ e.preventDefault(); lookupByPhone(pf.elements.phone.value); }, {once:true}); }
+    // rebind safely
+    setTimeout(()=>{
+      const pf2 = $('#findPhoneForm');
+      if (pf2 && !pf2._boundFind){ pf2._boundFind=true; pf2.addEventListener('submit',e=>{ e.preventDefault(); lookupByPhone(pf2.elements.phone.value); }); }
+    }, 50);
+  }
   const tb=$('#themeBtn2'); if(tb){ const t=document.documentElement.getAttribute('data-theme'); tb.innerHTML = themeIcon(t) + (t==='night'?' Night':' Day'); }
 }
 
@@ -3126,6 +3153,13 @@ function migrateAdmins(){
 function init(){
   migrateAdmins();
   migrateOwner();
+  try {
+    const h = (location.hash||'').replace(/^#/,'');
+    if (h.indexOf('qedit=')===0){
+      state._qedit = decodeURIComponent(h.slice(6)).trim();
+      history.replaceState(null, '', location.pathname + location.search);
+    }
+  } catch(e){}
   /* recovery link se aaya user: naya password set kare */
   try {
     if (/type=recovery/.test(location.hash) && CLOUD.enabled()){
@@ -3149,3 +3183,158 @@ else init();
 
 /* debug/test hooks (harmless) */
 try { window.setLang = setLang; window.translateTree = translateTree; window.getLang = ()=>LANG; } catch(e){}
+
+
+/* ============================================================
+   FIND FAMILY BY PHONE / QR (public read-only)
+   ============================================================ */
+function viewFind(){
+  return `
+    <div class="page-head"><div><h1>Find family</h1><p>Phone number daalo ya QR scan karo — sirf usi ghar ka read-only detail dikhega (edit nahi).</p></div></div>
+
+    <div class="grid g2">
+      <div class="card">
+        <div class="sec-title" style="margin-top:0">By phone number</div>
+        <form id="findPhoneForm">
+          <div class="field"><label>Mobile number</label><input class="inp" name="phone" inputmode="numeric" placeholder="eg 9876543210" autocomplete="tel" /></div>
+          <button class="btn" type="submit">${ICON.search} Find</button>
+        </form>
+        <p class="muted small" style="margin-top:10px">Last 4 digits bhi chal jaate hain agar full number fit na ho.</p>
+      </div>
+      <div class="card">
+        <div class="sec-title" style="margin-top:0">By QR scan</div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+          <button class="btn ghost" type="button" data-act="scan-qr">${ICON.camera} Scan QR</button>
+          <span class="muted small">Camera se QR scan karke seedha details khol do.</span>
+        </div>
+        <video id="qrVideo" class="qr-video" playsinline></video>
+        <canvas id="qrCanvas" hidden></canvas>
+        <div id="qrScanMsg" class="muted small" style="margin-top:8px"></div>
+      </div>
+    </div>
+
+    <div id="findResult"></div>
+  `;
+}
+
+let qrStream = null, qrTimer = null;
+async function startQrScan(){
+  const video = $('#qrVideo'), msg = $('#qrScanMsg');
+  if (!video) return;
+  if (!('mediaDevices' in navigator)) { if(msg) msg.textContent='Is browser me camera support nahi.'; return; }
+  try {
+    if (qrStream){ qrStream.getTracks().forEach(t=>t.stop()); qrStream=null; }
+    qrStream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:'environment' } });
+    video.srcObject = qrStream; await video.play();
+    if(msg) msg.textContent='QR scan ho raha hai...';
+    scanLoop();
+  } catch(e){ if(msg) msg.textContent='Camera access nahi mila. Settings se allow karo.'; }
+}
+function stopQrScan(){ if(qrTimer){ clearInterval(qrTimer); qrTimer=null; } if(qrStream){ qrStream.getTracks().forEach(t=>t.stop()); qrStream=null; } const video=$('#qrVideo'); if(video){ video.srcObject=null; } }
+function scanLoop(){
+  const video=$('#qrVideo'), canvas=$('#qrCanvas'), msg=$('#qrScanMsg');
+  if(!video||!canvas) return;
+  const ctx = canvas.getContext('2d');
+  qrTimer = setInterval(()=>{
+    if(video.readyState===video.HAVE_ENOUGH_DATA){
+      canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+      ctx.drawImage(video,0,0,canvas.width,canvas.height);
+      try {
+        const img = ctx.getImageData(0,0,canvas.width,canvas.height);
+        if (typeof jsQR === 'function'){
+          const res = jsQR(img.data, img.width, img.height);
+          if(res && res.data){
+            const txt = String(res.data);
+            stopQrScan();
+            if(msg) msg.textContent='QR mila: '+esc(txt);
+            handleQrFind(txt);
+            return;
+          }
+        }
+      } catch(e){}
+    }
+  }, 250);
+}
+function handleQrFind(txt){
+  const t = String(txt||'').trim();
+  // support full link #qedit=ID or plain FAMILY-ID
+  let id = t;
+  const m = t.match(/qedit=([^&\s]+)/i);
+  if (m) id = decodeURIComponent(m[1]);
+  id = id.split(/\s*\|\s*/)[0].trim();
+  lookupById(id);
+}
+async function lookupById(id){
+  const box = $('#findResult'); if(!box) return;
+  box.innerHTML = '<div class="card"><p class="muted">Searching...</p></div>';
+  try {
+    // try local first (admin logged in) else RPC
+    if (CLOUD.enabled()){
+      const c = await CLOUD.get();
+      if (c){
+        // try get_family_by_phone not directly; fallback: fetch families by id? anon blocked
+        const { data, error } = await c.rpc('get_family_by_id_public', { p_id: id });
+        if (data && data.found){ renderFindResult(data); return; }
+      }
+    }
+    // local lookup
+    const f = DB.families().find(x=>x.id===id);
+    if (f){
+      const pub = { found:true, family:{ id:f.id, houseName:f.houseName||'', houseNo:f.houseNo||'', street:streetName(f), houseType:f.houseType||'' }, members:(f.members||[]).map(m=>({ name:m.name||'', relation:m.relation||'', gender:m.gender||'', dob:m.dob||null, education_level:m.education_level||m.education||'', occupation:m.occupation||'', religious:m.religious||'', marital_status:m.marital_status||'', disability:m.disability||'no' })) };
+      renderFindResult(pub); return;
+    }
+    box.innerHTML = '<div class="card"><div class="alert err">Koi record nahi mila. Family ID ya phone number check karo.</div></div>';
+  } catch(e){
+    box.innerHTML = '<div class="card"><div class="alert err">Lookup nahi hua. Thodi der baad try karo.</div></div>';
+  }
+}
+async function lookupByPhone(phone){
+  const box = $('#findResult'); if(!box) return;
+  const p = String(phone||'').trim();
+  if (p.length < 4){ box.innerHTML='<div class="card"><div class="alert err">Kam se kam 4 digits daalo.</div></div>'; return; }
+  box.innerHTML = '<div class="card"><p class="muted">Searching...</p></div>';
+  try {
+    if (CLOUD.enabled()){
+      const c = await CLOUD.get();
+      if (c){
+        const { data } = await c.rpc('get_family_by_phone', { p_phone: p });
+        if (data && data.found){ renderFindResult(data); return; }
+      }
+    }
+    // local fallback
+    const dig = p.replace(/\D/g,'');
+    const f = DB.families().find(x=> (x.phone||'').replace(/\D/g,'').includes(dig));
+    if (f){
+      const pub = { found:true, family:{ id:f.id, houseName:f.houseName||'', houseNo:f.houseNo||'', street:streetName(f), houseType:f.houseType||'' }, members:(f.members||[]).map(m=>({ name:m.name||'', relation:m.relation||'', gender:m.gender||'', dob:m.dob||null, education_level:m.education_level||m.education||'', occupation:m.occupation||'', religious:m.religious||'', marital_status:m.marital_status||'', disability:m.disability||'no' })) };
+      renderFindResult(pub); return;
+    }
+    box.innerHTML = '<div class="card"><div class="alert err">Is number se koi ghar nahi mila.</div></div>';
+  } catch(e){
+    box.innerHTML = '<div class="card"><div class="alert err">Lookup nahi hua.</div></div>';
+  }
+}
+function renderFindResult(res){
+  const box = $('#findResult'); if(!box) return;
+  const fam = res.family || {}, members = res.members || [];
+  const rows = members.map((m,i)=>`<tr>
+    <td>${i+1}</td><td>${esc(m.name||'—')}</td><td>${esc(m.relation||'—')}</td><td>${esc(m.gender||'—')}</td>
+    <td>${ageFromDob(m.dob)===null?'—':ageFromDob(m.dob)}</td><td>${esc(m.education_level||'—')}</td>
+    <td>${esc(m.occupation||'—')}</td><td>${esc(m.religious||'—')}</td><td>${esc(m.marital_status||'—')}</td>
+    <td>${m.disability && m.disability!=='no'?esc(m.disability):'—'}</td>
+  </tr>`).join('');
+  box.innerHTML = `
+    <div class="card" style="margin-top:18px">
+      <div class="sec-title" style="margin-top:0">Household (Read-only)</div>
+      <div class="kv">
+        <div class="row"><span>Family ID</span><span class="mono">${esc(fam.id||'—')}</span></div>
+        <div class="row"><span>House name / no</span><span>${esc(fam.houseName||'—')}${fam.houseNo?' · '+esc(fam.houseNo):''}</span></div>
+        <div class="row"><span>Street</span><span>${esc(fam.street||'—')}</span></div>
+        <div class="row"><span>House type</span><span>${esc(labelOf(HOUSE_TYPES, houseTypeKey(fam.houseType)))}</span></div>
+      </div>
+      <div class="alert info small" style="margin-top:12px">Phone number aur address nahi dikhaya gaya (privacy). Ye view sirf dikhata hai, edit nahi kar sakte.</div>
+      <div class="sec-title" style="margin-top:16px">Members</div>
+      <div class="table-wrap"><table><thead><tr><th>#</th><th>Name</th><th>Relation</th><th>Gender</th><th>Age</th><th>Education</th><th>Occupation</th><th>Deeni</th><th>Marital</th><th>Challenged</th></tr></thead><tbody>${rows||'<tr><td colspan="10" class="muted">No members</td></tr>'}</tbody></table></div>
+    </div>
+  `;
+}
+
