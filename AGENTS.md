@@ -168,5 +168,11 @@ Open: wire Supabase keys; real OTP SMS later.
   admins, no photos), stamps `memc_lastbackup`; reminder banner after 7 days.
 - Drive me rakhna MANUAL hai (Shan khud upload karta hai). Auto Drive upload nahi —
   uske liye Google OAuth Client ID chahiye (Shan ke Google account se banana padega).
-- **Import/restore abhi nahi hai** (koi `restoreJSON` nahi) — backup file wapas
-  load karne ka button banana baaki kaam hai.
+- **Restore hai** (2026-10-27, v20): Settings → "Restore from backup file" → JSON
+  chuno → confirm → families+masjid replace, admins sirf ADD hote hain (lockout nahi),
+  seq max family-id se bump, phir cloud push (agar connected).
+- **Google Drive upload** (v20): `config.js → GOOGLE_CLIENT_ID` (OAuth Web client,
+  scope `drive.file`). Connect → folder `Masjid Records Backup` → multipart upload
+  `masjid-survey-backup-<date>-<HHMM>.json`; last upload meta `memc_drive`
+  (token sirf memory me, refresh nahi — 1 ghante baad silent re-auth try hota hai).
+- Drive OFF hai jab tak Client ID khaali hai — UI setup guide dikhata hai, crash nahi.

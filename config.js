@@ -21,7 +21,7 @@ window.APP_CONFIG = {
      → Credentials → Create OAuth client ID → Web application
      → Authorized JavaScript origins: https://smartbooksbasha-svg.github.io
      → paste the client ID (…apps.googleusercontent.com) below. */
-  GOOGLE_CLIENT_ID: "",
+  GOOGLE_CLIENT_ID: "206058317618-ts99lgaath602onml5t35g4o7r1oihfn.apps.googleusercontent.com",
   DRIVE_FOLDER: "Masjid Records Backup",
   ORG_NAME: "Masjid e Mohammadi",
   ORG_SUB: "Khidmath Committee",
