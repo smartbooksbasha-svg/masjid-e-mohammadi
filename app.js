@@ -2065,7 +2065,9 @@ function viewUsers(){
         <div class="field"><label>Name</label><input class="inp" name="name" required /></div>
         <div class="field"><label>Email ID</label><input class="inp" name="email" type="email" required /><span class="hint">Isi email par login confirm hoga</span></div>
         <div class="field"><label>Mobile</label><input class="inp" name="phone" inputmode="numeric" /></div>
-        <div class="field" style="justify-content:flex-end"><button class="btn" type="submit">Create request</button></div>
+        <div class="field"><label>Age</label><input class="inp" name="age" type="number" min="18" max="100" /></div>
+        <div class="field"><label>Photo</label><input type="file" class="inp" name="photo" accept="image/*" /></div>
+        <div class="field" style="justify-content:flex-end"><button class="btn" type="submit">Create admin</button></div>
       </form>
       <p class="muted small" style="margin-top:6px">Login ID aur password app khud banayegi — tumhe kuch sochna nahi.</p>
     </div>` : `<div class="card"><p class="muted small" style="margin:0">Naya admin sirf owner add kar sakta hai. Owner: <b>${esc(owner||'—')}</b></p></div>`}
@@ -2487,6 +2489,7 @@ function viewAdminEdit(id){
         <div class='field'><label>Full name</label><input class='inp' id='aName' value='${esc(a.name||'')}'/></div>
         <div class='field'><label>Email</label><input class='inp' id='aEmail' value='${esc(a.email||'')}'/></div>
         <div class='field'><label>Phone number</label><input class='inp' id='aPhone' value='${esc(a.phone||'')}' inputmode='tel'/></div>
+        <div class='field'><label>Age</label><input class='inp' id='aAge' value='${esc(a.age||'')}' type='number' min='18' max='100'/></div>
         <div class='field'><label>User ID</label><input class='inp' value='${esc(a.userId||'—')}' readonly/></div>
       </div>
       <div style='margin-top:18px'><button class='btn' data-act='admin-save' data-id='${esc(a.email)}'>Save changes</button></div>
@@ -2575,8 +2578,8 @@ function viewUsersTable(){
     <td style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn sm" data-act="approve-admin" data-id="${esc(a.email)}">Approve</button><button class="btn sm ghost" data-act="reject-admin" data-id="${esc(a.email)}">Reject</button></td></tr>`).join('')}
     </tbody></table></div>`:`<p class="muted small">Koi pending request nahi.</p>`}
     <div class="sec-title">Active admins</div>
-    <div class="table-wrap"><table><thead><tr><th>User ID</th><th>Admin (Photo / Name / Email)</th><th>Phone Number</th><th>Role</th><th>Action</th></tr></thead><tbody>
-    ${act.map(a=>{ const isO = String(a.email).toLowerCase()===owner || a.role==='owner'; const ini=(a.name||a.email).split(/[ @.]/).filter(Boolean).map(w=>w[0]).slice(0,2).join('').toUpperCase(); return `<tr><td class="mono">${esc(a.userId||'—')}</td><td><div style="display:flex;gap:10px;align-items:center"><span class="av" style="width:36px;height:36px;font-size:.8rem;overflow:hidden;border-radius:12px;border:1px solid var(--line)">${a.photo?`<img src='${esc(a.photo)}' style='width:100%;height:100%;object-fit:cover'/>`:esc(ini)}</span><div><div style="font-weight:600">${esc(a.name||'—')}</div><div class="muted small">${esc(a.email)}</div></div></div></td><td>${esc(a.phone||'—')}</td><td>${isO?'<span class="badge">Owner</span>':'<span class="badge gray">Admin</span>'}</td><td style="display:flex;gap:6px;flex-wrap:wrap">${isO?'<span class="muted small">Locked</span>':`<button class="btn sm" data-act="admin-edit" data-id="${esc(a.email)}">Edit</button><button class="btn sm ghost" data-act="del-admin" data-id="${esc(a.email)}">Remove</button>`}</td></tr>`; }).join('')}
+    <div class="table-wrap"><table><thead><tr><th>User ID</th><th>Admin (Photo / Name / Email)</th><th>Phone</th><th>Age</th><th>Role</th><th>Action</th></tr></thead><tbody>
+    ${act.map(a=>{ const isO = String(a.email).toLowerCase()===owner || a.role==='owner'; const ini=(a.name||a.email).split(/[ @.]/).filter(Boolean).map(w=>w[0]).slice(0,2).join('').toUpperCase(); return `<tr><td class="mono">${esc(a.userId||'—')}</td><td><div style="display:flex;gap:10px;align-items:center"><span class="av" style="width:36px;height:36px;font-size:.8rem;overflow:hidden;border-radius:12px;border:1px solid var(--line)">${a.photo?`<img src='${esc(a.photo)}' style='width:100%;height:100%;object-fit:cover'/>`:esc(ini)}</span><div><div style="font-weight:600">${esc(a.name||'—')}</div><div class="muted small">${esc(a.email)}</div></div></div></td><td>${esc(a.phone||'—')}</td><td>${esc(a.age||'—')}</td><td>${isO?'<span class="badge">Owner</span>':'<span class="badge gray">Admin</span>'}</td><td style="display:flex;gap:6px;flex-wrap:wrap">${isO?'<span class="muted small">Locked</span>':`<button class="btn sm" data-act="admin-edit" data-id="${esc(a.email)}">Edit</button><button class="btn sm ghost" data-act="del-admin" data-id="${esc(a.email)}">Remove</button>`}</td></tr>`; }).join('')}
     </tbody></table></div>
   `;
 }
@@ -2767,7 +2770,7 @@ document.addEventListener('click', (e)=>{
   if (act==='admin-edit'){ if(!isOwner()){toast('Sirf owner edit kar sakta hai','err');return;} go('admin-edit', el.dataset.id); return; }
   if (act==='admin-photo'){ if(!isOwner()){toast('Sirf owner','err');return;} const email=el.dataset.id; const inp=document.createElement('input'); inp.type='file'; inp.accept='image/*'; inp.onchange=async e=>{ const f=e.target.files[0]; if(!f)return; let d=await readFileAsDataURL(f); d=await compressImageDataURL(d,256,0.7); const admins=DB.admins(); const i=admins.findIndex(a=>a.email===email); if(i>=0){ admins[i].photo=d; DB.setAdmins(admins); toast('Photo updated'); go('adminpanel'); }}; inp.click(); return; }
   if (act==='admin-photo-rm'){ if(!isOwner()){toast('Sirf owner','err');return;} const email=el.dataset.id; const admins=DB.admins(); const i=admins.findIndex(a=>a.email===email); if(i>=0){ delete admins[i].photo; DB.setAdmins(admins); toast('Photo removed'); go('adminpanel'); } return; }
-  if (act==='admin-save'){ if(!isOwner()){toast('Sirf owner','err');return;} const email=el.dataset.id; const admins=DB.admins(); const i=admins.findIndex(a=>a.email===email); if(i>=0){ admins[i].name=$('#aName').value.trim(); admins[i].phone=$('#aPhone').value.trim(); admins[i].email=$('#aEmail').value.trim().toLowerCase(); DB.setAdmins(admins); toast('Saved'); go('adminpanel'); } return; }
+  if (act==='admin-save'){ if(!isOwner()){toast('Sirf owner','err');return;} const email=el.dataset.id; const admins=DB.admins(); const i=admins.findIndex(a=>a.email===email); if(i>=0){ admins[i].name=$('#aName').value.trim(); admins[i].phone=$('#aPhone').value.trim(); admins[i].email=$('#aEmail').value.trim().toLowerCase(); if($('#aAge')) admins[i].age=$('#aAge').value.trim(); DB.setAdmins(admins); toast('Saved'); go('adminpanel'); } return; }
   if (act==='prof-photo'){ if(!isAdmin())return; const inp=document.createElement('input'); inp.type='file'; inp.accept='image/*'; inp.onchange=async e=>{ const f=e.target.files[0]; if(!f)return; let d=await readFileAsDataURL(f); d=await compressImageDataURL(d,256,0.7); const admins=DB.admins(); const u=currentUser(); const i=admins.findIndex(a=>(a.email===u.email)||(a.userId===u.userId)); if(i>=0){ admins[i].photo=d; DB.setAdmins(admins); if(getSession() && getSession().email===admins[i].email){ const s2=getSession(); s2.photo=d; localStorage.setItem(LS.session, JSON.stringify(s2)); } toast('Photo updated'); renderShell(); go('myprofile'); }}; inp.click(); return; }
   if (act==='prof-photo-rm'){ if(!isAdmin())return; const admins=DB.admins(); const u=currentUser(); const i=admins.findIndex(a=>(a.email===u.email)||(a.userId===u.userId)); if(i>=0){ delete admins[i].photo; DB.setAdmins(admins); const ss=getSession(); if(ss){ delete ss.photo; localStorage.setItem(LS.session, JSON.stringify(ss)); } toast('Photo removed'); renderShell(); go('myprofile'); } return; }
   if (act==='prof-save'){ if(!isAdmin())return; const admins=DB.admins(); const u=currentUser(); const i=admins.findIndex(a=>(a.email===u.email)||(a.userId===u.userId)); if(i<0)return; const name=$('#profName')?.value||''; const phone=$('#profPhone')?.value||''; if(isOwner() || admins[i].email===u.email){ admins[i].name=name.trim(); admins[i].phone=phone.trim(); DB.setAdmins(admins); const ss=getSession(); if(ss){ ss.name=name.trim(); ss.phone=phone.trim(); if(admins[i].photo) ss.photo=admins[i].photo; localStorage.setItem(LS.session, JSON.stringify(ss)); } toast('Profile updated successfully'); renderShell(); go('myprofile'); } else toast('Not allowed','err'); return; }
@@ -3182,7 +3185,7 @@ function padCustom(custom){
    USERS create
    ============================================================ */
 /* ek hi jagah se admin request banti hai — owner form aur public "request access" dono */
-async function createAdminRequest(name, email, phone, requestedBy){
+async function createAdminRequest(name, email, phone, age, photo, requestedBy){
   email = String(email||'').trim().toLowerCase();
   if (!isEmail(email)) return { error:'Valid email ID daalo' };
   if (adminByEmail(email)) return { error:'Ye email pehle se admin hai' };
@@ -3191,8 +3194,8 @@ async function createAdminRequest(name, email, phone, requestedBy){
   const salt = uid();
   const rec = {
     email, name:String(name||'').trim() || email.split('@')[0], phone:String(phone||'').trim(),
-    userId, status:'pending', salt, passHash: await hashPass(tempPass, salt), tempPass,
-    createdAt:Date.now(), verified:false, requestedBy: requestedBy || 'public'
+    age: age||'', photo: photo||'', userId, status:'active', salt, passHash: await hashPass(tempPass, salt), tempPass,
+    createdAt:Date.now(), verified:true, requestedBy: requestedBy || 'owner'
   };
   const admins = DB.admins(); admins.push(rec); DB.setAdmins(admins);
   return { rec };
@@ -3200,12 +3203,17 @@ async function createAdminRequest(name, email, phone, requestedBy){
 
 async function addAdmin(form){
   const E = form.elements;
-  if (!isOwner()){ toast('Sirf owner (pehla admin) naya admin add kar sakta hai','err'); return; }
-  const out = await createAdminRequest(E.name.value, E.email.value, E.phone.value, currentUser().email);
+  if (!isOwner()){ toast('Sirf owner naya admin add kar sakta hai','err'); return; }
+  let photo = '';
+  const photoFile = E.photo && E.photo.files && E.photo.files[0];
+  if (photoFile){
+    try { photo = await compressImageDataURL(await readFileAsDataURL(photoFile), 256, 0.7); } catch(e){}
+  }
+  const out = await createAdminRequest(E.name.value, E.email.value, E.phone.value, E.age.value, photo, currentUser().email);
   if (out.error){ toast(out.error,'err'); return; }
   const rec = out.rec;
   state.newCreds = { userId:rec.userId, tempPass:rec.tempPass, name:rec.name, email:rec.email, mail: credsMailto(rec) };
-  toast('Admin request ban gaya — approve karo','ok');
+  toast('Admin ban gaya — credentials dekho','ok');
   go('users');
 }
 
