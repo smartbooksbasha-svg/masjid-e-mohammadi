@@ -264,6 +264,7 @@ function toast(msg, type){
 
 /* ---------------- caption helper icons (inline SVG) ---------------- */
 const ICON = {
+  image:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>',
   search:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>',
   camera:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>',
   exit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>',
@@ -2661,6 +2662,8 @@ function afterRender(view){
     setTimeout(()=>{
       const pf2 = $('#findPhoneForm');
       if (pf2 && !pf2._boundFind){ pf2._boundFind=true; pf2.addEventListener('submit',e=>{ e.preventDefault(); lookupByPhone(pf2.elements.phone.value); }); }
+      const qf = $('#qrFile');
+      if (qf && !qf._bound){ qf._bound=true; qf.addEventListener('change',e=>{ const f=e.target.files&&e.target.files[0]; if(f) scanQrImage(f); e.target.value=''; }); }
     }, 50);
   }
   if (view==='adminpanel'){
@@ -3293,8 +3296,11 @@ function viewFind(){
       <div class="card">
         <div class="sec-title" style="margin-top:0">By QR scan</div>
         <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
-          <button class="btn ghost" type="button" data-act="scan-qr">${ICON.camera} Scan QR</button>
-          <span class="muted small">Camera se QR scan karke seedha details khol do.</span>
+          <button class="btn ghost" type="button" data-act="scan-qr">${ICON.camera} Scan from camera</button>
+          <label class="btn ghost" style="cursor:pointer">${ICON.image||ICON.camera} Upload QR image
+            <input type="file" id="qrFile" accept="image/*" hidden />
+          </label>
+          <span class="muted small">Camera ya gallery se QR scan karke seedha details khol do.</span>
         </div>
         <video id="qrVideo" class="qr-video" playsinline></video>
         <canvas id="qrCanvas" hidden></canvas>
@@ -3307,6 +3313,35 @@ function viewFind(){
 }
 
 let qrStream = null, qrTimer = null;
+
+async function scanQrImage(file){
+  const msg = $('#qrScanMsg'); if(!msg) return;
+  if (!file) return;
+  if (typeof jsQR !== 'function'){ msg.textContent='QR scanner load nahi hua.'; return; }
+  msg.textContent='QR image scan ho raha hai...';
+  try {
+    const img = new Image();
+    img.onload = ()=>{
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth; canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img,0,0);
+      try {
+        const data = ctx.getImageData(0,0,canvas.width,canvas.height);
+        const res = jsQR(data.data, data.width, data.height);
+        if (res && res.data){
+          msg.textContent='QR mila';
+          handleQrFind(res.data);
+        } else {
+          msg.textContent='Is image me QR nahi mila. Dusri image try karo.';
+        }
+      } catch(e){ msg.textContent='Scan fail hua.'; }
+    };
+    img.onerror = ()=>{ msg.textContent='Image load nahi hua.'; };
+    img.src = URL.createObjectURL(file);
+  } catch(e){ msg.textContent='Scan nahi ho saka.'; }
+}
+
 async function startQrScan(){
   const video = $('#qrVideo'), msg = $('#qrScanMsg');
   if (!video) return;
