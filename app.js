@@ -101,15 +101,62 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&am
 function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
 function pad(n,l){ return String(n).padStart(l,'0'); }
 
+/* PBKDF2 (1,20,000 rounds) — offline admin password kabhi plain/1-round store nahi hota */
+const PBKDF2_ITER = 120000;
+const _hex = buf => Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
 async function hashPass(pw, salt){
-  const raw = salt + '::' + pw;
-  if (window.crypto && crypto.subtle && crypto.subtle.digest){
-    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(raw));
-    return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
-  }
+  const raw = String(salt||'') + '::' + String(pw||'');
+  try {
+    if (window.crypto && crypto.subtle && crypto.subtle.importKey){
+      const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(raw), 'PBKDF2', false, ['deriveBits']);
+      const bits = await crypto.subtle.deriveBits({ name:'PBKDF2', salt:new TextEncoder().encode('memc'), iterations:PBKDF2_ITER, hash:'SHA-256' }, key, 256);
+      return 'pbkdf2$' + PBKDF2_ITER + '$' + _hex(bits);
+    }
+    if (window.crypto && crypto.subtle && crypto.subtle.digest){
+      const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(raw));
+      return _hex(buf);                       // purana format (compat)
+    }
+  } catch(e){}
   let h = 2166136261; for (let i=0;i<raw.length;i++){ h ^= raw.charCodeAt(i); h = Math.imul(h, 16777619); }
   return 'fnv' + (h>>>0).toString(16);
 }
+/* stored hash (naya ya purana) se password check */
+async function checkPass(pw, admin){
+  const stored = String((admin && admin.passHash) || '');
+  const salt = (admin && admin.salt) || '';
+  if (!stored) return false;
+  if (stored.indexOf('pbkdf2$') === 0){
+    const iter = Number(stored.split('$')[1]) || PBKDF2_ITER;
+    const raw = String(salt) + '::' + String(pw||'');
+    try {
+      const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(raw), 'PBKDF2', false, ['deriveBits']);
+      const bits = await crypto.subtle.deriveBits({ name:'PBKDF2', salt:new TextEncoder().encode('memc'), iterations:iter, hash:'SHA-256' }, key, 256);
+      return 'pbkdf2$' + iter + '$' + _hex(bits) === stored;
+    } catch(e){ return false; }
+  }
+  /* purane records: plain sha256 hex ya 'fnv...' */
+  const raw = String(salt) + '::' + String(pw||'');
+  if (stored.indexOf('fnv') === 0){
+    let h = 2166136261; for (let i=0;i<raw.length;i++){ h ^= raw.charCodeAt(i); h = Math.imul(h, 16777619); }
+    return 'fnv' + (h>>>0).toString(16) === stored;
+  }
+  try {
+    if (window.crypto && crypto.subtle && crypto.subtle.digest){
+      const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(raw));
+      return _hex(buf) === stored;
+    }
+  } catch(e){}
+  return false;
+}
+
+/* login brute-force lock: 5 galat try = 60 second rukna (per device) */
+const LOGIN_TRIES = { n:0, until:0 };
+function loginLocked(){ return Date.now() < LOGIN_TRIES.until; }
+function loginFailed(){
+  LOGIN_TRIES.n = (LOGIN_TRIES.n || 0) + 1;
+  if (LOGIN_TRIES.n >= 5){ LOGIN_TRIES.until = Date.now() + 60000; LOGIN_TRIES.n = 0; }
+}
+function loginOk(){ LOGIN_TRIES.n = 0; LOGIN_TRIES.until = 0; }
 function ageFromDob(dob){
   if (!dob) return null; const d = new Date(dob); if (isNaN(d)) return null;
   const t = new Date(); let a = t.getFullYear()-d.getFullYear();
@@ -157,6 +204,7 @@ const DB = {
 function getSession(){ try{ return JSON.parse(localStorage.getItem(LS.session)||'null'); }catch(e){ return null; } }
 function setSession(s){
   localStorage.setItem(LS.session, JSON.stringify(s));
+  try { cloudPulled = false; } catch(e){}
   if (!s || s.kind !== 'admin' || !s.email) return;
   const e = String(s.email).toLowerCase();
   /* pehla login = owner (agar owner set nahi hai) */
@@ -172,7 +220,7 @@ function setSession(s){
     if (ch) DB.setAdmins(admins);
   } catch(x){}
 }
-function clearSession(){ localStorage.removeItem(LS.session); }
+function clearSession(){ localStorage.removeItem(LS.session); try { cloudPulled = false; } catch(e){} }
 
 /* ---------- optional cloud (Supabase) ---------- */
 const CLOUD = {
@@ -199,8 +247,11 @@ function currentUser(){
 function isAdmin(){ migrateAdmins(); return !!currentUser(); }
 
 /* ---------------- theme ---------------- */
+const ICON_SUN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>';
+const ICON_MOON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>';
+function themeIcon(t){ return t==='night' ? ICON_MOON : ICON_SUN; }
 function applyTheme(t){ document.documentElement.setAttribute('data-theme', t); localStorage.setItem(LS.theme, t);
-  const b=$('#themeBtn'); if(b) b.textContent = t==='night' ? '☾ Night' : '☀ Day'; }
+  const b=$('#themeBtn'); if(b) b.innerHTML = themeIcon(t) + (t==='night' ? ' Night' : ' Day'); }
 function toggleTheme(){ applyTheme(document.documentElement.getAttribute('data-theme')==='night' ? 'day' : 'night'); }
 applyTheme(localStorage.getItem(LS.theme) || 'day');
 
@@ -221,7 +272,16 @@ const ICON = {
   home:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5 12 3l9 6.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>',
   mosque:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2c2.5 2.4 4 4.2 4 6a4 4 0 0 1-8 0c0-1.8 1.5-3.6 4-6z"/><path d="M4 21v-6a8 8 0 0 1 16 0v6"/><path d="M9 21v-4a3 3 0 0 1 6 0v4"/><path d="M2 21h20"/></svg>',
   doc:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>',
-  out:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>'
+  out:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>',
+  dl:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><polyline points="7 11 12 16 17 11"/><path d="M4 20h16"/></svg>',
+  print:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>',
+  cloud:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 17H7A5 5 0 0 1 7 7a6 6 0 0 1 11.3 1.7A4 4 0 0 1 18 17z"/></svg>',
+  refresh:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><polyline points="21 3 21 9 15 9"/></svg>',
+  mail:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><polyline points="2 7 12 13 22 7"/></svg>',
+  sun:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
+  moon:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>',
+  clipboard:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 4h6a1 1 0 0 1 1 1v1H8V5a1 1 0 0 1 1-1z"/><path d="M16 6h2a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h2"/><path d="M8 11h8M8 15h5"/></svg>',
+  check:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>'
 };
 
 /* ============================================================
@@ -321,7 +381,7 @@ function renderLogin(){
         <span class="hint">Owner ne jo User ID di hai (ya registered email) — dono chalega</span></div>
       <div class="field"><label>Password</label><input class="inp" name="pass" type="password" required autocomplete="current-password" /></div>
       <div class="field"><label>Captcha — answer the sum</label>
-        <div class="captcha-box"><div class="captcha-q" id="captchaQ"></div><button type="button" class="icon-btn" id="captchaReload" aria-label="New captcha">↻</button></div>
+        <div class="captcha-box"><div class="captcha-q" id="captchaQ"></div><button type="button" class="icon-btn" id="captchaReload" aria-label="New captcha">${ICON.refresh}</button></div>
         <input class="inp" name="captcha" inputmode="numeric" required placeholder="Answer" style="margin-top:6px" />
       </div>
       <div id="loginAlert"></div>
@@ -341,6 +401,10 @@ function renderLogin(){
   $('#loginForm').addEventListener('submit', async (e)=>{
     e.preventDefault();
     const E = e.target.elements, alertBox = $('#loginAlert');
+    if (loginLocked()){
+      const left = Math.ceil((LOGIN_TRIES.until - Date.now())/1000);
+      alertBox.innerHTML='<div class="alert err">Bahut zyada galat try — <b>'+left+' second</b> ruk jao.</div>'; return;
+    }
     const ident = E.email.value.trim(), pass = E.pass.value;
     if (parseInt(E.captcha.value,10) !== capA+capB){ alertBox.innerHTML='<div class="alert err">Captcha answer is wrong.</div>'; newCaptcha(); E.captcha.value=''; return; }
     const found = findAdminByIdentifier(ident);
@@ -354,7 +418,8 @@ function renderLogin(){
       const c = await CLOUD.get();
       if (!c){ alertBox.innerHTML='<div class="alert err">Cloud connect nahi hua — internet check karo.</div>'; return; }
       const { error } = await c.auth.signInWithPassword({ email, password: pass });
-      if (error){ alertBox.innerHTML='<div class="alert err">'+esc(error.message)+'</div>'; return; }
+      if (error){ loginFailed(); alertBox.innerHTML='<div class="alert err">'+esc(error.message)+'</div>'; return; }
+      loginOk();
       await cloudClaimAdmin(email, '', '');
       if (!adminByEmail(email)){
         const admins = DB.admins();
@@ -367,8 +432,12 @@ function renderLogin(){
 
     const admin = adminByEmail(email);
     if (!admin){ alertBox.innerHTML='<div class="alert err">Is email se koi admin nahi hai.</div>'; newCaptcha(); return; }
-    const h = await hashPass(pass, admin.salt);
-    if (h !== admin.passHash){ alertBox.innerHTML='<div class="alert err">Password galat hai.</div>'; newCaptcha(); return; }
+    if (!(await checkPass(pass, admin))){
+      loginFailed();
+      alertBox.innerHTML='<div class="alert err">Password galat hai.' + (loginLocked()?' <b>60 second ruk jao.</b>':'') + '</div>';
+      newCaptcha(); return;
+    }
+    loginOk();
     pending = { kind:'login', email, code:newCode(), expires:Date.now()+10*60*1000 };
     renderCodeStep();
   });
@@ -413,7 +482,7 @@ function renderRequestSent(rec){
     </div>
     <p class="muted small" style="margin-top:10px">Owner ko request email/WhatsApp par bhejni hai? Ye button dabao.</p>
     <div style="display:flex;gap:10px;flex-wrap:wrap">
-      <a class="btn" href="${esc(mail)}">✉ Owner ko email bhejo</a>
+      <a class="btn" href="${esc(mail)}">${ICON.mail} Owner ko email bhejo</a>
       <a class="btn ghost" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent('Masjid Survey admin request\nNaam: '+rec.name+'\nEmail: '+rec.email+'\nUser ID: '+rec.userId)}">WhatsApp</a>
       <button class="btn ghost" data-act="auth-cancel">Login par jao</button>
     </div>`);
@@ -705,9 +774,88 @@ const ADMIN_FAM_COLS = PUB_FAM_COLS + ',address,phone';
 const MEMBER_COLS = ['relation','name','father_name','mother_name','gender','dob','education','education_level','occupation','sector','religious','marital_status','children','disability','schemes','scheme_name','docs'];
 const MEMBER_TO_JS = { father_name:'fatherName', mother_name:'motherName', education_level:'educationLevel', marital_status:'maritalStatus', scheme_name:'schemeName' };
 
+/* public view ke liye ANONYMOUS copy — na naam, na phone, na pata, na notes */
+const ANON_MEMBER_FIELDS = ['gender','dob','educationLevel','occupation','religious','maritalStatus','children','disability','schemes','docs'];
+function anonymizeFamily(f, i){
+  return {
+    id:'p' + (i + 1),
+    street:f.street || '',
+    houseType:f.houseType || 'moulding',
+    createdAt:f.createdAt || 0,
+    docs:{}, custom:[],
+    members:(f.members||[]).filter(m=>String(m.name||'').trim() || m.gender).map(m=>{
+      const o = {}; ANON_MEMBER_FIELDS.forEach(k=>{ o[k] = m[k]; });
+      return o;
+    })
+  };
+}
+function publicPayload(){
+  const fams = DB.families().map(anonymizeFamily);
+  const mj = DB.masjid() || {};
+  return {
+    v:4,
+    at:new Date().toISOString(),
+    families:fams,
+    masjid:{ name:mj.name||'', established:mj.established||'', address:mj.address||'', phone:mj.phone||'',
+             imam:mj.imam||'', muazzin:mj.muazzin||'', area:mj.area||'', capacity:mj.capacity||'',
+             rooms:mj.rooms||'', madrasa:mj.madrasa||'', note:mj.note||'', photos:mj.photos||[],
+             email:mj.email||'' }
+  };
+}
+
 const SYNC = {
   on(){ return CLOUD.enabled(); },
   famCols(){ return isAdmin() ? ADMIN_FAM_COLS : PUB_FAM_COLS; },
+  /* public snapshot = jo anon padhta hai (single row, anonymous) */
+  async publishSnapshot(){
+    const c = await CLOUD.get(); if (!c || !isAdmin()) return false;
+    try {
+      const { error } = await c.from('public_snapshot').upsert({ id:true, data:publicPayload(), updated_at:new Date().toISOString() });
+      return !error;
+    } catch(e){ return false; }
+  },
+  async pullPublic(){
+    const c = await CLOUD.get(); if (!c) return false;
+    try {
+      const { data, error } = await c.from('public_snapshot').select('data').limit(1);
+      if (error) throw error;
+      const snap = data && data[0] && data[0].data;
+      /* snapshot abhi publish nahi hua (ya SQL v4 nahi chala) — purana public read try karo
+         taaki site khali na dikhe. SQL v4 chalne ke baad ye raasta khud band ho jaata hai. */
+      if (!snap || !Array.isArray(snap.families) || !snap.families.length) return await this.pullPublicLegacy();
+      PUBDATA = {
+        families:snap.families.map((f,i)=>Object.assign({}, f, {
+          members:(f.members||[]).map((m,j)=>Object.assign({ id:'m'+i+'_'+j }, m))
+        })),
+        masjid:snap.masjid || null
+      };
+      try { localStorage.setItem('memc_pub', JSON.stringify(PUBDATA)); } catch(e){}
+      return true;
+    } catch(e){ return false; }
+  },
+  /* fallback: SQL v4 se pehle wala public read (sirf anon-safe columns) */
+  async pullPublicLegacy(){
+    const c = await CLOUD.get(); if (!c) return false;
+    try {
+      const { data, error } = await c.from('families').select(PUB_FAM_COLS + ',members(gender,dob,education_level,occupation,religious,marital_status,children,disability,schemes,docs)');
+      if (error || !data || !data.length) return false;
+      PUBDATA = {
+        families: data.map((f,i)=>({
+          id:'p' + (i+1), street:f.street||'', houseType:f.house_type||'moulding', createdAt:f.created_at?Date.parse(f.created_at):0,
+          docs:{}, custom:[], members:(f.members||[]).map((m,j)=>({
+            id:'m'+i+'_'+j, gender:m.gender||'', dob:m.dob||'', educationLevel:m.education_level||'',
+            occupation:m.occupation||'', religious:m.religious||'', maritalStatus:m.marital_status||'',
+            children:m.children||'', disability:m.disability||'', schemes:m.schemes||{}, docs:m.docs||{}
+          }))
+        })),
+        masjid:null
+      };
+      try { const { data:mj } = await c.from('masjid').select('name,established,address,phone,imam,muazzin,area,capacity,rooms,madrasa,note,photos').limit(1);
+        if (mj && mj[0]) PUBDATA.masjid = mj[0]; } catch(e){}
+      try { localStorage.setItem('memc_pub', JSON.stringify(PUBDATA)); } catch(e){}
+      return true;
+    } catch(e){ return false; }
+  },
   async pull(){
     const c = await CLOUD.get(); if (!c) return false;
     try {
@@ -727,6 +875,8 @@ const SYNC = {
       if (fams.length) DB.setFamilies(fams);
       const { data: mj } = await c.from('masjid').select('*').limit(1);
       if (mj && mj[0]) DB.setMasjid(mj[0]);
+      /* public snapshot ko fresh rakho (anon sirf yahi padhta hai) */
+      this.publishSnapshot();
       return true;
     } catch(e){ return false; }
   },
@@ -748,19 +898,20 @@ const SYNC = {
         children:String(m.children||''), disability:m.disability||'no', schemes:m.schemes||{}, scheme_name:m.schemeName||'', docs:m.docs||{}
       }));
       if (rows.length){ const { error: e2 } = await c.from('members').insert(rows); if (e2) throw e2; }
+      this.publishSnapshot();
       return true;
     } catch(e){ return false; }
   },
   async delFamily(id){
     const c = await CLOUD.get(); if (!c) return false;
-    try { const { error } = await c.from('families').delete().eq('id', id); if (error) throw error; return true; } catch(e){ return false; }
+    try { const { error } = await c.from('families').delete().eq('id', id); if (error) throw error; this.publishSnapshot(); return true; } catch(e){ return false; }
   },
   async saveMasjid(m){
     const c = await CLOUD.get(); if (!c) return false;
     try {
       const row = Object.assign({}, m, { id:true, updated_at:new Date().toISOString() });
       const { error } = await c.from('masjid').upsert(row);
-      if (error) throw error; return true;
+      if (error) throw error; this.publishSnapshot(); return true;
     } catch(e){ return false; }
   }
 };
@@ -774,7 +925,8 @@ function enterApp(){
   go(state.view, state.param);
   if (SYNC.on() && !cloudPulled){
     cloudPulled = true;
-    SYNC.pull().then(ok=>{ if (ok) go(state.view, state.param); });
+    const job = isAdmin() ? SYNC.pull() : SYNC.pullPublic();
+    job.then(ok=>{ if (ok) go(state.view, state.param); });
   }
 }
 
@@ -850,8 +1002,15 @@ function houseTypeKey(t){
 }
 function streetName(f){ return (String(f.street||'').trim()) || 'Unassigned'; }
 
+/* visitor (non-admin) ke liye sirf ANONYMOUS snapshot — admin ka local data chhua nahi jaata */
+let PUBDATA = null;
+try { PUBDATA = JSON.parse(localStorage.getItem('memc_pub') || 'null'); } catch(e){ PUBDATA = null; }
+function sourceFamilies(){
+  if (!isAdmin() && PUBDATA && Array.isArray(PUBDATA.families) && PUBDATA.families.length) return PUBDATA.families;
+  return DB.families();
+}
 function computeStats(){
-  const fams = DB.families();
+  const fams = sourceFamilies();
   const s = {
     houses: fams.length,
     families: fams.length,
@@ -1041,7 +1200,7 @@ function masjidHero(){
       <div class="mh-grid">
         <div class="mh-photos">
           ${photos.length ? photos.map((p,i)=>`<button class="mh-photo ${i===0?'lead':''}" type="button" data-act="photo" data-src="${esc(p.src||p)}"><img src="${esc(p.src||p)}" alt="Masjid photo ${i+1}" loading="lazy" /></button>`).join('')
-            : `<div class="mh-empty"><span class="mh-crescent">☾</span><b>Masjid photos</b><span>Admin login karke Masjid Profile me photos add hongi.</span></div>`}
+            : `<div class="mh-empty"><span class="mh-crescent">${ICON_MOON}</span><b>Masjid photos</b><span>Admin login karke Masjid Profile me photos add hongi.</span></div>`}
         </div>
         <div class="mh-text">
           <div class="mh-kicker">${esc(CFG.ORG_SUB||'Khidmath Committee')}</div>
@@ -1149,7 +1308,7 @@ function viewDashboard(){
       <tr class="totals"><td>Total</td><td>${s.houses}</td><td>${s.houseTypes.moulding}</td><td>${s.houseTypes.cement}</td><td>${s.houseTypes.palm}</td><td>${s.houseTypes.other}</td></tr>
     </tbody></table></div>` : `<p class="muted small" style="margin-top:12px">No streets yet — street names appear here as households are added.</p>`;
 
-  const empty = s.houses ? '' : `<div class="empty" style="margin-top:18px"><div class="big">🕌</div><h3>No households surveyed yet</h3><p>Add the first household, ya sample data load karke dashboard dekh lo.</p>
+  const empty = s.houses ? '' : `<div class="empty" style="margin-top:18px"><div class="big">${ICON.mosque}</div><h3>No households surveyed yet</h3><p>Add the first household, ya sample data load karke dashboard dekh lo.</p>
      <div style="margin-top:16px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
      ${isAdmin() ? '<button class="btn" data-act="goto" data-view="add">Add first household</button>' : ''}
      <button class="btn ghost" data-act="load-sample">Load sample data</button></div></div>`;
@@ -1157,17 +1316,17 @@ function viewDashboard(){
   const backupBanner = (isAdmin() && needsBackup()) ? `
     <div class="alert warn" style="margin:0 0 14px;display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap">
       <span><b>Backup reminder:</b> ${esc(backupHint())} — ek backup file download karke Drive me rakho.</span>
-      <button class="btn sm" type="button" data-act="backup-json">⭳ Backup now</button>
+      <button class="btn sm" type="button" data-act="backup-json">${ICON.dl} Backup now</button>
     </div>` : '';
-  return `${backupBanner}${heroBlock}
-
+  return `${backupBanner}
     <div class="page-head"><div><h1>Survey Dashboard</h1><p>Mohalla ke ghar, raste aur logon ka poora hisaab — live totals.</p></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         ${isAdmin()
-          ? `<button class="btn ghost sm" data-act="export-excel">⭳ Excel</button>
-             <button class="btn ghost sm" data-act="print-all">⎙ PDF / Print</button>`
+          ? `<button class="btn ghost sm" data-act="export-excel">${ICON.dl} Excel</button>
+             <button class="btn ghost sm" data-act="print-all">${ICON.print} PDF / Print</button>`
           : `<span class="badge gray">Public view · read only</span>`}
       </div></div>
+    ${heroBlock}
 
     <div class="kpi-row">${kpis.map(k=>`<div class="stat"><div class="ic">${k[0]}</div><div class="n">${k[1]}</div><div class="l">${k[2]}</div></div>`).join('')}</div>
     ${empty}
@@ -1320,7 +1479,7 @@ function viewFamilies(){
   const pre = state.param ? esc(state.param) : '';
   return `
     <div class="page-head"><div><h1>Households</h1><p>${fams.length} households on record.</p></div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">${isAdmin()?`<button class="btn ghost sm" data-act="export-excel">⭳ Excel</button><button class="btn ghost sm" data-act="print-all">⎙ PDF</button><button class="btn sm" data-act="goto" data-view="add">+ Add Household</button>`:''}</div></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">${isAdmin()?`<button class="btn ghost sm" data-act="export-excel">${ICON.dl} Excel</button><button class="btn ghost sm" data-act="print-all">${ICON.print} PDF</button><button class="btn sm" data-act="goto" data-view="add">+ Add Household</button>`:''}</div></div>
     <div class="toolbar">
       <input class="inp grow" id="famSearch" placeholder="Search household, Family ID, phone, street…" />
       <select class="inp" id="famStreetF" style="max-width:200px"><option value="">All streets</option>${streets.map(st=>`<option ${pre===st?'selected':''}>${esc(st)}</option>`).join('')}</select>
@@ -1331,7 +1490,7 @@ function viewFamilies(){
 }
 function emptyFamilies(){
   return `<div class="page-head"><div><h1>Households</h1><p>No households on record yet.</p></div></div>
-    <div class="card"><div class="empty"><div class="big">📋</div><h3>Start the survey</h3><p>Add your first household, or load sample data to explore.</p>
+    <div class="card"><div class="empty"><div class="big">${ICON.clipboard}</div><h3>Start the survey</h3><p>Add your first household, or load sample data to explore.</p>
       <div style="margin-top:16px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
       ${isAdmin()?`<button class="btn" data-act="goto" data-view="add">+ Add Household</button>`:''}
       <button class="btn ghost" data-act="load-sample">Load sample data</button></div></div></div>`;
@@ -1530,7 +1689,7 @@ function viewFamilyDetail(id){
   return `
     <div class="page-head"><div><h1>${esc(f.houseName||'Household')}</h1><p>${esc(streetName(f))}${f.houseNo?' · House '+esc(f.houseNo):''} · ${members.length} member(s)${canEdit?'':' · public view (phone hidden)'}</p></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        ${canEdit?`<button class="btn ghost sm" data-act="print-family" data-id="${esc(f.id)}">⎙ PDF</button>`:''}
+        ${canEdit?`<button class="btn ghost sm" data-act="print-family" data-id="${esc(f.id)}">${ICON.print} PDF</button>`:''}
         <button class="btn ghost sm" data-act="goto" data-view="families">← Back</button>
         ${canEdit?`<button class="btn sm" data-act="edit-family" data-id="${esc(f.id)}">Edit</button>`:''}
       </div></div>
@@ -1567,7 +1726,7 @@ function viewFamilyDetail(id){
     <div class="sec-title">Documents held</div>
     <div class="card">
       <div style="display:flex;flex-wrap:wrap;gap:8px">
-        ${[].concat(docsYes, customYes).length ? [].concat(docsYes,customYes).map(x=>`<span class="badge">✔ ${esc(x)}</span>`).join('') : '<span class="muted">No documents marked.</span>'}
+        ${[].concat(docsYes, customYes).length ? [].concat(docsYes,customYes).map(x=>`<span class="badge badge-ic">${ICON.check} ${esc(x)}</span>`).join('') : '<span class="muted">No documents marked.</span>'}
       </div>
     </div>
     ${f.notes?`<div class="sec-title">Notes</div><div class="card">${esc(f.notes)}</div>`:''}`;
@@ -1580,9 +1739,8 @@ function viewUsers(){
   if (!isAdmin()) return `<div class="empty"><h3>Admins only</h3><p>Ye page sirf admin ke liye hai.</p></div>`;
   const me = currentUser();
   const owner = ownerEmail();
-  const admins = DB.admins();
-  const pend = admins.filter(a=>adminStatus(a)==='pending');
-  const active = admins.filter(a=>adminStatus(a)==='active');
+  const pend = pendingAdmins();
+  const active = activeAdmins();
   const creds = state.newCreds;
   return `
     <div class="page-head"><div><h1>Admins</h1><p>Naya admin pehle <b>request</b> banta hai — owner approve karega tabhi login chalega.</p></div></div>
@@ -1597,7 +1755,7 @@ function viewUsers(){
         <div class="row"><span>Email</span><span class="mono">${esc(creds.email)}</span></div>
       </div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px">
-        <a class="btn sm" href="${esc(creds.mail)}">✉ Email owner ko bhejo</a>
+        <a class="btn sm" href="${esc(creds.mail)}">${ICON.mail} Email owner ko bhejo</a>
         <a class="btn ghost sm" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent('Masjid Survey admin login\nUser ID: '+creds.userId+'\nPassword: '+creds.tempPass)}">WhatsApp</a>
         <button class="btn ghost sm" data-act="copy-creds">Copy karo</button>
         <button class="btn ghost sm" data-act="close-creds">Band karo</button>
@@ -1605,7 +1763,7 @@ function viewUsers(){
       <p class="muted small" style="margin-top:8px">Approve karne ke baad hi ye login kaam karega — pehle "Pending requests" me Approve dabao.</p>
     </div>` : ''}
 
-    <div class="card" style="margin-top:16px">
+    <div class="card">
       <div class="card-h"><div><h3>Pending requests</h3><div class="hint">Owner approve karega tabhi access milega</div></div>
         <span class="badge ${pend.length?'':'gray'}">${pend.length}</span></div>
       ${pend.length ? `<div class="table-wrap" style="margin-top:12px"><table><thead><tr><th>User ID</th><th>Name</th><th>Email</th><th>Mobile</th><th>Requested</th><th></th></tr></thead><tbody>
@@ -1623,7 +1781,7 @@ function viewUsers(){
       : '<p class="muted small" style="margin-top:10px">Koi pending request nahi.</p>'}
     </div>
 
-    ${isOwner() ? `<div class="card" style="margin-top:16px">
+    ${isOwner() ? `<div class="card">
       <div class="sec-title" style="margin-top:0">Naya admin request banao</div>
       <form id="addAdminForm" class="grid g3">
         <div class="field"><label>Name</label><input class="inp" name="name" required /></div>
@@ -1632,7 +1790,7 @@ function viewUsers(){
         <div class="field" style="justify-content:flex-end"><button class="btn" type="submit">Create request</button></div>
       </form>
       <p class="muted small" style="margin-top:6px">Login ID aur password app khud banayegi — tumhe kuch sochna nahi.</p>
-    </div>` : `<div class="card" style="margin-top:16px"><p class="muted small" style="margin:0">Naya admin sirf owner add kar sakta hai. Owner: <b>${esc(owner||'—')}</b></p></div>`}
+    </div>` : `<div class="card"><p class="muted small" style="margin:0">Naya admin sirf owner add kar sakta hai. Owner: <b>${esc(owner||'—')}</b></p></div>`}
 
     <div class="sec-title">Active admins (${active.length})</div>
     <div class="table-wrap"><table><thead><tr><th>User ID</th><th>Email (login)</th><th>Name</th><th>Mobile</th><th>Added</th><th></th></tr></thead><tbody>
@@ -2003,6 +2161,7 @@ const MASJID_FIELDS = [
 ];
 
 function masjidData(){
+  if (!isAdmin() && PUBDATA && PUBDATA.masjid) return Object.assign({ photos: [] }, PUBDATA.masjid);
   const m = DB.masjid() || {};
   return Object.assign({ photos: [] }, m);
 }
@@ -2059,36 +2218,47 @@ function viewSettings(){
     <div class="card">
       <div class="sec-title" style="margin-top:0">Appearance</div>
       <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
-        <button class="toggle" data-act="toggle-theme" id="themeBtn2">☀ Day / ☾ Night</button>
+        <button class="toggle" data-act="toggle-theme" id="themeBtn2">${themeIcon(document.documentElement.getAttribute('data-theme'))} Day / Night</button>
         <span class="muted small">Emerald Lattice theme · day &amp; night.</span>
       </div>
     </div>
 
-    <div class="card" style="margin-top:16px">
+    <div class="card">
       <div class="sec-title" style="margin-top:0">Data &amp; backup</div>
       <div style="display:flex;gap:10px;flex-wrap:wrap">
-        <button class="btn ghost sm" data-act="export-excel">⭳ Export Excel (.xlsx)</button>
-        <button class="btn ghost sm" data-act="print-all">⎙ Export PDF / Print</button>
-        <button class="btn ghost sm" data-act="backup-json">⭳ Backup (JSON)</button>
+        <button class="btn ghost sm" data-act="export-excel">${ICON.dl} Export Excel (.xlsx)</button>
+        <button class="btn ghost sm" data-act="print-all">${ICON.print} Export PDF / Print</button>
+        <button class="btn ghost sm" data-act="backup-json">${ICON.dl} Backup (JSON)</button>
+        <button class="btn ghost sm" data-act="publish-public">${ICON.refresh} Public totals refresh</button>
         <button class="btn ghost sm" data-act="load-sample">Load sample data</button>
       </div>
       <p class="muted small" style="margin:12px 0 0">Last backup: <b>${esc(backupHint())}</b> · har hafte ek backup lena zaroori hai (file Google Drive / laptop me rakho).</p>
     </div>
 
-    <div class="card" style="margin-top:16px">
+    <div class="card">
       <div class="sec-title" style="margin-top:0">Restore &amp; Google Drive</div>
       <div style="display:flex;gap:10px;flex-wrap:wrap">
         <button class="btn ghost sm" data-act="restore-json">⭱ Restore from backup file</button>
-        <button class="btn ghost sm" data-act="drive-connect">☁ ${driveConnected()?'Drive connected ✔':'Connect Google Drive'}</button>
-        <button class="btn ghost sm" data-act="drive-backup">☁ Backup to Drive</button>
+        <button class="btn ghost sm" data-act="drive-connect">${ICON.cloud} ${driveConnected()?'Drive connected':'Connect Google Drive'}</button>
+        <button class="btn ghost sm" data-act="drive-backup">${ICON.cloud} Backup to Drive</button>
       </div>
       <input type="file" id="restoreFile" accept="application/json,.json" hidden />
       <p class="muted small" style="margin:12px 0 0">${esc(driveStatusText())}</p>
-      ${driveReady()?'':`<p class="muted small" style="margin-top:6px">Drive setup (ek baar, ~10 min): <span class="mono">console.cloud.google.com</span> → naya project → <b>APIs &amp; Services → Library</b> me <b>Google Drive API</b> enable → <b>OAuth consent screen</b> (External, apna email test user) → <b>Credentials → Create OAuth client ID → Web application</b> → <b>Authorized JavaScript origins</b> me <span class="mono">${esc(location.origin)}</span> daalo → Client ID copy karke <span class="mono">config.js</span> ke <span class="mono">GOOGLE_CLIENT_ID</span> me paste karo.</p>`}
+      ${driveReady()?'':`<details class="details">
+        <summary>Drive setup (ek baar, ~10 min)</summary>
+        <ol class="steps">
+          <li><a href="https://console.cloud.google.com/projectcreate" target="_blank" rel="noopener">console.cloud.google.com</a> par naya project banao.</li>
+          <li><b>APIs &amp; Services → Library</b> → <b>Google Drive API</b> → Enable.</li>
+          <li><b>OAuth consent screen</b> → External → apna Gmail test user me add karo.</li>
+          <li><b>Credentials → Create OAuth client ID → Web application</b>.</li>
+          <li><b>Authorized JavaScript origins</b> me <span class="mono">${esc(location.origin)}</span> daalo (bina slash).</li>
+          <li>Client ID copy karke <span class="mono">config.js</span> → <span class="mono">GOOGLE_CLIENT_ID</span> me paste karo, phir page refresh.</li>
+        </ol>
+      </details>`}
       <p class="muted small" style="margin-top:6px">Restore purana JSON backup wapas laata hai (is device ka data replace hota hai; admins sirf add hote hain).</p>
     </div>
 
-    <div class="card" style="margin-top:16px">
+    <div class="card">
       <div class="sec-title" style="margin-top:0">Cloud sync &amp; email (Supabase)</div>
       <p class="muted small">Status: <b style="color:${cloudOn?'var(--ok)':'var(--warn)'}">${cloudOn?'Connected':'Not connected — data is on this device only'}</b></p>
       <div class="kv" style="margin-top:10px">
@@ -2098,7 +2268,7 @@ function viewSettings(){
       ${cloudOn ? '' : `<p class="muted small" style="margin-top:10px">Public dashboard aur asli email code ke liye Supabase free project chahiye: <span class="mono">supabase.com</span> → naya project → Settings → API se <b>Project URL</b> + <b>anon key</b>, aur <span class="mono">supabase/schema.sql</span> run karo. Phir dono values <span class="mono">config.js</span> me daalo.</p>`}
     </div>
 
-    <div class="card" style="margin-top:16px">
+    <div class="card">
       <div class="sec-title" style="margin-top:0">Account</div>
       <div class="kv"><div class="row"><span>Name</span><span>${esc(u.name||'—')}</span></div>
         <div class="row"><span>User ID</span><span class="mono">${esc(u.userId||'—')}</span></div>
@@ -2113,7 +2283,19 @@ function viewSettings(){
       <button class="btn danger sm" data-act="admin-logout" style="margin-top:16px">Log out</button>
     </div>
 
-    <div class="card" style="margin-top:16px;border-color:var(--danger-brd)">
+    <div class="card">
+      <div class="sec-title" style="margin-top:0">Security</div>
+      <div class="kv">
+        <div class="row"><span>Public website</span><span>${cloudOn?'Sirf totals (naam/phone kabhi nahi)':'Local demo — cloud off'}</span></div>
+        <div class="row"><span>Database</span><span>${cloudOn?'Row-level security on':'—'}</span></div>
+        <div class="row"><span>Admin password</span><span>PBKDF2 (1,20,000 rounds)</span></div>
+        <div class="row"><span>Galat login</span><span>5 try ke baad 60s lock</span></div>
+        <div class="row"><span>Naya admin</span><span>Owner approval ke bina login nahi</span></div>
+      </div>
+      <p class="muted small" style="margin-top:10px">Public totals sirf anonymous snapshot se aate hain. Detail kisike paas nahi jaata — na public ko, na search engine ko. Poora security note: <span class="mono">SECURITY.md</span> (repo me).</p>
+    </div>
+
+    <div class="card" style="border-color:var(--danger-brd)">
       <div class="sec-title" style="margin-top:0;color:var(--danger)">Danger zone</div>
       <p class="muted small" style="margin-bottom:12px">Deletes all household records on this device. Admin accounts are kept.</p>
       <button class="btn danger sm" data-act="clear-data">Erase all household records</button>
@@ -2127,10 +2309,10 @@ document.addEventListener('click', (e)=>{
   const el = e.target.closest('[data-act]'); if(!el) return;
   const act = el.dataset.act;
   const id = el.dataset.id;
-  const ADMIN_ACTS = ['load-sample','clear-data','export-excel','print-all','backup-json','restore-json','drive-connect','drive-backup','edit-family','del-family','del-admin','saveMasjid','delPhoto','print-family','approve-admin','reject-admin','close-creds','copy-creds'];
+  const ADMIN_ACTS = ['load-sample','clear-data','export-excel','print-all','backup-json','restore-json','drive-connect','drive-backup','edit-family','del-family','del-admin','saveMasjid','delPhoto','print-family','approve-admin','reject-admin','close-creds','copy-creds','publish-public'];
   if (ADMIN_ACTS.includes(act) && !isAdmin()){ toast('Ye sirf admin kar sakta hai','err'); return; }
 
-  if (act==='toggle-theme') { toggleTheme(); const b=$('#themeBtn2'); if(b) b.textContent = document.documentElement.getAttribute('data-theme')==='night'?'☾ Night':'☀ Day'; return; }
+  if (act==='toggle-theme') { toggleTheme(); const b=$('#themeBtn2'); if(b){ const t=document.documentElement.getAttribute('data-theme'); b.innerHTML = themeIcon(t) + (t==='night'?' Night':' Day'); } return; }
   if (act==='goto'){ if (el.dataset.view==='add'){ state.draft=blankDraft(); go(el.dataset.view); } else go(el.dataset.view, el.dataset.param || el.dataset.street || null); return; }
   if (act==='auth-check'){ cloudLinkCheck(); return; }
   if (act==='magic-login'){
@@ -2211,6 +2393,12 @@ document.addEventListener('click', (e)=>{
     const txt = 'User ID: ' + (c.userId||'') + '\nPassword: ' + (c.tempPass||'') + '\nLogin: ' + location.href;
     try { navigator.clipboard.writeText(txt); toast('Copy ho gaya'); }
     catch(e){ toast('Copy nahi hua — haath se likh lo','err'); }
+    return;
+  }
+  if (act==='publish-public'){
+    if (!isAdmin()){ toast('Sirf admin','err'); return; }
+    if (!CLOUD.enabled()){ toast('Cloud off — public site ko totals nahi bheje ja sakte','err'); return; }
+    SYNC.publishSnapshot().then(ok=>toast(ok?'Public totals refresh ho gaye':'Refresh fail — schema v4 run hua hai?','' + (ok?'':'err')));
     return;
   }
   if (act==='drive-connect'){ driveConnect(); return; }
@@ -2336,7 +2524,7 @@ function afterRender(view){
   if (view==='add' && state.draft){ renderMembers(); }
   if (view==='detail'){ const f=DB.families().find(x=>x.id===state.param); const box=$('#qrBox'); if(f&&box) renderQR(box, f.id + ' | ' + (f.houseName||'')); }
   if (view==='families'){ renderFamilyList(); }
-  const tb=$('#themeBtn2'); if(tb) tb.textContent = document.documentElement.getAttribute('data-theme')==='night'?'☾ Night':'☀ Day';
+  const tb=$('#themeBtn2'); if(tb){ const t=document.documentElement.getAttribute('data-theme'); tb.innerHTML = themeIcon(t) + (t==='night'?' Night':' Day'); }
 }
 
 /* ---------------- QR ---------------- */
@@ -2496,7 +2684,7 @@ function summaryRows(){
   ].map(([group,metric,value])=>({ Group:group, Metric:metric, Total:value }));
 }
 function exportExcel(){
-  if (typeof XLSX === 'undefined'){ toast('Excel library not loaded (need internet once)','err'); return; }
+  if (typeof XLSX === 'undefined'){ toast('Excel library load nahi hui — page refresh karo','err'); return; }
   const rows = collectRows();
   if (!rows.length){ toast('No data to export','err'); return; }
   const wb = XLSX.utils.book_new();
@@ -2710,7 +2898,7 @@ async function driveConnect(){
   try {
     await driveToken(true);
     try { await driveEnsureFolder(DRIVE.token); } catch(e){}
-    toast('Google Drive connected ✔', 'ok');
+    toast('Google Drive connected', 'ok');
     try { go('settings'); } catch(e){}
   } catch(e){
     toast('Connect nahi hua — dobara try karo', 'err');

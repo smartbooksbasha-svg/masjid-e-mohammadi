@@ -185,3 +185,56 @@ Open: wire Supabase keys; real OTP SMS later.
   (Shan ka Gmail). Warna connect par `origin_mismatch` / `access_denied`.
 - sw cache `memc-app-v21`. Smoke 134/134 (harness GOOGLE_CLIENT_ID blank karke
   offline path + runtime-enabled path dono test karta hai).
+
+## Admin approval model (2026-10-27, v22 — FINAL)
+- Shan ka order: public se koi khud admin nahi ban sakta; naya admin ka **User ID +
+  temporary password app khud banati hai**, owner (Shan) approve karta hai, phir hi login.
+- `createAdminRequest(name,email,phone,requestedBy)` — ek hi jagah se request banti hai:
+  `userId = ADM-YYYY-NNNN` (`genUserId()`), `tempPass = genTempPass()` (9 chars),
+  `salt`+`passHash` (hashPass), `status:'pending'`, `tempPass` sirf tab tak jab tak
+  pehli baar login na ho (setSession me delete + `firstLoginAt`).
+- Owner = `ownerEmail()` (`memc_owner` localStorage, default = pehla admin;
+  pehle login par auto-set). `isOwner()` = currentUser.email === ownerEmail().
+- `isAdmin()` → `migrateAdmins()` bhi chalata hai: purane records me `userId` + `status:'active'` bhar deta hai.
+- Register/self-signup BAND: admins hone par `renderRegister()` → `renderRequestAccess()`
+  (`#reqForm`, no password) → `renderRequestSent()` (User ID + pending badge + mailto/WhatsApp).
+  Pehla admin (empty DB) hi normal register karta hai.
+- Login field = **User ID ya Email** (`findAdminByIdentifier`); pending account block
+  ("approval pending"). Cloud `signInWithPassword` ab bhi email se hota hai (ID se resolve).
+- Admins screen (owner only): Pending requests table → Approve / Reject; "Naya admin request
+  banao" form (name/email/mobile — koi password field nahi); Active admins table with User ID
+  + Owner badge; non-owner ko sirf info ("owner: email") dikhta hai, koi approve/add/remove nahi.
+- Approve par: `status:'active'`, cloud `signUp` (tempPass) chalta hai aur **owner app_users
+  row banata hai** (`user_id: data.user.id`) — RLS ke wajah se row owner hi likh sakta hai.
+- `cloudAutoLogin()` ab sirf approved admin ko andar leta hai: local record active ya
+  `cloudIsListed(email)` (app_users row), warna `signOut` + "approved list me nahi" message.
+- Settings → Account: User ID, login email, role (Owner/Admin), **Approval email (owner)**
+  editable (`#ownerForm`, owner only), log out.
+- `del-admin`, `approve-admin`, `reject-admin` sab owner-only guards ke saath.
+- sw cache `memc-app-v22`. Smoke **152/152** (21 naye asserts: migration, self-register band,
+  pending block, approve → login with user ID, tempPass clear, non-owner blocked).
+- i18n keys naye: `User ID / Email`, `Request access`, `Request admin access`, `Create first admin`.
+
+## v23 — security hardening (2026-10-27)
+- **Data leak band**: pehle anon key se koi bhi `families`/`members` ka poora data padh sakta tha.
+  Ab `supabase/security-v4.sql` (`revoke select ... from anon`) + naya **`public_snapshot`** table
+  (id boolean PK, single row, RLS: public read / admin write). Public site sirf snapshot padhti hai.
+- `publicPayload()` + `anonymizeFamily()`: sirf street/houseType/members survey fields — naam,
+  phone, pata, notes, docs, bank/waqf kabhi nahi. `sourceFamilies()` public ke liye PUBDATA
+  (`localStorage memc_pub`) deta hai, admin ke liye real data.
+- `SYNC.publishSnapshot()` (admin save par auto + Settings "Public totals refresh"),
+  `SYNC.pullPublic()` (snapshot), `SYNC.pullPublicLegacy()` (jab tak SQL v4 nahi chala —
+  site blank na ho). `setSession`/`clearSession` `cloudPulled` reset karte hain.
+- **PBKDF2** `hashPass()` (`pbkdf2$120000$hex`), `checkPass()` legacy sha256 + fnv bhi verify karta
+  hai (purane accounts lock nahi hote). Login lockout: 5 galat → 60s (`LOGIN_TRIES`).
+- **Vendored libs**: `vendor/qrcode.js`, `vendor/xlsx.full.min.js`; CDN hataye; `index.html` me
+  CSP (object-src none, base-uri self, frame-ancestors none) + referrer policy + robots.
+- CSS fixes: undefined `--accent-soft`/`--shadow-1` define kiye, card rhythm `#content .card`,
+  sticky `th`, mobile table `min-width:560px`, `@media(hover:none)` hover reset,
+  `prefers-reduced-motion`, 40px tap targets, `:focus-visible` ring, `.empty`, `.details/.steps`
+  (collapsible setup guide), emoji → inline SVG (`ICON.*`, `themeIcon()`).
+- Settings me naya **Security** card (public scope / RLS / PBKDF2 / lockout / approval).
+  `SECURITY.md` = poora model + verification queries + incident steps.
+- sw cache `memc-app-v23`. Smoke **176/176** (security payload, XSS, CSP/SQL asserts, PBKDF2 + lockout).
+- ⚠️ Trap: `applyTheme()` load par turant chalta hai — `ICON` const uske baad define hota hai,
+  isliye theme icons `ICON_SUN`/`ICON_MOON` (applyTheme se pehle) use karo, warna app boot par crash.
