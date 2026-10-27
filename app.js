@@ -2745,7 +2745,7 @@ function saveFamily(){
       if (fams.some(f=>f.id.toUpperCase()===custom)) return fail('Ye Family ID pehle se kisi ghar ke paas hai — koi aur do.');
       d.id = custom;
     } else {
-      d.id = nextFamilyId();
+      d.id = nextFamilyId(d.members ? d.members.length : 0);
     }
     d.createdAt = Date.now();
     d.createdBy = u.id;
@@ -2761,7 +2761,13 @@ function saveFamily(){
   go('detail', d.id);
 }
 function previewFamilyId(){ return PREFIX+'-'+new Date().getFullYear()+'-'+pad(DB.seq()+1,6); }
-function nextFamilyId(){ const n=DB.seq()+1; DB.setSeq(n); return PREFIX+'-'+new Date().getFullYear()+'-'+pad(n,6); }
+function nextFamilyId(membersCount){
+  const n=DB.seq()+1; DB.setSeq(n);
+  const year = new Date().getFullYear();
+  const formNo = pad(n, 3); // form number/order
+  const fm = pad(Number(membersCount)||0, 2);
+  return year + formNo + 'FM' + fm;
+}
 function padCustom(custom){
   const arr = Array.isArray(custom) ? custom.slice(0,CUSTOM_DOCS) : [];
   while (arr.length < CUSTOM_DOCS) arr.push({label:'', value:'no'});
@@ -3209,7 +3215,7 @@ function loadSample(){
   ];
   const fams = DB.families();
   sample.forEach((s,i)=>{
-    const id = nextFamilyId();
+    const id = nextFamilyId(state.draft && state.draft.members ? state.draft.members.length : 0);
     const docs = {}; DOC_TYPES.forEach(([k],idx)=>{ docs[k] = (idx % 2 === 0 && i % 2 === 0) ? 'yes' : 'no'; });
     fams.push(Object.assign({ id, createdAt:Date.now()- (sample.length-i)*86400000, createdBy:'sample', notes:'Sample record', docs, custom:padCustom([]) }, s));
   });
@@ -3314,12 +3320,12 @@ function viewFind(){
 
     <div class="grid g2">
       <div class="card">
-        <div class="sec-title" style="margin-top:0">By phone number</div>
+        <div class="sec-title" style="margin-top:0">By Family ID</div>
         <form id="findPhoneForm">
-          <div class="field"><label>Mobile number</label><input class="inp" name="phone" inputmode="numeric" placeholder="eg 9876543210" autocomplete="tel" /></div>
+          <div class="field"><label>Family ID</label><input class="inp" name="phone" placeholder="eg 2026001FM03" autocomplete="off" /></div>
           <button class="btn" type="submit">${ICON.search} Find</button>
         </form>
-        <p class="muted small" style="margin-top:10px">Last 4 digits bhi chal jaate hain agar full number fit na ho.</p>
+        <p class="muted small" style="margin-top:10px">Family ID daalo aur details dekho (sirf read-only).</p>
       </div>
       <div class="card">
         <div class="sec-title" style="margin-top:0">By QR scan</div>
@@ -3328,7 +3334,7 @@ function viewFind(){
           <label class="btn ghost" style="cursor:pointer">${ICON.image||ICON.camera} Upload QR image
             <input type="file" id="qrFile" accept="image/*" hidden />
           </label>
-          <span class="muted small">Camera ya gallery se QR scan karke seedha details khol do.</span>
+          <span class="muted small">Camera ya gallery se QR scan karke Family ID se details khol do.</span>
         </div>
         <video id="qrVideo" class="qr-video" playsinline></video>
         <canvas id="qrCanvas" hidden></canvas>
@@ -3440,27 +3446,18 @@ async function lookupById(id){
     box.innerHTML = '<div class="card"><div class="alert err">Lookup nahi hua. Thodi der baad try karo.</div></div>';
   }
 }
-async function lookupByPhone(phone){
+async function lookupByPhone(id){
   const box = $('#findResult'); if(!box) return;
-  const p = String(phone||'').trim();
-  if (p.length < 4){ box.innerHTML='<div class="card"><div class="alert err">Kam se kam 4 digits daalo.</div></div>'; return; }
+  const p = String(id||'').trim().toUpperCase();
+  if (!p){ box.innerHTML='<div class="card"><div class="alert err">Family ID daalo.</div></div>'; return; }
   box.innerHTML = '<div class="card"><p class="muted">Searching...</p></div>';
   try {
-    if (CLOUD.enabled()){
-      const c = await CLOUD.get();
-      if (c){
-        const { data } = await c.rpc('get_family_by_phone', { p_phone: p });
-        if (data && data.found){ renderFindResult(data); return; }
-      }
-    }
-    // local fallback
-    const dig = p.replace(/\D/g,'');
-    const f = DB.families().find(x=> (x.phone||'').replace(/\D/g,'').includes(dig));
+    const f = DB.families().find(x=>String(x.id||'').toUpperCase()===p);
     if (f){
       const pub = { found:true, family:{ id:f.id, houseName:f.houseName||'', houseNo:f.houseNo||'', street:streetName(f), houseType:f.houseType||'' }, members:(f.members||[]).map(m=>({ name:m.name||'', relation:m.relation||'', gender:m.gender||'', dob:m.dob||null, education_level:m.education_level||m.education||'', occupation:m.occupation||'', religious:m.religious||'', marital_status:m.marital_status||'', disability:m.disability||'no' })) };
       renderFindResult(pub); return;
     }
-    box.innerHTML = '<div class="card"><div class="alert err">Is number se koi ghar nahi mila.</div></div>';
+    box.innerHTML = '<div class="card"><div class="alert err">Is Family ID se koi ghar nahi mila.</div></div>';
   } catch(e){
     box.innerHTML = '<div class="card"><div class="alert err">Lookup nahi hua.</div></div>';
   }
