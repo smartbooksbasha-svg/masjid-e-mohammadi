@@ -14,7 +14,6 @@
 window.APP_CONFIG = {
   SUPABASE_URL: "https://yipxzbgqtyvfllrpqehs.supabase.co", // Shan ka project (2026-10-26)
   SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlpcHh6YmdxdHl2ZmxscnBxZWhzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTMwMjczNjcsImV4cCI6MjEwODYwMzM2N30.7nopVZwAOvi6Wu3g3nM1Chxfwt5AHoaVlgFlgNa9qXM",  // e.g. "eyJhbGciOi..."
-  ADMIN_INVITE_CODE: "MEMC-2026",  // naye admin register karne ke liye code (badal lo)
   /* Google Drive backup — free OAuth "Web application" client ID.
      console.cloud.google.com → APIs & Services → Library → enable "Google Drive API"
      → OAuth consent screen (External, add your email as test user)

@@ -493,8 +493,8 @@ function renderRegister(){
   const first = DB.admins().length === 0;
   if (!first) return renderRequestAccess();
   $('#authScreen').innerHTML = authCard(`
-    <h1>${first?'Create the first admin':'Create another admin'}</h1>
-    <p class="lead">${first ? 'Pehla admin account banao — email par 6-digit code aayega.' : 'Naya admin banane ke liye committee ka invite code chahiye.'}</p>
+    <h1>Create the first admin</h1>
+    <p class="lead">Pehla admin account banao — email par verification link/code aayega. Iske baad naye admins sirf owner ki approval se bante hain.</p>
     ${authTabs('register')}
     <form id="regForm">
       <div class="field"><label>Full name</label><input class="inp" name="name" required placeholder="e.g. Abdul Rahman" /></div>
@@ -506,8 +506,6 @@ function renderRegister(){
         <div class="field"><label>Password</label><input class="inp" name="pass" type="password" required minlength="6" placeholder="min 6 characters" /></div>
         <div class="field"><label>Confirm password</label><input class="inp" name="pass2" type="password" required minlength="6" /></div>
       </div>
-      ${first ? '' : `<div class="field"><label>Invite code</label><input class="inp" name="invite" required placeholder="Admin se poochho" />
-        <span class="hint">Settings me admin invite code dikhta hai.</span></div>`}
       <div id="regAlert"></div>
       <button class="btn block" type="submit">Send code to email</button>
     </form>`);
