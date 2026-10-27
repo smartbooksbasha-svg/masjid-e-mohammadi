@@ -71,9 +71,12 @@ const SCHEMES = [
   ['other','Other scheme']
 ];
 const DEENI = [
-  ['','— none —'],
-  ['aalim','Aalim'],
+  ['','— none / Quran nahi seekha —'],
+  ['nazira','Nazira'],
   ['hafiz','Hafiz'],
+  ['aalim','Aalim'],
+  ['aalima','Aalima'],
+  ['mufti','Mufti'],
   ['both','Aalim + Hafiz']
 ];
 const labelOf = (list,key) => (list.find(x=>x[0]===key)||[])[1] || '';
@@ -1088,7 +1091,7 @@ function computeStats(){
     occupations: [],
     employed: 0,
     occupationNames: 0,
-    deeni: { menAalim:0, menHafiz:0, womenAalim:0, womenHafiz:0 },
+    deeni: { menAalim:0, menHafiz:0, womenAalim:0, womenHafiz:0, menNazira:0, womenNazira:0, menAalima:0, womenAalima:0, menMufti:0, womenMufti:0 },
     docs: Object.fromEntries(BASIC_DOCS.map(([k])=>[k,0])),
     membersWithAllDocs: 0,
     membersWithNoDocs: 0,
@@ -1173,6 +1176,9 @@ function computeStats(){
       const isF = g==='female';
       if (dn==='aalim' || dn==='both'){ if (isF) s.deeni.womenAalim++; else s.deeni.menAalim++; }
       if (dn==='hafiz' || dn==='both'){ if (isF) s.deeni.womenHafiz++; else s.deeni.menHafiz++; }
+      if (dn==='nazira'){ if (isF) s.deeni.womenNazira++; else s.deeni.menNazira++; }
+      if (dn==='aalima'){ if (isF) s.deeni.womenAalima++; else s.deeni.menAalima++; }
+      if (dn==='mufti'){ if (isF) s.deeni.womenMufti++; else s.deeni.menMufti++; }
     });
   });
 
@@ -1314,7 +1320,7 @@ function publicDashboard(){
     ${masjidHero()}
     ${pending}
     <div class="sec-title">Survey — 6 categories</div>
-    <p class="muted small" style="margin:-6px 0 12px">Sirf totals public hain. Har ghar ki zaati tafseel sirf committee admin ke paas rehti hai.</p>
+    <p class="muted small" style="margin:-6px 0 12px">Only totals are public. Individual household details are visible only to committee admins.</p>
     <div class="cat-grid">${CATS.map(([n,t,sub])=>catTile(n,t,sub,s)).join('')}</div>
     ${aboutContactBlock(masjidData())}`;
 }
@@ -1342,7 +1348,7 @@ function viewCat(param){
     extra = tbl(['Occupation','Men','Women','Total'], s.occupations.map(o=>`<tr><td><b>${esc(o.name)}</b></td><td>${o.men}</td><td>${o.women}</td><td><b>${o.total}</b></td></tr>`));
   }
   if (n===5){
-    metrics = [['Aalim (men)',s.deeni.menAalim],['Hafiz (men)',s.deeni.menHafiz],['Aalim (women)',s.deeni.womenAalim],['Hafiz (women)',s.deeni.womenHafiz]].map(([l,v])=>metric(l,v)).join('');
+    metrics = [['Nazira (men)',s.deeni.menNazira||0],['Nazira (women)',s.deeni.womenNazira||0],['Hafiz (men)',s.deeni.menHafiz],['Hafiz (women)',s.deeni.womenHafiz],['Aalim (men)',s.deeni.menAalim],['Aalim (women)',s.deeni.womenAalim],['Aalima (women)',s.deeni.womenAalima||0],['Mufti (men)',s.deeni.menMufti||0]].map(([l,v])=>metric(l,v)).join('');
   }
   if (n===6){
     metrics = [['Members with all basic documents',s.membersWithAllDocs],['Members with no basic document',s.membersWithNoDocs],['Scheme applied',s.scheme.applied],['Scheme not applied',s.scheme.notApplied]].map(([l,v])=>metric(l,v)).join('');
@@ -1376,7 +1382,7 @@ function viewDashboard(){
       <tr class="totals"><td>Total</td><td>${s.houses}</td><td>${s.houseTypes.moulding}</td><td>${s.houseTypes.cement}</td><td>${s.houseTypes.palm}</td><td>${s.houseTypes.other}</td></tr>
     </tbody></table></div>` : `<p class="muted small" style="margin-top:12px">No streets yet — street names appear here as households are added.</p>`;
 
-  const empty = s.houses ? '' : `<div class="empty" style="margin-top:18px"><div class="big">${ICON.mosque}</div><h3>No households surveyed yet</h3><p>Add the first household, ya sample data load karke dashboard dekh lo.</p>
+  const empty = s.houses ? '' : `<div class="empty" style="margin-top:18px"><div class="big">${ICON.mosque}</div><h3>No households surveyed yet</h3><p>Add the first household to get started.</p>
      <div style="margin-top:16px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
      ${isAdmin() ? '<button class="btn" data-act="goto" data-view="add">Add first household</button>' : ''}
      ${isAdmin() ? '<button class="btn ghost" data-act="load-sample">Load sample data</button>' : ''}</div></div>`;
@@ -1387,7 +1393,7 @@ function viewDashboard(){
       <button class="btn sm" type="button" data-act="backup-json">${ICON.dl} Backup now</button>
     </div>` : '';
   return `${backupBanner}
-    <div class="page-head"><div><h1>Survey Dashboard</h1><p>Mohalla ke ghar, raste aur logon ka poora hisaab — live totals.</p></div>
+    <div class="page-head"><div><h1>Survey Dashboard</h1><p>Complete survey of households, streets and members — live totals.</p></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         ${isAdmin()
           ? `<button class="btn ghost sm" data-act="export-excel">${ICON.dl} Excel</button>
@@ -1894,9 +1900,9 @@ const I18N = {
     'Admin mode · you can add and edit':'Admin mode · you can add and edit',
     'Public view · read only':'Public view · read only',
     'Admin login / create admin':'Admin login / create admin',
-    'Mohalla ke ghar, raste aur logon ka poora hisaab — live totals.':'Every house, street and person in the mohalla — live totals.',
+    'Complete survey of households, streets and members — live totals.':'Every house, street and person in the mohalla — live totals.',
     'No households surveyed yet':'No households surveyed yet',
-    'Add the first household, ya sample data load karke dashboard dekh lo.':'Add the first household, or load sample data to see the dashboard.',
+    'Add the first household to get started.':'Add the first household, or load sample data to see the dashboard.',
     'Add first household':'Add first household',
     'Load sample data':'Load sample data',
     'Ghar aur raste ki details':'Houses and streets',
@@ -1908,7 +1914,7 @@ const I18N = {
     'Ghar, raste aur makan ki qism':'Houses, streets and house type',
     'Ghar walon ki ginti, umar aur halat':'Family count, age and status',
     'Survey — 6 categories':'Survey — 6 categories',
-    'Sirf totals public hain. Har ghar ki zaati tafseel sirf committee admin ke paas rehti hai.':'Only totals are public. Each household\u2019s private detail stays with the committee admin.',
+    'Only totals are public. Individual household details are visible only to committee admins.':'Only totals are public. Each household\u2019s private detail stays with the committee admin.',
     'public totals':'public totals',
     'Har ghar ki zaati tafseel (naam, umar, documents, schemes) sirf admin login ke andar hai.':'Private household details (name, age, documents, schemes) are inside admin login only.',
     'ghar':'houses',
@@ -2011,9 +2017,9 @@ const I18N = {
     'Admin mode · you can add and edit':'நிர்வாகி பயன்முறை · சேர்க்கவும் திருத்தவும் முடியும்',
     'Public view · read only':'பொது பார்வை · படிக்க மட்டும்',
     'Admin login / create admin':'நிர்வாகி உள்நுழைவு / நிர்வாகி உருவாக்கு',
-    'Mohalla ke ghar, raste aur logon ka poora hisaab — live totals.':'ஒவ்வொரு வீடு, தெரு மற்றும் மக்களின் முழு கணக்கு — நேரடி மொத்தம்.',
+    'Complete survey of households, streets and members — live totals.':'ஒவ்வொரு வீடு, தெரு மற்றும் மக்களின் முழு கணக்கு — நேரடி மொத்தம்.',
     'No households surveyed yet':'இன்னும் எந்த குடும்பமும் பதிவாகவில்லை',
-    'Add the first household, ya sample data load karke dashboard dekh lo.':'முதல் குடும்பத்தைச் சேர்க்கவும், அல்லது மாதிரி தரவை ஏற்றி டாஷ்போர்டைப் பாருங்கள்.',
+    'Add the first household to get started.':'முதல் குடும்பத்தைச் சேர்க்கவும், அல்லது மாதிரி தரவை ஏற்றி டாஷ்போர்டைப் பாருங்கள்.',
     'Add first household':'முதல் குடும்பத்தைச் சேர்',
     'Load sample data':'மாதிரி தரவை ஏற்று',
     'Location & Housing':'இடம் & வீடு',
@@ -2031,7 +2037,7 @@ const I18N = {
     'Ghar, raste aur makan ki qism':'வீடுகள், தெருக்கள் மற்றும் வீட்டு வகை',
     'Ghar walon ki ginti, umar aur halat':'குடும்ப எண்ணிக்கை, வயது மற்றும் நிலை',
     'Survey — 6 categories':'கணக்கெடுப்பு — 6 பிரிவுகள்',
-    'Sirf totals public hain. Har ghar ki zaati tafseel sirf committee admin ke paas rehti hai.':'பொதுவில் மொத்த எண்ணிக்கை மட்டும். ஒவ்வொரு வீட்டின் தனிப்பட்ட விவரம் குழு நிர்வாகியிடம் மட்டுமே.',
+    'Only totals are public. Individual household details are visible only to committee admins.':'பொதுவில் மொத்த எண்ணிக்கை மட்டும். ஒவ்வொரு வீட்டின் தனிப்பட்ட விவரம் குழு நிர்வாகியிடம் மட்டுமே.',
     'public totals':'பொது மொத்தம்',
     'Har ghar ki zaati tafseel (naam, umar, documents, schemes) sirf admin login ke andar hai.':'தனிப்பட்ட விவரங்கள் (பெயர், வயது, ஆவணங்கள், திட்டங்கள்) நிர்வாகி உள்நுழைவில் மட்டும்.',
     'ghar':'வீடுகள்',
