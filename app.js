@@ -1174,9 +1174,11 @@ window.openSidebar = function(){
 window.navTo = function(v){
   try {
     if (v==='add') state.draft = blankDraft();
+    alert('Navigating to: ' + v);
     go(v);
     closeNav();
-  } catch(e){ console.error('navTo error:', e); }
+    alert('Done: ' + v);
+  } catch(e){ alert('ERROR: ' + e.message); console.error('navTo error:', e); }
 };
 
 function closeNav(){ const s=$('#sidebar'), sc=$('#scrimNav'); if(s) s.classList.remove('open'); if(sc) sc.classList.remove('show'); }
