@@ -7,7 +7,7 @@
 /* ---------------- config / constants ---------------- */
 const CFG = window.APP_CONFIG || {};
 const PREFIX = CFG.FAMILY_ID_PREFIX || 'MEMC';
-const LS = { users:'memc_users', admins:'memc_admins', families:'memc_families', seq:'memc_seq', session:'memc_session', theme:'memc_theme', seeded:'memc_seeded', masjid:'memc_masjid', events:'memc_events', logo:'memc_logo', formDraft:'memc_form_draft' };
+const LS = { admins:'memc_admins', families:'memc_families', seq:'memc_seq', session:'memc_session', theme:'memc_theme', seeded:'memc_seeded', masjid:'memc_masjid', events:'memc_events', logo:'memc_logo', formDraft:'memc_form_draft' };
 
 const DOC_TYPES = [
   ['aadhaar','Aadhaar Card'], ['pan','PAN Card'], ['passport','Passport'],
@@ -17,7 +17,6 @@ const DOC_TYPES = [
 ];
 const CUSTOM_DOCS = 12; // "more than 10" empty custom boxes
 
-const ROLE_LABEL = { super:'Super Admin', admin:'Admin', family:'Family Member' };
 const GENDERS = ['Male','Female','Other'];
 const MARITAL = ['Unmarried','Married','Widow','Widower','Divorced'];
 
@@ -232,21 +231,13 @@ function compressImageDataURL(dataUrl, maxW=512, quality=0.72){
 
 /* ---------------- storage ---------------- */
 const DB = {
-  users(){ try{ return JSON.parse(localStorage.getItem(LS.users)||'[]'); }catch(e){ return []; } },
-  setUsers(v){ localStorage.setItem(LS.users, JSON.stringify(v)); },
-  /* single-role world: admins only. Old super/admin accounts migrate once. */
+  /* two-role world: owner (super admin) + admin (masjid employees). Public is read-only. */
   admins(){
     try {
       const raw = JSON.parse(localStorage.getItem(LS.admins)||'null');
       if (Array.isArray(raw)) return raw;
     } catch(e){}
-    const legacy = this.users().filter(u=>u.role==='super'||u.role==='admin').map(u=>({
-      email: String(u.id||'').includes('@') ? u.id : (u.email||''),
-      name: u.name||u.id, phone:u.phone||'', salt:u.salt, passHash:u.passHash,
-      createdAt:u.createdAt||Date.now(), verified:true, legacyId:u.id
-    })).filter(a=>a.email);
-    localStorage.setItem(LS.admins, JSON.stringify(legacy));
-    return legacy;
+    return [];
   },
   setAdmins(v){ localStorage.setItem(LS.admins, JSON.stringify(v)); },
   families(){ try{ return JSON.parse(localStorage.getItem(LS.families)||'[]'); }catch(e){ return []; } },
