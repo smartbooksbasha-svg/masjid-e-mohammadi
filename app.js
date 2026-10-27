@@ -500,7 +500,7 @@ function renderLogin(){
       <button class="btn block" type="submit">Login</button>
       <button class="btn ghost block" type="button" data-act="magic-login" style="margin-top:8px">Email link se login (password ke bina)</button>
       <div style="display:flex;gap:8px;justify-content:space-between;margin-top:12px;flex-wrap:wrap">
-        <button class="linklike" type="button" data-act="auth-tab" data-tab="forgot">Forgot password / ID?</button>
+        <button class="linklike" type="button" data-act="auth-tab" data-tab="forgot">Forgot password?</button>
         <button class="linklike" type="button" data-act="auth-tab" data-tab="register">${DB.admins().length ? 'Request admin access' : 'Create first admin'}</button>
       </div>
     </form>`);
@@ -639,7 +639,7 @@ function renderRegister(){
       if (error){
         const m = String(error.message||'');
         if (/already registered|already exists/i.test(m))
-          alertBox.innerHTML='<div class="alert err">Ye email pehle se registered hai. <b>Forgot password / ID?</b> par jao → email par link aayega → click karke password set karo, phir login.</div>';
+          alertBox.innerHTML='<div class="alert err">Ye email pehle se registered hai. <b>Forgot password?</b> par jao → email par link aayega → click karke password set karo, phir login.</div>';
         else alertBox.innerHTML='<div class="alert err">'+esc(m)+'</div>';
         return;
       }
@@ -789,8 +789,8 @@ function renderCodeStep(){
 /* ---------------- forgot password / id ---------------- */
 function renderForgot(){
   $('#authScreen').innerHTML = authCard(`
-    <h1>Forgot password / ID</h1>
-    <p class="lead">Email ID yaad hai to password reset karo. Nahi to mobile number se ID dhoondo.</p>
+    <h1>Forgot password</h1>
+    <p class="lead">Registered email ID daalo aur password reset link milega.</p>
     ${authTabs('forgot')}
     <div class="sec-title" style="margin-top:0;font-size:.9rem">Reset password</div>
     <form id="forgotForm">
@@ -798,12 +798,7 @@ function renderForgot(){
       <div id="forgotAlert"></div>
       <button class="btn block" type="submit">Send reset code</button>
     </form>
-    <div class="sec-title" style="margin-top:18px;font-size:.9rem">Forgot your ID?</div>
-    <form id="findForm">
-      <div class="field"><label>Registered mobile number</label><input class="inp" name="phone" inputmode="numeric" required placeholder="10-digit" /></div>
-      <div id="findAlert"></div>
-      <button class="btn ghost block" type="submit">Find my ID</button>
-    </form>`);
+`);
 
   $('#forgotForm').addEventListener('submit', async (e)=>{
     e.preventDefault();
@@ -823,14 +818,7 @@ function renderForgot(){
     renderCodeStep();
   });
 
-  $('#findForm').addEventListener('submit', (e)=>{
-    e.preventDefault();
-    const phone = e.target.elements.phone.value.trim().replace(/\D/g,'');
-    const alertBox = $('#findAlert');
-    const hit = DB.admins().find(a=>String(a.phone||'').replace(/\D/g,'')===phone && phone);
-    if (!hit){ alertBox.innerHTML='<div class="alert err">Is number se koi admin nahi mila.</div>'; return; }
-    alertBox.innerHTML=`<div class="alert ok">Aapki admin ID: <b>${esc(hit.email)}</b><br><span class="small">Ab password reset kar sakte ho.</span></div>`;
-  });
+
 }
 
 function renderNewPassword(){
@@ -2213,7 +2201,7 @@ const I18N = {
     'Answer':'Answer',
     'Login':'Login',
     'Email link se login (password ke bina)':'Log in with an email link (no password)',
-    'Forgot password / ID?':'Forgot password / ID?',
+    'Forgot password?':'Forgot password?',
     'Create admin':'Create admin',
     'New captcha':'New captcha'
   },
@@ -2336,7 +2324,7 @@ const I18N = {
     'Answer':'பதில்',
     'Login':'உள்நுழை',
     'Email link se login (password ke bina)':'மின்னஞ்சல் இணைப்பால் உள்நுழை (கடவுச்சொல் இல்லாமல்)',
-    'Forgot password / ID?':'கடவுச்சொல் / ஐடி மறந்துவிட்டதா?',
+    'Forgot password?':'கடவுச்சொல் / ஐடி மறந்துவிட்டதா?',
     'Create admin':'நிர்வாகி உருவாக்கு',
     'New captcha':'புதிய கேப்ட்சா'
   }
