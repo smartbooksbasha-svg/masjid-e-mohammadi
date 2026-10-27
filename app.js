@@ -982,7 +982,7 @@ function renderShell(){
   if (u){
     const initials = (u.name||u.email).split(/[ @.]/).filter(Boolean).map(w=>w[0]).slice(0,2).join('').toUpperCase();
     const own = isOwner() ? ' · Owner' : '';
-    chip.innerHTML = `<span class="av">${esc(initials)}</span><span><span class="nm">${esc(u.name||u.email)}</span><br><span class="rl">Admin${own}</span></span>`;
+    chip.innerHTML = `<span class="av">${esc(initials)}</span><span><span class="nm">${esc(u.name||u.email)}</span><br><span class="rl">Admin${own}</span></span> <button class="chip-logout" type="button" data-act="admin-logout" title="Log out">${ICON.exit}</button>`;
     chip.removeAttribute('data-act');
     chip.title = u.name||u.email;
   } else {

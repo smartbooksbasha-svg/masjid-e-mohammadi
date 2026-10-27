@@ -567,3 +567,9 @@ a:focus-visible,summary:focus-visible,[tabindex]:focus-visible{outline:2px solid
 /* find family */
 .qr-video{width:100%;max-width:320px;border-radius:14px;border:1px solid var(--line);margin-top:12px;background:#000}
 #findResult .table-wrap{overflow:auto}
+
+/* chip logout */
+.user-chip{display:flex;align-items:center;gap:8px}
+.chip-logout{border:1px solid var(--line);background:var(--surface);color:var(--muted);border-radius:999px;width:28px;height:28px;display:grid;place-items:center;cursor:pointer;padding:0}
+.chip-logout svg{width:14px;height:14px}
+.chip-logout:hover{color:var(--danger);border-color:var(--danger-brd);background:var(--danger-bg)}
