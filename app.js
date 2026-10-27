@@ -972,7 +972,7 @@ function navItems(){
   if (!isAdmin()) return [ ['dashboard','Dashboard',ICON.dash], ['find','Find family',ICON.search] ];
   return [ ['dashboard','Dashboard',ICON.dash], ['families','Households',ICON.list],
            ['add','Add Household',ICON.plus], ['find','Find family',ICON.search], ['masjid','Masjid Profile',ICON.mosque],
-           ['users','Admins',ICON.users], ['settings','Settings',ICON.gear] ];
+           ['adminpanel','Administration',ICON.gear] ];
 }
 
 function renderShell(){
@@ -981,19 +981,18 @@ function renderShell(){
   const chip = $('#userChip');
   if (u){
     const initials = (u.name||u.email).split(/[ @.]/).filter(Boolean).map(w=>w[0]).slice(0,2).join('').toUpperCase();
-    chip.innerHTML = `<span class="av">${esc(initials)}</span><span><span class="nm">${esc(u.name||u.email)}</span><br><span class="rl">Admin · logout</span></span>`;
-    chip.setAttribute('data-act','admin-logout');
-    chip.title = 'Click to log out';
+    const own = isOwner() ? ' · Owner' : '';
+    chip.innerHTML = `<span class="av">${esc(initials)}</span><span><span class="nm">${esc(u.name||u.email)}</span><br><span class="rl">Admin${own}</span></span>`;
+    chip.removeAttribute('data-act');
+    chip.title = u.name||u.email;
   } else {
     chip.innerHTML = `<span class="public-chip">Public view</span><span class="btn ghost sm" data-act="open-auth" style="margin-left:8px">Admin login</span>`;
     chip.removeAttribute('data-act');
     chip.title = 'Read-only public view';
   }
-  const out = $('#logoutBtn'); if (out) out.classList.toggle('hidden', !u);
   const foot = document.querySelector('.sb-foot');
   if (foot) foot.innerHTML = u
-    ? `Admin mode · you can add and edit
-       <button class="foot-logout" type="button" data-act="admin-logout">${ICON.exit} Log out</button>`
+    ? `Admin mode · you can add and edit`
     : 'Public view · read only<br><button class="linklike" type="button" data-act="open-auth" style="margin-top:8px">Admin login / create admin</button>';
   $$('#nav .nav-item').forEach(a=>a.classList.toggle('active', a.dataset.view===state.view || (state.view==='add' && a.dataset.view==='add')));
   closeNav();
@@ -1004,7 +1003,7 @@ function go(view, param){
   if (ADMIN_ONLY.includes(view) && !isAdmin()){ toast('Ye page sirf admin ke liye hai','err'); view='dashboard'; }
   state.view = view; state.param = param||null;
   closeNav();
-  const titles = { dashboard:'Survey Dashboard', families:'Households', add:(state.param?'Edit Household':'Add Household'), detail:'Household Record', find:'Find family', users:'Admins', settings:'Settings', masjid:'Masjid Profile', cat:'Survey Category' };
+  const titles = { dashboard:'Survey Dashboard', families:'Households', add:(state.param?'Edit Household':'Add Household'), detail:'Household Record', find:'Find family', adminpanel:'Administration', users:'Admins', settings:'Settings', masjid:'Masjid Profile', cat:'Survey Category' };
   $('#pageTitle').textContent = titles[view] || 'Survey Dashboard';
   let html='';
   if (view==='dashboard') html = viewDashboard();
@@ -1736,7 +1735,7 @@ function viewFamilyDetail(id){
       <div class="qr-panel">
         <div class="qr-box" id="qrBox"></div>
         <div><div class="muted small">FAMILY ID</div><div class="fid">${esc(f.id)}</div>
-        <div class="muted small" style="margin-top:6px">Scan to view this household's record</div></div>
+        <div class="muted small" style="margin-top:6px">Scan QR → admin login par seedha edit form khul jata hai. Ye QR me Family ID bhi likha hua hota hai.</div></div>
       </div>
       <div style="min-width:240px;flex:1">
         <div class="kv">
@@ -2245,6 +2244,94 @@ async function compressImage(file, maxSide = 1100, quality = 0.72){
   const c = document.createElement('canvas'); c.width=w; c.height=h;
   const ctx = c.getContext('2d'); ctx.drawImage(img,0,0,w,h);
   return c.toDataURL('image/jpeg', quality);
+}
+
+
+
+/* ============================================================
+   ADMINISTRATION PANEL (Admins + Settings + Logout)
+   ============================================================ */
+function viewAdminPanel(){
+  const u = currentUser();
+  return `
+    <div class="page-head"><div><h1>Administration</h1><p>Admins, settings aur account.</p></div></div>
+    <div class="card">
+      <div class="sec-title" style="margin-top:0">Admins & approval</div>
+      <p class="muted small">Naye admins sirf owner approve kar sakta hai.</p>
+      <div style="margin-top:12px">${isOwner()?viewUsersTable():viewUsersReadonly()}</div>
+    </div>
+    ${viewSettingsCard('adminpanel')}
+    <div class="card">
+      <div class="sec-title" style="margin-top:0">Account</div>
+      <div class="kv">
+        <div class="row"><span>Logged in as</span><span>${esc(u.name||u.email)} ${isOwner()?'· <b>Owner</b>':''}</span></div>
+        <div class="row"><span>Email</span><span>${esc(u.email)}</span></div>
+      </div>
+      <div style="margin-top:14px"><button class="btn danger" data-act="admin-logout">${ICON.exit} Log out</button></div>
+    </div>
+  `;
+}
+function viewUsersTable(){
+  // reuse existing viewUsers logic minimal
+  const admins = DB.admins().slice().sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+  const owner = ownerEmail();
+  const pend = (admins.filter(a=>a.status==='pending'));
+  const act = (admins.filter(a=>a.status!=='pending'));
+  return `
+    <div class="sec-title" style="margin-top:0">Pending requests</div>
+    ${pend.length?`<div class="table-wrap"><table><thead><tr><th>Name</th><th>Email</th><th>Mobile</th><th>User ID</th><th>Action</th></tr></thead><tbody>
+    ${pend.map(a=>`<tr><td>${esc(a.name||'—')}</td><td>${esc(a.email)}</td><td>${esc(a.phone||'—')}</td><td class="mono">${esc(a.userId||'—')}</td>
+    <td style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn sm" data-act="approve-admin" data-id="${esc(a.email)}">Approve</button><button class="btn sm ghost" data-act="reject-admin" data-id="${esc(a.email)}">Reject</button></td></tr>`).join('')}
+    </tbody></table></div>`:`<p class="muted small">Koi pending request nahi.</p>`}
+    <div class="sec-title">Active admins</div>
+    <div class="table-wrap"><table><thead><tr><th>User ID</th><th>Name</th><th>Email</th><th>Role</th><th>Action</th></tr></thead><tbody>
+    ${act.map(a=>{ const isO = String(a.email).toLowerCase()===owner || a.role==='owner'; return `<tr><td class="mono">${esc(a.userId||'—')}</td><td>${esc(a.name||'—')}</td><td>${esc(a.email)}</td><td>${isO?'<span class="badge">Owner</span>':'<span class="badge gray">Admin</span>'}</td><td>${isO?'—':`<button class="btn sm ghost" data-act="del-admin" data-id="${esc(a.email)}">Remove</button>`}</td></tr>`; }).join('')}
+    </tbody></table></div>
+  `;
+}
+function viewUsersReadonly(){
+  const admins = DB.admins().filter(a=>a.status!=='pending');
+  const owner = ownerEmail();
+  return `<div class="table-wrap"><table><thead><tr><th>User ID</th><th>Name</th><th>Email</th><th>Role</th></tr></thead><tbody>
+  ${admins.map(a=>{ const isO = String(a.email).toLowerCase()===owner || a.role==='owner'; return `<tr><td class="mono">${esc(a.userId||'—')}</td><td>${esc(a.name||'—')}</td><td>${esc(a.email)}</td><td>${isO?'<span class="badge">Owner</span>':'<span class="badge gray">Admin</span>'}</td></tr>`; }).join('')}
+  </tbody></table></div>`;
+}
+function viewSettingsCard(ctx='adminpanel'){
+  const u = currentUser();
+  const cloudOn = CLOUD.enabled();
+  return `
+    <div class="card">
+      <div class="sec-title" style="margin-top:0">Settings</div>
+      <div class="sec-title" style="margin-top:0;font-size:.9rem">Appearance</div>
+      <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+        <button class="toggle" data-act="toggle-theme" id="themeBtn2">${themeIcon(document.documentElement.getAttribute('data-theme'))} Day / Night</button>
+        <span class="muted small">Emerald Lattice theme · day &amp; night.</span>
+      </div>
+      <div class="sec-title" style="font-size:.9rem">Data &amp; backup</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button class="btn ghost sm" data-act="export-excel">${ICON.dl} Export Excel (.xlsx)</button>
+        <button class="btn ghost sm" data-act="print-all">${ICON.print} Export PDF / Print</button>
+        <button class="btn ghost sm" data-act="backup-json">${ICON.dl} Backup (JSON)</button>
+        <button class="btn ghost sm" data-act="publish-public">${ICON.refresh} Public totals refresh</button>
+        <button class="btn ghost sm" data-act="load-sample">Load sample data</button>
+      </div>
+      <div class="sec-title" style="font-size:.9rem">Restore &amp; Google Drive</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button class="btn ghost sm" data-act="restore-json">Restore from backup file</button>
+        <button class="btn ghost sm" data-act="drive-connect">${ICON.cloud} ${driveConnected()?'Drive connected':'Connect Google Drive'}</button>
+        <button class="btn ghost sm" data-act="drive-backup">${ICON.cloud} Backup to Drive</button>
+      </div>
+      <input type="file" id="restoreFile" accept="application/json,.json" hidden />
+      <p class="muted small" style="margin:10px 0 0">${esc(driveStatusText())}</p>
+      ${isOwner()?`<div class="sec-title" style="font-size:.9rem">Owner</div>
+      <form id="ownerForm" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+        <div class="field" style="margin:0;min-width:260px"><label>Approval email (admin requests)</label><input class="inp" name="oemail" value="${esc(ownerEmail())}" /></div>
+        <button class="btn sm" type="submit">Save</button>
+      </form>`:''}
+      <p class="muted small" style="margin-top:12px">Logged in: <b>${esc(u.email)}</b> ${isOwner()?'(Owner)':''}</p>
+      <button class="btn danger sm" data-act="admin-logout" style="margin-top:10px">${ICON.exit} Log out</button>
+    </div>
+  `;
 }
 
 function viewSettings(){

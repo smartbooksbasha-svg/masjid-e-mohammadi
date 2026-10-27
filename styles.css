@@ -561,15 +561,8 @@ a:focus-visible,summary:focus-visible,[tabindex]:focus-visible{outline:2px solid
 .steps li{margin-bottom:4px}
 .steps .mono{color:var(--text)}
 
-/* ---------- logout (topbar icon + sidebar row) ---------- */
-.icon-btn.hidden{display:none}
+/* ---------- logout moved to Administration ---------- */
 .sb-foot{line-height:1.5}
-.foot-logout{margin-top:10px;width:100%;display:inline-flex;align-items:center;gap:8px;justify-content:center;
-  padding:10px 12px;border-radius:12px;border:1px solid var(--line);background:var(--surface);
-  color:var(--danger);font:inherit;font-size:.8rem;font-weight:600;cursor:pointer}
-.foot-logout svg{width:15px;height:15px}
-.foot-logout:hover{background:var(--danger-bg);border-color:var(--danger-brd)}
-@media (max-width:560px){ #logoutBtn{display:grid} }
 
 /* find family */
 .qr-video{width:100%;max-width:320px;border-radius:14px;border:1px solid var(--line);margin-top:12px;background:#000}
