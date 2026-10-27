@@ -328,9 +328,7 @@ function isOwner(){
   if (e === ownerEmail()) return true;
   const rec = adminByEmail(e);
   if (rec && rec.role === 'owner') return true;
-  /* bootstrap: sabse pehla admin bhi owner hai (approval kabhi lock na ho) */
-  const act = activeAdmins().slice().sort((a,b)=>String(a.createdAt||a.userId||'').localeCompare(String(b.createdAt||b.userId||'')));
-  return !!(act[0] && String(act[0].email||'').toLowerCase() === e);
+  return false;
 }
 function genUserId(){
   let n = 1;
@@ -2259,14 +2257,14 @@ function viewAdminPanel(){
     <div class="page-head"><div><h1>Administration</h1><p>Admins, settings aur account.</p></div></div>
     <div class="card">
       <div class="sec-title" style="margin-top:0">Admins & approval</div>
-      <p class="muted small">Naye admins sirf owner approve kar sakta hai.</p>
+      <p class="muted small">Naye admins sirf owner approve kar sakta hai. Owner: <b>${esc(ownerEmail())}</b></p>
       <div style="margin-top:12px">${isOwner()?viewUsersTable():viewUsersReadonly()}</div>
     </div>
     ${viewSettingsCard('adminpanel')}
     <div class="card">
       <div class="sec-title" style="margin-top:0">Account</div>
       <div class="kv">
-        <div class="row"><span>Logged in as</span><span>${esc(u.name||u.email)} ${isOwner()?'· <b>Owner</b>':''}</span></div>
+        <div class="row"><span>Logged in as</span><span>${esc(u.name||u.email)} ${isOwner()?'· <b>Owner</b>':(ownerEmail()===String(u.email).toLowerCase()?'· <b>Owner</b>':'')}</span></div>
         <div class="row"><span>Email</span><span>${esc(u.email)}</span></div>
       </div>
       <div style="margin-top:14px"><button class="btn danger" data-act="admin-logout">${ICON.exit} Log out</button></div>
@@ -3233,11 +3231,7 @@ function migrateAdmins(){
       if (!a.userId){ n += 1; a.userId = 'ADM-' + new Date().getFullYear() + '-' + pad(n, 4); ch = true; }
       if (!a.status){ a.status = 'active'; ch = true; }
     });
-    /* koi owner nahi to sabse purana active admin owner ban jaata hai */
-    if (!admins.some(a=>a.role==='owner')){
-      const first = admins.slice().sort((a,b)=>String(a.createdAt||a.userId||'').localeCompare(String(b.createdAt||b.userId||'')))[0];
-      if (first){ first.role = 'owner'; ch = true; }
-    }
+    /* owner sirf config OWNER_EMAIL ya manually set memc_owner se decide hota hai */
     if (ch) DB.setAdmins(admins);
   } catch(e){}
 }
