@@ -1243,8 +1243,13 @@ function catTile(n, title, sub, s){
 
 function publicDashboard(){
   const s = computeStats();
+  const pending = (!s.families && !s.houses) ? `
+      <div class="alert info" style="margin:0 0 16px">
+        <span><b>Totals abhi publish nahi hue.</b> Committee jab survey save karegi, ye 6 categories bhar jaayengi — naam, phone aur pata kabhi public nahi hote.</span>
+      </div>` : '';
   return `
     ${masjidHero()}
+    ${pending}
     <div class="sec-title">Survey — 6 categories</div>
     <p class="muted small" style="margin:-6px 0 12px">Sirf totals public hain. Har ghar ki zaati tafseel sirf committee admin ke paas rehti hai.</p>
     <div class="cat-grid">${CATS.map(([n,t,sub])=>catTile(n,t,sub,s)).join('')}</div>
@@ -1311,7 +1316,7 @@ function viewDashboard(){
   const empty = s.houses ? '' : `<div class="empty" style="margin-top:18px"><div class="big">${ICON.mosque}</div><h3>No households surveyed yet</h3><p>Add the first household, ya sample data load karke dashboard dekh lo.</p>
      <div style="margin-top:16px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
      ${isAdmin() ? '<button class="btn" data-act="goto" data-view="add">Add first household</button>' : ''}
-     <button class="btn ghost" data-act="load-sample">Load sample data</button></div></div>`;
+     ${isAdmin() ? '<button class="btn ghost" data-act="load-sample">Load sample data</button>' : ''}</div></div>`;
 
   const backupBanner = (isAdmin() && needsBackup()) ? `
     <div class="alert warn" style="margin:0 0 14px;display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap">
