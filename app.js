@@ -1074,7 +1074,7 @@ function navItems(){
 
 function renderShell(){
   const u = currentUser();
-  $('#nav').innerHTML = navItems().map(([v,label,ic])=>`<a class="nav-item" data-view="${v}" onclick="if('${v}'==='add'){state.draft=blankDraft();}go('${v}');closeNav();return false;" href="javascript:void(0)">${ic}<span>${label}</span></a>`).join('');
+  $('#nav').innerHTML = navItems().map(([v,label,ic])=>`<button type="button" class="nav-item" data-view="${v}" onclick="try{if('${v}'==='add'){state.draft=blankDraft();}go('${v}');closeNav();}catch(e){console.error(e);}return false;">${ic}<span>${label}</span></button>`).join('');
   const logo = DB.logo();
   const brand = document.querySelector('.sb-brand');
   if(brand){
