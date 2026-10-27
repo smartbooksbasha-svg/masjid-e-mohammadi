@@ -999,7 +999,7 @@ function renderShell(){
 }
 
 function go(view, param){
-  const ADMIN_ONLY = ['add','users','settings','families','detail','masjid'];
+  const ADMIN_ONLY = ['add','users','settings','families','detail','masjid','adminpanel'];
   if (ADMIN_ONLY.includes(view) && !isAdmin()){ toast('Ye page sirf admin ke liye hai','err'); view='dashboard'; }
   state.view = view; state.param = param||null;
   closeNav();
@@ -1011,8 +1011,9 @@ function go(view, param){
   else if (view==='add') html = viewFamilyForm();
   else if (view==='detail') html = viewFamilyDetail(state.param);
   else if (view==='find') html = viewFind();
-  else if (view==='users') html = viewUsers();
-  else if (view==='settings') html = viewSettings();
+  else if (view==='adminpanel') html = isAdmin()?viewAdminPanel():`<div class="empty"><h3>Admin only</h3></div>`;
+  else if (view==='users') html = isAdmin()?viewAdminPanel():`<div class="empty"><h3>Admin only</h3></div>`;
+  else if (view==='settings') html = isAdmin()?viewAdminPanel():`<div class="empty"><h3>Admin only</h3></div>`;
   else if (view==='masjid') html = viewMasjid();
   else if (view==='cat') html = viewCat(state.param);
   $('#content').innerHTML = html;
@@ -2657,13 +2658,14 @@ function afterRender(view){
   }}
   if (view==='families'){ renderFamilyList(); }
   if (view==='find'){
-    const pf = $('#findPhoneForm');
-    if (pf){ pf.onsubmit = null; pf.addEventListener('submit',e=>{ e.preventDefault(); lookupByPhone(pf.elements.phone.value); }, {once:true}); }
-    // rebind safely
     setTimeout(()=>{
       const pf2 = $('#findPhoneForm');
       if (pf2 && !pf2._boundFind){ pf2._boundFind=true; pf2.addEventListener('submit',e=>{ e.preventDefault(); lookupByPhone(pf2.elements.phone.value); }); }
     }, 50);
+  }
+  if (view==='adminpanel'){
+    const of = $('#ownerForm');
+    if (of && !of._bound){ of._bound=true; of.addEventListener('submit',e=>{ e.preventDefault(); const v=of.elements.oemail.value.trim().toLowerCase(); if(!isEmail(v)){toast('Valid email daalo','err');return;} setOwnerEmail(v); localStorage.setItem('memc_owner_src','user'); toast('Owner email save ho gaya'); go('adminpanel'); }); }
   }
   const tb=$('#themeBtn2'); if(tb){ const t=document.documentElement.getAttribute('data-theme'); tb.innerHTML = themeIcon(t) + (t==='night'?' Night':' Day'); }
 }
