@@ -313,6 +313,36 @@ function ownerName(){
 }
 function setOwnerEmail(e){ /* locked - cannot change */ return false; }
 /* purane auto-set owner ko ek baar clear karo — owner ab config se aata hai */
+
+/* PURGE: sirf fixed owner rakho, baaki sab admins hata do */
+function purgeNonOwnerAdmins(){
+  try {
+    const FIXED = 'smartbooksbasha@gmail.com';
+    const FIXED_NAME = 'Isthiyaque Basha';
+    const admins = DB.admins();
+    const kept = admins.filter(a => String(a.email||'').toLowerCase() === FIXED);
+    if (kept.length === 0){
+      kept.push({ email: FIXED, name: FIXED_NAME, role: 'owner', status: 'active', userId: 'ADM-OWNER-0001', createdAt: Date.now(), phone: '' });
+    } else {
+      kept[0].email = FIXED;
+      kept[0].name = FIXED_NAME;
+      kept[0].role = 'owner';
+      kept[0].status = 'active';
+      if (!kept[0].userId) kept[0].userId = 'ADM-OWNER-0001';
+    }
+    if (JSON.stringify(admins) !== JSON.stringify(kept)){
+      DB.setAdmins(kept);
+      try {
+        const sess = getSession();
+        if (sess && String(sess.email||'').toLowerCase() !== FIXED){
+          localStorage.removeItem(LS.session);
+        }
+      } catch(e){}
+      console.log('[purge] Purane admins hata diye gaye, sirf owner baki');
+    }
+  } catch(e){}
+}
+
 function migrateOwner(){
   try {
     if (localStorage.getItem('memc_owner_src')) return;
@@ -3242,6 +3272,7 @@ function migrateAdmins(){
 function init(){
   migrateAdmins();
   migrateOwner();
+  purgeNonOwnerAdmins();
   try {
     const h = (location.hash||'').replace(/^#/,'');
     if (h.indexOf('qedit=')===0){
