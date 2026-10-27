@@ -1,7 +1,7 @@
 {
-  "name": "Mohalla Survey — Masjid - E- Mohammadiy, Khidmath Committee",
+  "name": "Mohalla Survey \u2014 Masjid - E- Mohammadiy, Khidmath Committee",
   "short_name": "Mohalla Survey",
-  "description": "Mohalla survey — streets, houses, families, education, work and deeni taleem totals with PDF/Excel export.",
+  "description": "Mohalla survey \u2014 streets, houses, families, education, work and deeni taleem totals with PDF/Excel export.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
@@ -10,8 +10,21 @@
   "theme_color": "#0e7c66",
   "lang": "en",
   "icons": [
-    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
-    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/app-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
   ]
 }
