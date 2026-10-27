@@ -3328,7 +3328,7 @@ function viewFind(){
       <div class="card">
         <div class="sec-title" style="margin-top:0">By Family ID</div>
         <form id="findPhoneForm">
-          <div class="field"><label>Family ID</label><input class="inp" name="phone" placeholder="eg 2026001FM03" autocomplete="off" /></div>
+          <div class="field"><label>Family ID</label><input class="inp" name="phone" placeholder="eg XXXXX01" autocomplete="off" /></div>
           <button class="btn" type="submit">${ICON.search} Find</button>
         </form>
         <p class="muted small" style="margin-top:10px">Family ID daalo aur details dekho (sirf read-only).</p>
