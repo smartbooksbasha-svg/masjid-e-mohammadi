@@ -1511,9 +1511,7 @@ function viewDashboard(){
     <div class="page-head"><div><h1>Survey Dashboard</h1><p>Complete survey of households, streets and members — live totals.</p></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         ${isAdmin()
-          ? `<button class="btn sm" data-act="goto" data-view="add">${ICON.plus} Add Household</button>
-             <button class="btn ghost sm" data-act="goto" data-view="find">${ICON.search} Find family</button>
-             <button class="btn ghost sm" data-act="export-excel">${ICON.dl} Excel</button>
+          ? `<button class="btn ghost sm" data-act="export-excel">${ICON.dl} Excel</button>
              <button class="btn ghost sm" data-act="print-all">${ICON.print} PDF / Print</button>`
           : `<span class="badge gray">Public view · read only</span>`}
       </div></div>
@@ -2783,6 +2781,7 @@ document.addEventListener('click', (e)=>{
   if (act==='drive-connect'){ driveConnect(); return; }
   if (act==='drive-backup'){ backupToDrive(); return; }
   if (act==='view-family'){ go('detail', id); return; }
+  if (act==='detail'){ go('detail', id); return; }
   if (act==='edit-family'){ const f=DB.families().find(x=>x.id===id); if(f){ state.draft = JSON.parse(JSON.stringify(f)); state.draft.docs = Object.assign(Object.fromEntries(DOC_TYPES.map(d=>[d[0],'no'])), state.draft.docs||{}); state.draft.custom = padCustom(state.draft.custom); if(!state.draft.houseType) state.draft.houseType='moulding'; go('add', id); } return; }
   if (act==='del-family'){ if(confirm('Delete this household record permanently?')){
     DB.setFamilies(DB.families().filter(f=>f.id!==id));
