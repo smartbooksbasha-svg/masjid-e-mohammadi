@@ -301,16 +301,17 @@ function adminByEmail(email){
 function adminStatus(a){ return (a && a.status) || 'active'; }
 function activeAdmins(){ return DB.admins().filter(a=>adminStatus(a)==='active'); }
 function pendingAdmins(){ return DB.admins().filter(a=>adminStatus(a)==='pending'); }
+/* FIXED OWNER - LOCKED */
+const FIXED_OWNER_EMAIL = 'smartbooksbasha@gmail.com';
+const FIXED_OWNER_NAME = 'Isthiyaque Basha';
+
 function ownerEmail(){
-  let o = ''; try { o = String(localStorage.getItem('memc_owner')||''); } catch(e){}
-  if (!o) o = String((typeof CFG!=='undefined' && CFG.OWNER_EMAIL) || '');
-  if (!o){ const a = DB.admins()[0]; o = a ? String(a.email||'') : ''; }
-  return String(o).toLowerCase();
+  return FIXED_OWNER_EMAIL;
 }
-function setOwnerEmail(e){ try {
-  localStorage.setItem('memc_owner', String(e||'').toLowerCase());
-  localStorage.setItem('memc_owner_src', 'user');   /* user ne Settings se set kiya */
-} catch(x){} }
+function ownerName(){
+  return FIXED_OWNER_NAME;
+}
+function setOwnerEmail(e){ /* locked - cannot change */ return false; }
 /* purane auto-set owner ko ek baar clear karo — owner ab config se aata hai */
 function migrateOwner(){
   try {
@@ -325,9 +326,9 @@ function isOwner(){
   const u = currentUser(); if (!u) return false;
   const e = String(u.email||'').toLowerCase();
   if (!e) return false;
-  if (e === ownerEmail()) return true;
+  if (e === FIXED_OWNER_EMAIL) return true;
   const rec = adminByEmail(e);
-  if (rec && rec.role === 'owner') return true;
+  if (rec && rec.role === 'owner' && String(rec.email||'').toLowerCase() === FIXED_OWNER_EMAIL) return true;
   return false;
 }
 function genUserId(){
@@ -2257,14 +2258,15 @@ function viewAdminPanel(){
     <div class="page-head"><div><h1>Administration</h1><p>Admins, settings aur account.</p></div></div>
     <div class="card">
       <div class="sec-title" style="margin-top:0">Admins & approval</div>
-      <p class="muted small">Naye admins sirf owner approve kar sakta hai. Owner: <b>${esc(ownerEmail())}</b></p>
+      <p class="muted small">Naye admins sirf owner approve kar sakta hai. <b>Owner: ${esc(ownerName())} (${esc(ownerEmail())})</b> — locked</p>
       <div style="margin-top:12px">${isOwner()?viewUsersTable():viewUsersReadonly()}</div>
     </div>
     ${viewSettingsCard('adminpanel')}
     <div class="card">
       <div class="sec-title" style="margin-top:0">Account</div>
       <div class="kv">
-        <div class="row"><span>Logged in as</span><span>${esc(u.name||u.email)} ${isOwner()?'· <b>Owner</b>':(ownerEmail()===String(u.email).toLowerCase()?'· <b>Owner</b>':'')}</span></div>
+        <div class="row"><span>Owner</span><span><b>${esc(ownerName())}</b> (${esc(ownerEmail())})</span></div>
+        <div class="row"><span>Logged in as</span><span>${esc(u.name||u.email)} ${isOwner()?'· <b>Owner</b>':''}</span></div>
         <div class="row"><span>Email</span><span>${esc(u.email)}</span></div>
       </div>
       <div style="margin-top:14px"><button class="btn danger" data-act="admin-logout">${ICON.exit} Log out</button></div>
@@ -2323,11 +2325,12 @@ function viewSettingsCard(ctx='adminpanel'){
       </div>
       <input type="file" id="restoreFile" accept="application/json,.json" hidden />
       <p class="muted small" style="margin:10px 0 0">${esc(driveStatusText())}</p>
-      ${isOwner()?`<div class="sec-title" style="font-size:.9rem">Owner</div>
-      <form id="ownerForm" style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
-        <div class="field" style="margin:0;min-width:260px"><label>Approval email (admin requests)</label><input class="inp" name="oemail" value="${esc(ownerEmail())}" /></div>
-        <button class="btn sm" type="submit">Save</button>
-      </form>`:''}
+      <div class="sec-title" style="font-size:.9rem">Owner (Fixed)</div>
+      <div class="kv">
+        <div class="row"><span>Name</span><span><b>${esc(ownerName())}</b></span></div>
+        <div class="row"><span>Email</span><span class="mono">${esc(ownerEmail())}</span></div>
+      </div>
+      <p class="muted small" style="margin-top:6px">Owner details lock hain, change nahi ho sakte.</p>
       <p class="muted small" style="margin-top:12px">Logged in: <b>${esc(u.email)}</b> ${isOwner()?'(Owner)':''}</p>
       <button class="btn danger sm" data-act="admin-logout" style="margin-top:10px">${ICON.exit} Log out</button>
     </div>
