@@ -1074,7 +1074,7 @@ function navItems(){
 
 function renderShell(){
   const u = currentUser();
-  $('#nav').innerHTML = navItems().map(([v,label,ic])=>`<button type="button" class="nav-item" data-view="${v}" onclick="try{if('${v}'==='add'){state.draft=blankDraft();}go('${v}');closeNav();}catch(e){console.error(e);}return false;">${ic}<span>${label}</span></button>`).join('');
+  $('#nav').innerHTML = navItems().map(([v,label,ic])=>`<button type="button" class="nav-item" data-view="${v}" onclick="navTo('${v}');return false;">${ic}<span>${label}</span></button>`).join('');
   const logo = DB.logo();
   const brand = document.querySelector('.sb-brand');
   if(brand){
@@ -1159,6 +1159,25 @@ function go(view, param){
   $$('#nav .nav-item').forEach(a=>a.classList.toggle('active', a.dataset.view===view || (view==='detail'&&a.dataset.view==='families')||(view==='add'&&a.dataset.view==='add')));
   afterRender(view);
 }
+
+// Global sidebar open function
+window.openSidebar = function(){
+  try {
+    var s = document.getElementById('sidebar');
+    var sc = document.getElementById('scrimNav');
+    if (s) s.classList.add('open');
+    if (sc) sc.classList.add('show');
+  } catch(e){ console.error('openSidebar error:', e); }
+};
+
+// Global navigation function for inline onclick
+window.navTo = function(v){
+  try {
+    if (v==='add') state.draft = blankDraft();
+    go(v);
+    closeNav();
+  } catch(e){ console.error('navTo error:', e); }
+};
 
 function closeNav(){ const s=$('#sidebar'), sc=$('#scrimNav'); if(s) s.classList.remove('open'); if(sc) sc.classList.remove('show'); }
 
