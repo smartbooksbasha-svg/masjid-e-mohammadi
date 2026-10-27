@@ -7,7 +7,7 @@
 /* ---------------- config / constants ---------------- */
 const CFG = window.APP_CONFIG || {};
 const PREFIX = CFG.FAMILY_ID_PREFIX || 'MEMC';
-const LS = { users:'memc_users', admins:'memc_admins', families:'memc_families', seq:'memc_seq', session:'memc_session', theme:'memc_theme', seeded:'memc_seeded', masjid:'memc_masjid' };
+const LS = { users:'memc_users', admins:'memc_admins', families:'memc_families', seq:'memc_seq', session:'memc_session', theme:'memc_theme', seeded:'memc_seeded', masjid:'memc_masjid', events:'memc_events', logo:'memc_logo', formDraft:'memc_form_draft' };
 
 const DOC_TYPES = [
   ['aadhaar','Aadhaar Card'], ['pan','PAN Card'], ['passport','Passport'],
@@ -43,11 +43,19 @@ const BASIC_DOCS = [
   ['kapidu','Kapidu Thittam card'],
 ];
 const EDU = [
-  ['primary','Primary (1-8)'],
-  ['higher_secondary','Higher secondary (9-12)'],
-  ['college','College / University'],
+  ['','— Select —'],
+  ['illiterate','Illiterate'],
+  ['primary','Primary (1-5)'],
+  ['middle','Middle (6-8)'],
+  ['secondary','Secondary (SSLC/10th)'],
+  ['higher_secondary','Higher Secondary (HSC/12th)'],
+  ['iti','ITI'],
+  ['diploma','Diploma'],
+  ['degree','Degree / Graduate'],
+  ['postgrad','Post Graduate'],
+  ['professional','Professional'],
   ['madarsa','Madarsa'],
-  ['none','Not studying']
+  ['others','Others']
 ];
 /* occupation is free text; these are just quick suggestions */
 const OCCUPATIONS = [
@@ -101,6 +109,20 @@ function eduKey(m){ return m.educationLevel || inferEdu(m.education); }
 const $  = (s, r=document) => r.querySelector(s);
 const $$ = (s, r=document) => Array.from(r.querySelectorAll(s));
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+function sanitize(str){
+  if (str == null) return '';
+  return String(str).replace(/[<>]/g, function(c){
+    return c === '<' ? '&lt;' : '&gt;';
+  });
+}
+function sanitizeInput(el){
+  if (!el) return;
+  try {
+    if (el.value) el.value = String(el.value).replace(/[<>]/g,'');
+  } catch(e){}
+}
+
 function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
 function pad(n,l){ return String(n).padStart(l,'0'); }
 
@@ -174,6 +196,39 @@ function maskPhone(p){
 }
 function fmtDate(d){ if(!d) return '—'; const x=new Date(d); return isNaN(x)?d:x.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}); }
 function todayStr(){ const d=new Date(); return d.getFullYear()+'-'+pad(d.getMonth()+1,2)+'-'+pad(d.getDate(),2); }
+function monthKey(d=new Date()){ return d.getFullYear()+'-'+pad(d.getMonth()+1,2); }
+function recordEvent(type, note){
+  try {
+    const evs = DB.events();
+    evs.push({id:uid(), type, note:String(note||''), at:Date.now(), mk:monthKey(), y:new Date().getFullYear()});
+    DB.setEvents(evs.slice(-500));
+  } catch(e){}
+}
+function readFileAsDataURL(file){
+  return new Promise((res,rej)=>{
+    if(!file){rej('no file');return;}
+    const fr=new FileReader();
+    fr.onload=()=>res(fr.result);
+    fr.onerror=rej;
+    fr.readAsDataURL(file);
+  });
+}
+function compressImageDataURL(dataUrl, maxW=512, quality=0.72){
+  return new Promise((res)=>{
+    try{
+      const img=new Image();
+      img.onload=()=>{
+        const ratio = Math.min(1, maxW/img.width);
+        const w=Math.round(img.width*ratio), h=Math.round(img.height*ratio);
+        const c=document.createElement('canvas'); c.width=w; c.height=h;
+        const ctx=c.getContext('2d'); ctx.drawImage(img,0,0,w,h);
+        res(c.toDataURL('image/jpeg', quality));
+      };
+      img.onerror=()=>res(dataUrl);
+      img.src=dataUrl;
+    }catch(e){res(dataUrl);}
+  });
+}
 
 /* ---------------- storage ---------------- */
 const DB = {
@@ -201,12 +256,21 @@ const DB = {
   seeded(){ return localStorage.getItem(LS.seeded)==='1'; },
   setSeeded(){ localStorage.setItem(LS.seeded,'1'); },
   masjid(){ try{ return JSON.parse(localStorage.getItem(LS.masjid)||'null') || null; }catch(e){ return null; } },
-  setMasjid(v){ localStorage.setItem(LS.masjid, JSON.stringify(v)); }
+  setMasjid(v){ localStorage.setItem(LS.masjid, JSON.stringify(v)); },
+  events(){ try{ return JSON.parse(localStorage.getItem(LS.events)||'[]'); }catch(e){ return []; } },
+  setEvents(v){ localStorage.setItem(LS.events, JSON.stringify(v)); },
+  logo(){ try{ return localStorage.getItem(LS.logo)||''; }catch(e){ return ''; } },
+  setLogo(v){ if(!v) localStorage.removeItem(LS.logo); else localStorage.setItem(LS.logo, String(v)); }
 };
 
 function getSession(){ try{ return JSON.parse(localStorage.getItem(LS.session)||'null'); }catch(e){ return null; } }
 function setSession(s){
-  localStorage.setItem(LS.session, JSON.stringify(s));
+  try {
+    if (!s) { clearSession(); return; }
+    // Don't store photo/dataUrl in session to save space
+    const safe = { kind:s.kind, email:s.email, userId:s.userId, name:s.name, role:s.role };
+    localStorage.setItem(LS.session, JSON.stringify(safe));
+  } catch(e){ try { localStorage.setItem(LS.session, JSON.stringify(s)); } catch(x){} }
   try { cloudPulled = false; } catch(e){}
   if (!s || s.kind !== 'admin' || !s.email) return;
   const e = String(s.email).toLowerCase();
@@ -223,7 +287,7 @@ function setSession(s){
     if (ch) DB.setAdmins(admins);
   } catch(x){}
 }
-function clearSession(){ localStorage.removeItem(LS.session); try { cloudPulled = false; } catch(e){} }
+function clearSession(){ try { localStorage.removeItem(LS.session); } catch(e){} try { cloudPulled = false; } catch(e){} try { if(window.CLOUD && CLOUD.client){ CLOUD.client.auth.signOut().catch(()=>{}); } } catch(e){} }
 
 /* ---------- optional cloud (Supabase) ---------- */
 const CLOUD = {
@@ -383,7 +447,7 @@ function credsMailto(rec){
   const owner = ownerEmail() || 'owner';
   const sub = 'New admin request — ' + (rec.name||rec.email);
   const body = 'Masjid e Mohammadi · Mohalla Survey\n\n'
-    + 'Naya admin request aaya hai. Approve karne ke baad hi usko access milega.\n\n'
+    + 'New admin request pending. Access granted only after approval.\n\n'
     + 'Naam: ' + (rec.name||'—') + '\nEmail: ' + rec.email + '\nMobile: ' + (rec.phone||'—') + '\n'
     + 'User ID: ' + rec.userId + '\nTemporary password: ' + (rec.tempPass||'(approve ke baad)') + '\n\n'
     + 'App → Admins → Pending requests → Approve.\n';
@@ -467,7 +531,7 @@ function renderLogin(){
     const found = findAdminByIdentifier(ident);
     if (!found && !isEmail(ident)){ alertBox.innerHTML='<div class="alert err">User ID / email galat lag raha hai.</div>'; return; }
     if (found && adminStatus(found) === 'pending'){
-      alertBox.innerHTML='<div class="alert err">Ye account abhi <b>approval pending</b> hai. Owner approve karega tabhi login hoga — thodi der baad try karo.</div>'; return;
+      alertBox.innerHTML='<div class="alert err">This account is pending approval. Wait for owner approval.</div>'; return;
     }
     const email = found ? String(found.email).toLowerCase() : ident.toLowerCase();
 
@@ -491,7 +555,7 @@ function renderLogin(){
     if (!admin){ alertBox.innerHTML='<div class="alert err">Is email se koi admin nahi hai.</div>'; newCaptcha(); return; }
     if (!(await checkPass(pass, admin))){
       loginFailed();
-      alertBox.innerHTML='<div class="alert err">Password galat hai.' + (loginLocked()?' <b>60 second ruk jao.</b>':'') + '</div>';
+      alertBox.innerHTML='<div class="alert err">Incorrect password.' + (loginLocked()?' <b>60 second ruk jao.</b>':'') + '</div>';
       newCaptcha(); return;
     }
     loginOk();
@@ -505,7 +569,7 @@ function renderRequestAccess(){
   const owner = ownerEmail();
   $('#authScreen').innerHTML = authCard(`
     <h1>Request admin access</h1>
-    <p class="lead">Public se koi khud admin nahi ban sakta. Request owner ko jaati hai — approve hone par login ID milti hai.</p>
+    <p class="lead">Public registration disabled. Request access for owner approval.</p>
     ${authTabs('register')}
     <form id="reqForm">
       <div class="field"><label>Full name</label><input class="inp" name="name" required placeholder="e.g. Abdul Rahman" /></div>
@@ -514,8 +578,8 @@ function renderRequestAccess(){
         <div class="field"><label>Mobile</label><input class="inp" name="phone" inputmode="numeric" /></div>
       </div>
       <div id="reqAlert"></div>
-      <div class="alert info small">Login ID aur password app khud banayegi. Approve hone ke baad owner tumhe bhej dega.</div>
-      <button class="btn block" type="submit">Request bhejo</button>
+      <div class="alert info small">Login ID and password will be generated. Owner will share them after approval.</div>
+      <button class="btn block" type="submit">Send request</button>
     </form>`);
 
   $('#reqForm').addEventListener('submit', async (e)=>{
@@ -530,18 +594,18 @@ function renderRequestAccess(){
 function renderRequestSent(rec){
   const mail = credsMailto(rec);
   $('#authScreen').innerHTML = authCard(`
-    <h1>Request bhej diya</h1>
+    <h1>Request sent</h1>
     <p class="lead"><b>${esc(rec.name)}</b> (${esc(rec.email)}) ki request owner ke paas hai${ownerEmail()?` — <b>${esc(ownerEmail())}</b>`:''}.</p>
-    <div class="alert info">Approve hone ke baad owner tumhe <b>User ID</b> aur <b>temporary password</b> bhejega. Tabhi login hoga — password khud set karne ki zaroorat nahi.</div>
+    <div class="alert info">After approval, owner will share your User ID and temporary password. Tabhi login hoga — password khud set karne ki zaroorat nahi.</div>
     <div class="kv" style="margin-top:10px">
       <div class="row"><span>User ID</span><span class="mono">${esc(rec.userId)}</span></div>
       <div class="row"><span>Status</span><span class="badge gray">Approval pending</span></div>
     </div>
     <p class="muted small" style="margin-top:10px">Owner ko request email/WhatsApp par bhejni hai? Ye button dabao.</p>
     <div style="display:flex;gap:10px;flex-wrap:wrap">
-      <a class="btn" href="${esc(mail)}">${ICON.mail} Owner ko email bhejo</a>
+      <a class="btn" href="${esc(mail)}">${ICON.mail} Email owner</a>
       <a class="btn ghost" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent('Masjid Survey admin request\nNaam: '+rec.name+'\nEmail: '+rec.email+'\nUser ID: '+rec.userId)}">WhatsApp</a>
-      <button class="btn ghost" data-act="auth-cancel">Login par jao</button>
+      <button class="btn ghost" data-act="auth-cancel">Back to login</button>
     </div>`);
 }
 
@@ -551,7 +615,7 @@ function renderRegister(){
   if (!first) return renderRequestAccess();
   $('#authScreen').innerHTML = authCard(`
     <h1>Create the first admin</h1>
-    <p class="lead">Pehla admin account banao — email par verification link/code aayega. Iske baad naye admins sirf owner ki approval se bante hain.</p>
+    <p class="lead">Create first admin account. Email verification required.</p>
     ${authTabs('register')}
     <form id="regForm">
       <div class="field"><label>Full name</label><input class="inp" name="name" required placeholder="e.g. Abdul Rahman" /></div>
@@ -572,10 +636,10 @@ function renderRegister(){
     const E = e.target.elements, alertBox = $('#regAlert');
     const name = E.name.value.trim(), email = E.email.value.trim().toLowerCase(), phone = E.phone.value.trim();
     const pass = E.pass.value, pass2 = E.pass2.value;
-    if (!isEmail(email)){ alertBox.innerHTML='<div class="alert err">Valid email ID daalo.</div>'; return; }
-    if (adminByEmail(email)){ alertBox.innerHTML='<div class="alert err">Ye email pehle se admin hai — login karo.</div>'; return; }
-    if (pass !== pass2){ alertBox.innerHTML='<div class="alert err">Passwords match nahi kar rahe.</div>'; return; }
-    if (pass.length < 6){ alertBox.innerHTML='<div class="alert err">Password kam se kam 6 characters ka ho.</div>'; return; }
+    if (!isEmail(email)){ alertBox.innerHTML='<div class="alert err">Enter a valid email address.</div>'; return; }
+    if (adminByEmail(email)){ alertBox.innerHTML='<div class="alert err">This email is already registered. Please login.</div>'; return; }
+    if (pass !== pass2){ alertBox.innerHTML='<div class="alert err">Passwords do not match.</div>'; return; }
+    if (pass.length < 6){ alertBox.innerHTML='<div class="alert err">Password must be at least 6 characters.</div>'; return; }
 
     if (mailMode() === 'cloud'){
       const c = await CLOUD.get();
@@ -627,9 +691,9 @@ function renderLinkSent(){
   const isReset = pending.kind === 'reset';
   const isLogin = pending.kind === 'login';
   $('#authScreen').innerHTML = authCard(`
-    <h1>${isReset?'Reset link bhej diya':isLogin?'Login link bhej diya':'Email check karo'}</h1>
+    <h1>${isReset?'Reset link bhej diya':isLogin?'Login link bhej diya':'Check your email'}</h1>
     <p class="lead"><b>${esc(pending.email)}</b> par ${isReset?'password reset':isLogin?'login':'confirm'} link bheja hai.</p>
-    <div class="alert info">Email kholo → link par <b>click</b> karo → app khud login kar lega.<br>
+    <div class="alert info">Email kholo → click the link in your email to login automatically.<br>
       <span class="small">Link na dikhe to spam folder dekho. Link 1 ghante tak chalta hai.</span></div>
     <button class="btn block" type="button" data-act="auth-check">Maine link par click kar liya</button>
     <button class="btn ghost block" type="button" data-act="auth-cancel">Cancel</button>`);
@@ -640,7 +704,7 @@ async function cloudLinkCheck(){
   if (!c){ toast('Cloud connect nahi hua','err'); return; }
   const { data } = await c.auth.getSession();
   const sess = data && data.session;
-  if (!sess){ toast('Abhi verify nahi hua — email me link par click karo','err'); return; }
+  if (!sess){ toast('Verification pending. Click the link in your email.','err'); return; }
   const email = (sess.user.email||'').toLowerCase();
   if (pending && pending.kind === 'reset'){ pending = { kind:'newpass', email }; return renderNewPassword(); }
   const md = sess.user.user_metadata || {};
@@ -663,7 +727,7 @@ async function cloudLinkCheck(){
     DB.setAdmins(admins);
   }
   setSession({ kind:'admin', email });
-  pending=null; closeAuth(); enterApp(); toast('Admin login ho gaya');
+  pending=null; closeAuth(); enterApp(); toast('Login successful');
 }
 
 /* ---------------- email code step ---------------- */
@@ -699,7 +763,7 @@ function renderCodeStep(){
         admins.push({ email:pending.email, name:pending.name, phone:pending.phone, createdAt:Date.now(), verified:true, cloud:true });
         DB.setAdmins(admins);
         setSession({ kind:'admin', email:pending.email });
-        pending=null; closeAuth(); enterApp(); toast('Admin account ban gaya'); return;
+        pending=null; closeAuth(); enterApp(); toast('Admin account created'); return;
       }
       if (pending.kind === 'reset'){
         const { error } = await c.auth.verifyOtp({ email:pending.email, token:code, type:'recovery' });
@@ -722,7 +786,7 @@ function renderCodeStep(){
       admins.push({ email:pending.email, name:pending.name, phone:pending.phone, salt, passHash: await hashPass(pending.pass, salt), createdAt:Date.now(), verified:true });
       DB.setAdmins(admins);
       setSession({ kind:'admin', email:pending.email });
-      pending=null; closeAuth(); enterApp(); toast('Admin account ban gaya'); return;
+      pending=null; closeAuth(); enterApp(); toast('Admin account created'); return;
     }
     if (pending.kind === 'reset'){
       pending = { ...pending, kind:'newpass', code:'' };
@@ -781,7 +845,7 @@ function renderForgot(){
 function renderNewPassword(){
   $('#authScreen').innerHTML = authCard(`
     <h1>Set a new password</h1>
-    <p class="lead">Naya password daalo — iske baad login ho jayega.</p>
+    <p class="lead">Enter new password. You will be logged in after.</p>
     <form id="newPassForm">
       <div class="grid g2">
         <div class="field"><label>New password</label><input class="inp" name="pass" type="password" required minlength="6" /></div>
@@ -793,7 +857,7 @@ function renderNewPassword(){
   $('#newPassForm').addEventListener('submit', async (e)=>{
     e.preventDefault();
     const E = e.target.elements, alertBox = $('#npAlert');
-    if (E.pass.value !== E.pass2.value){ alertBox.innerHTML='<div class="alert err">Passwords match nahi kar rahe.</div>'; return; }
+    if (E.pass.value !== E.pass2.value){ alertBox.innerHTML='<div class="alert err">Passwords do not match.</div>'; return; }
     if (E.pass.value.length < 6){ alertBox.innerHTML='<div class="alert err">Kam se kam 6 characters.</div>'; return; }
 
     if (mailMode() === 'cloud'){
@@ -810,7 +874,7 @@ function renderNewPassword(){
       DB.setAdmins(admins);
     }
     const email = pending.email; pending = null;
-    toast('Password badal gaya — ab login karo');
+    toast('Password updated. Please login.');
     renderLogin();
   });
 }
@@ -1011,13 +1075,47 @@ function navItems(){
 function renderShell(){
   const u = currentUser();
   $('#nav').innerHTML = navItems().map(([v,label,ic])=>`<a class="nav-item" data-act="goto" data-view="${v}">${ic}<span>${label}</span></a>`).join('');
+  const logo = DB.logo();
+  const brand = document.querySelector('.sb-brand');
+  if(brand){
+    const crest = brand.querySelector('.crest');
+    if(crest){
+      crest.innerHTML = logo ? `<img src="${esc(logo)}" alt="Website logo" style="width:100%;height:100%;object-fit:cover;border-radius:12px;display:block"/>` : 'M';
+      crest.style.overflow='hidden';
+    }
+    if(isOwner()){
+      brand.style.cursor='pointer'; 
+      brand.setAttribute('title','Click to upload/change website logo from gallery');
+      brand.onclick = (e)=>{ 
+        e.preventDefault(); e.stopPropagation(); 
+        const inp=document.createElement('input'); 
+        inp.type='file'; inp.accept='image/*'; 
+        inp.onchange=async ev=>{ 
+          const f=ev.target.files[0]; if(!f)return; 
+          let d=await readFileAsDataURL(f); 
+          d=await compressImageDataURL(d,640,0.78); 
+          DB.setLogo(d); 
+          toast('Website logo updated'); 
+          renderShell(); 
+          go(state.view,state.param); 
+        }; 
+        inp.click(); 
+      };
+    } else { 
+      brand.style.cursor='default'; 
+      brand.removeAttribute('title'); 
+      brand.onclick=null; 
+    }
+  }
   const chip = $('#userChip');
   if (u){
     const initials = (u.name||u.email).split(/[ @.]/).filter(Boolean).map(w=>w[0]).slice(0,2).join('').toUpperCase();
     const own = isOwner() ? ' · Owner' : '';
-    chip.innerHTML = `<span class="av">${esc(initials)}</span><span><span class="nm">${esc(u.name||u.email)}</span><br><span class="rl">Admin${own}</span></span> <button class="chip-logout" type="button" data-act="admin-logout" title="Log out">${ICON.exit}</button>`;
+    const admins = DB.admins();
+    const me = admins.find(a=> (a.email===u.email) || (a.userId===u.userId)) || u;
+    const ph = me.photo ? `<img src="${esc(me.photo)}" alt="Profile photo"/>` : initials;
+    chip.innerHTML = `<button type="button" class="chip-btn" data-act="myprofile" title="My Profile - Edit photo/name/phone"><span class="av" style="overflow:hidden;border-radius:10px">${ph}</span><span><span class="nm">${esc(me.name||u.name||u.email)}</span><br><span class="rl">Admin${own}</span></span></button> <button class="chip-logout" type="button" data-act="admin-logout" title="Log out">${ICON.exit}</button>`;
     chip.removeAttribute('data-act');
-    chip.title = u.name||u.email;
   } else {
     chip.innerHTML = `<span class="public-chip">Public view</span><span class="btn ghost sm" data-act="open-auth" style="margin-left:8px">Admin login</span>`;
     chip.removeAttribute('data-act');
@@ -1032,11 +1130,17 @@ function renderShell(){
 }
 
 function go(view, param){
+  // Save draft if leaving add form
+  try {
+    if (state.view === 'add' && view !== 'add' && isAdmin() && state.draft && !state.draft.id){
+      saveFormDraft();
+    }
+  } catch(e){}
   const ADMIN_ONLY = ['add','users','settings','families','detail','masjid','adminpanel'];
   if (ADMIN_ONLY.includes(view) && !isAdmin()){ toast('Ye page sirf admin ke liye hai','err'); view='dashboard'; }
   state.view = view; state.param = param||null;
   closeNav();
-  const titles = { dashboard:'Survey Dashboard', families:'Households', add:(state.param?'Edit Household':'Add Household'), detail:'Household Record', find:'Find family', adminpanel:'Administration', users:'Admins', settings:'Settings', masjid:'Masjid Profile', cat:'Survey Category' };
+  const titles = { dashboard:'Survey Dashboard', families:'Households', add:(state.param?'Edit Household':'Add Household'), detail:'Household Record', find:'Find family', adminpanel:'Administration', users:'Admins', settings:'Settings', masjid:'Masjid Profile', cat:'Survey Category', myprofile:'My Profile', 'admin-edit':'Edit Admin' };
   $('#pageTitle').textContent = titles[view] || 'Survey Dashboard';
   let html='';
   if (view==='dashboard') html = viewDashboard();
@@ -1048,6 +1152,8 @@ function go(view, param){
   else if (view==='users') html = isAdmin()?viewAdminPanel():`<div class="empty"><h3>Admin only</h3></div>`;
   else if (view==='settings') html = isAdmin()?viewAdminPanel():`<div class="empty"><h3>Admin only</h3></div>`;
   else if (view==='masjid') html = viewMasjid();
+  else if (view==='myprofile') html = isAdmin()?viewMyProfile():`<div class='empty'><h3>Admin only</h3></div>`;
+  else if (view==='admin-edit') html = isOwner()?viewAdminEdit(state.param):`<div class='empty'><h3>Owner only</h3></div>`;
   else if (view==='cat') html = viewCat(state.param);
   $('#content').innerHTML = html;
   $$('#nav .nav-item').forEach(a=>a.classList.toggle('active', a.dataset.view===view || (view==='detail'&&a.dataset.view==='families')||(view==='add'&&a.dataset.view==='add')));
@@ -1095,11 +1201,18 @@ function computeStats(){
     docs: Object.fromEntries(BASIC_DOCS.map(([k])=>[k,0])),
     membersWithAllDocs: 0,
     membersWithNoDocs: 0,
-    scheme: { applied:0, notApplied:0, byName:[], counts:{} }
+    scheme: { applied:0, notApplied:0, byName:[], counts:{} },
+    events: { birthMonth:0, birthYear:0, deathMonth:0, deathYear:0 }
   };
   const streetMap = new Map();
   const schemeMap = new Map();
   const occMap = new Map();
+  const evs = DB.events();
+  const now = new Date(); const mk = monthKey(now); const yy = now.getFullYear();
+  s.events.birthMonth = evs.filter(e=>e.type==='birth' && e.mk===mk).length;
+  s.events.birthYear  = evs.filter(e=>e.type==='birth' && e.y===yy).length;
+  s.events.deathMonth = evs.filter(e=>e.type==='death' && e.mk===mk).length;
+  s.events.deathYear  = evs.filter(e=>e.type==='death' && e.y===yy).length;
 
   fams.forEach(f=>{
     const name = streetName(f);
@@ -1372,7 +1485,9 @@ function viewDashboard(){
     [icSmall('<path d="M4 20V8l8-4 8 4v12"/><path d="M9 20v-6h6v6"/>'), s.streets.length, 'Total streets'],
     [icSmall('<path d="M3 9.5 12 3l9 6.5V20a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/>'), s.houses, 'Total houses'],
     [icSmall('<circle cx="12" cy="7" r="4"/><path d="M5 21a7 7 0 0 1 14 0"/>'), s.families, 'Total families'],
-    [icSmall('<circle cx="9" cy="8" r="3.4"/><path d="M2.5 21v-1a6.5 6.5 0 0 1 13 0v1"/><path d="M17 5.5a3.4 3.4 0 0 1 0 6"/><path d="M18.5 21v-1a6 6 0 0 0-2-4.5"/>'), s.pop, 'Total population']
+    [icSmall('<circle cx="9" cy="8" r="3.4"/><path d="M2.5 21v-1a6.5 6.5 0 0 1 13 0v1"/><path d="M17 5.5a3.4 3.4 0 0 1 0 6"/><path d="M18.5 21v-1a6 6 0 0 0-2-4.5"/>'), s.pop, 'Total population'],
+    [icSmall('<path d="M12 5v14M5 12h14"/>'), s.events.birthMonth, 'Births this month'],
+    [icSmall('<path d="M5 12h14"/>'), s.events.deathMonth, 'Deaths this month']
   ];
 
   const streetRows = s.streets.length ? `
@@ -1623,7 +1738,7 @@ function blankDraft(){
   return { id:null, customId:'', houseName:'', houseNo:'', street:'', houseType:'moulding', address:'', phone:'', notes:'',
     members:[ blankMember() ],
     docs: Object.fromEntries(DOC_TYPES.map(d=>[d[0],'no'])),
-    custom: Array.from({length:CUSTOM_DOCS}, ()=>({label:'', value:'no'})) };
+    custom: [] };
 }
 function streetOptions(current){
   const streets = Array.from(new Set(DB.families().map(streetName).filter(x=>x && x!=='Unassigned'))).sort();
@@ -1632,7 +1747,21 @@ function streetOptions(current){
 }
 
 function viewFamilyForm(){
-  if (!state.draft) state.draft = blankDraft();
+  if (!state.draft) {
+    // try draft
+    if (isAdmin() && !state.param){
+      try {
+        const saved = loadFormDraft();
+        if (saved && saved.draft && !saved.draft.id){
+          const age = Date.now() - (saved.ts||0);
+          if (age < 24*60*60*1000){
+            state.draft = saved.draft;
+          }
+        }
+      } catch(e){}
+    }
+    if (!state.draft) state.draft = blankDraft();
+  }
   const d = state.draft;
   const editing = !!d.id;
   return `
@@ -1657,11 +1786,11 @@ function viewFamilyForm(){
           <div class="field"><label>Phone number</label><input class="inp" data-field="phone" inputmode="numeric" value="${esc(d.phone)}" placeholder="10-digit mobile" /></div>
         </div>
         <div class="field" style="margin-top:12px">
-          <label>Family ID ${editing?'':'<span class="hint" style="font-weight:400">— optional, khali chhodo to auto banega</span>'}</label>
+          <label>Family ID ${editing?'':'<span class="hint" style="font-weight:400">— optional, leave empty for auto-generate</span>'}</label>
           ${editing
             ? `<input class="inp" value="${esc(d.id)}" readonly />`
             : `<input class="inp" data-field="customId" value="${esc(d.customId||'')}" placeholder="Auto: ${esc(previewFamilyId())}" />
-               <span class="hint">Apna ID likhna ho to likho (jaise MEMC-2026-000101), warna system khud de dega. QR isi ID ka banega.</span>`}
+               <span class="hint">Enter custom ID or leave empty MEMC-2026-000101), warna system khud de dega. QR will be generated from this ID.</span>`}
         </div>
         <div class="field" style="margin-top:12px"><label>Address / landmark</label><input class="inp" data-field="address" value="${esc(d.address)}" placeholder="Mohalla, gali, landmark" /></div>
         <div class="field" style="margin-top:12px"><label>Notes (optional)</label><textarea class="inp" data-field="notes" placeholder="Any remark about this household">${esc(d.notes)}</textarea></div>
@@ -1673,15 +1802,13 @@ function viewFamilyForm(){
 
       <div class="sec-title">Documents held</div>
       <div class="card">
-        <p class="muted small" style="margin-bottom:12px">Mark Yes / No for each document. Add your own fields in the empty boxes below.</p>
+        <p class="muted small" style="margin-bottom:12px">Mark Yes / No for each document.</p>
         <div class="doc-grid">
           ${DOC_TYPES.map(([k,label])=>docRow(label, d.docs[k], k, null)).join('')}
-          ${d.custom.map((c,i)=>`
-            <div class="doc-row custom">
-              <input data-field="customLabel" data-ci="${i}" value="${esc(c.label)}" placeholder="Custom document ${i+1}" />
-              ${segHTML(c.value, 'custom:'+i)}
-            </div>`).join('')}
         </div>
+        <div class="sec-title" style="font-size:14px;margin-top:16px">Additional Documents</div>
+        <div id="customDocsList"></div>
+        <button type="button" class="btn ghost sm" data-act="add-custom-doc" style="margin-top:10px">+ Add document</button>
       </div>
 
       <div id="formAlert" style="margin-top:14px"></div>
@@ -1699,10 +1826,35 @@ function segHTML(value, key){
 function docRow(label, value, key, _x){
   return `<div class="doc-row"><span class="nm">${esc(label)}</span>${segHTML(value,key)}</div>`;
 }
+
+function renderCustomDocs(){
+  const wrap = $('#customDocsList'); if(!wrap || !state.draft) return;
+  if(!Array.isArray(state.draft.custom)) state.draft.custom = [];
+  if(state.draft.custom.length === 0) { 
+    wrap.innerHTML = '<div class="muted small" style="margin-top:6px">Koi additional document nahi add kiya gaya. Neeche button se add karo.</div>'; 
+    return; 
+  }
+  wrap.innerHTML = state.draft.custom.map((c,i)=>`
+    <div class="member-card" style="margin-top:10px;padding:12px">
+      <div class="member-head">
+        <span class="idx">Document ${i+1}${c.label?' · '+esc(c.label):''}</span>
+        <button type="button" class="btn ghost sm" data-act="remove-custom-doc" data-ci="${i}" style="color:var(--danger)">Remove</button>
+      </div>
+      <div class="grid g2" style="margin-top:10px">
+        <div class="field"><label>Document Name</label><input class="inp" data-field="customLabel" data-ci="${i}" value="${esc(c.label||'')}" placeholder="e.g. Caste Certificate" /></div>
+        <div class="field"><label>Status</label>${segHTML(c.value||'no', 'custom:'+i)}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
 function renderMembers(){
   const wrap = $('#membersWrap'); if(!wrap) return;
   wrap.innerHTML = state.draft.members.map((m,i)=>{
     const edu = eduKey(m);
+    const age = ageFromDob(m.dob);
+    const isChild = (age !== null && age >= 0 && age <= 5);
+    const isStudent = String(occName(m)||'').toLowerCase().includes('student');
     return `
     <div class="member-card">
       <div class="member-head">
@@ -1715,12 +1867,12 @@ function renderMembers(){
         <div class="field"><label>Gender</label><select class="inp" data-field="m.gender" data-idx="${i}">${GENDERS.map(g=>`<option ${m.gender===g?'selected':''}>${g}</option>`).join('')}</select></div>
         <div class="field"><label>Date of birth</label><input class="inp" type="date" data-field="m.dob" data-idx="${i}" value="${esc(m.dob)}" /></div>
         <div class="field"><label>Marital status</label><select class="inp" data-field="m.maritalStatus" data-idx="${i}">${MARITAL.map(x=>`<option ${m.maritalStatus===x?'selected':''}>${x}</option>`).join('')}</select></div>
-        <div class="field"><label>Number of children</label><input class="inp" inputmode="numeric" data-field="m.children" data-idx="${i}" value="${esc(m.children)}" /></div>
-        <div class="field"><label>Education</label><select class="inp" data-field="m.educationLevel" data-idx="${i}">
-          <option value="">— not set —</option>${EDU.map(([k,l])=>`<option value="${k}" ${edu===k?'selected':''}>${esc(l)}</option>`).join('')}</select></div>
-        <div class="field"><label>Kaam / occupation</label>
+        <div class="field m-children" style="display:${(m.maritalStatus||'')==='Married'?'block':'none'}"><label>Number of children</label><input class="inp" inputmode="numeric" data-field="m.children" data-idx="${i}" value="${esc(m.children||'')}" placeholder="0"/></div>
+        <div class="field child-hide-edu" style="display:${(isChild||isStudent)?'none':'block'}"><label>Education</label><select class="inp edu-sel" data-field="m.educationLevel" data-idx="${i}">
+          ${EDU.map(([k,l])=>`<option value="${k}" ${edu===k?'selected':''}>${esc(l)}</option>`).join('')}</select></div>
+        <div class="field child-hide-occ" style="display:${(isChild||isStudent)?'none':'block'}"><label>Kaam / occupation</label>
           <input class="inp" data-field="m.occupation" data-idx="${i}" list="occList" value="${esc(occName(m))}" placeholder="Plumber, Electrician, Painter, Helper…" /></div>
-        <div class="field"><label>Deeni taleem</label><select class="inp" data-field="m.religious" data-idx="${i}">
+        <div class="field child-hide-deeni" style="display:${(isChild||isStudent)?'none':'block'}"><label>Deeni taleem</label><select class="inp" data-field="m.religious" data-idx="${i}">
           ${DEENI.map(([k,l])=>`<option value="${k}" ${(m.religious||'')===k?'selected':''}>${esc(l)}</option>`).join('')}</select></div>
         <div class="field"><label>Father name</label><input class="inp" data-field="m.fatherName" data-idx="${i}" value="${esc(m.fatherName)}" /></div>
         <div class="field"><label>Mother name</label><input class="inp" data-field="m.motherName" data-idx="${i}" value="${esc(m.motherName)}" /></div>
@@ -1764,6 +1916,7 @@ function viewFamilyDetail(id){
     <div class="page-head"><div><h1>${esc(f.houseName||'Household')}</h1><p>${esc(streetName(f))}${f.houseNo?' · House '+esc(f.houseNo):''} · ${members.length} member(s)${canEdit?'':' · public view (phone hidden)'}</p></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         ${canEdit?`<button class="btn ghost sm" data-act="print-family" data-id="${esc(f.id)}">${ICON.print} PDF</button>`:''}
+        ${canEdit?`<button class="btn ghost sm" data-act="print-idcards" data-id="${esc(f.id)}">${ICON.id||ICON.print} ID Cards</button>`:''}
         <button class="btn ghost sm" data-act="goto" data-view="families">← Back</button>
         ${canEdit?`<button class="btn sm" data-act="edit-family" data-id="${esc(f.id)}">Edit</button>`:''}
       </div></div>
@@ -1772,7 +1925,7 @@ function viewFamilyDetail(id){
       <div class="qr-panel">
         <div class="qr-box" id="qrBox"></div>
         <div><div class="muted small">FAMILY ID</div><div class="fid">${esc(f.id)}</div>
-        <div class="muted small" style="margin-top:6px">Scan QR → admin login par seedha edit form khul jata hai. Ye QR me Family ID bhi likha hua hota hai.</div></div>
+        <div class="muted small" style="margin-top:6px">Scan QR to open edit form after admin login. QR contains Family ID.</div></div>
       </div>
       <div style="min-width:240px;flex:1">
         <div class="kv">
@@ -1831,8 +1984,8 @@ function viewUsers(){
       <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px">
         <a class="btn sm" href="${esc(creds.mail)}">${ICON.mail} Email owner ko bhejo</a>
         <a class="btn ghost sm" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent('Masjid Survey admin login\nUser ID: '+creds.userId+'\nPassword: '+creds.tempPass)}">WhatsApp</a>
-        <button class="btn ghost sm" data-act="copy-creds">Copy karo</button>
-        <button class="btn ghost sm" data-act="close-creds">Band karo</button>
+        <button class="btn ghost sm" data-act="copy-creds">Copy</button>
+        <button class="btn ghost sm" data-act="close-creds">Close</button>
       </div>
       <p class="muted small" style="margin-top:8px">Approve karne ke baad hi ye login kaam karega — pehle "Pending requests" me Approve dabao.</p>
     </div>` : ''}
@@ -2240,6 +2393,55 @@ function masjidData(){
   return Object.assign({ photos: [] }, m);
 }
 
+function viewMyProfile(){
+  const u = currentUser(); if(!u) return `<div class='empty'><h3>Login required</h3></div>`;
+  const admins = DB.admins();
+  const me = admins.find(a=> (a.email===u.email) || (a.userId===u.userId)) || u;
+  const initials = (me.name||me.email||'A').split(/[ @.]/).filter(Boolean).map(w=>w[0]).slice(0,2).join('').toUpperCase();
+  return `<div class='page-head'><div><h1>My Profile</h1><p>Edit your photo, name & phone number</p></div><div class='ph-actions'><button class='btn ghost sm' data-act='goto' data-view='dashboard'>← Dashboard</button></div></div>
+    <div class='card' style='max-width:720px'>
+      <div style='display:flex;gap:16px;align-items:center;flex-wrap:wrap'>
+        <div class='av' style='width:84px;height:84px;font-size:1.6rem;border-radius:18px;overflow:hidden;border:1px solid var(--line)'>${me.photo?`<img src='${esc(me.photo)}' alt='' style='width:100%;height:100%;object-fit:cover'/>`:esc(initials)}</div>
+        <div style='display:flex;gap:8px;flex-wrap:wrap'>
+          <button class='btn sm' type='button' data-act='prof-photo'>Add / Change photo (Gallery)</button>
+          ${me.photo?`<button class='btn ghost sm' type='button' data-act='prof-photo-rm'>Remove photo</button>`:''}
+        </div>
+      </div>
+      <div class='grid2' style='margin-top:18px'>
+        <div class='field'><label>Full name</label><input class='inp' id='profName' value='${esc(me.name||'')}'/></div>
+        <div class='field'><label>Email (login)</label><input class='inp' value='${esc(me.email||'')}' readonly/></div>
+        <div class='field'><label>Phone number</label><input class='inp' id='profPhone' value='${esc(me.phone||'')}' inputmode='tel'/></div>
+        <div class='field'><label>User ID</label><input class='inp' value='${esc(me.userId||u.userId||'—')}' readonly/></div>
+      </div>
+      <div style='margin-top:18px'><button class='btn' data-act='prof-save'>Save changes</button></div>
+    </div>`;
+}
+
+function viewAdminEdit(id){
+  if(!isOwner()) return `<div class='empty'><h3>Owner only</h3></div>`;
+  const admins = DB.admins();
+  const a = admins.find(x=>x.email===id);
+  if(!a) return `<div class='empty'><h3>Admin not found</h3></div>`;
+  const initials = (a.name||a.email||'A').split(/[ @.]/).filter(Boolean).map(w=>w[0]).slice(0,2).join('').toUpperCase();
+  return `<div class='page-head'><div><h1>Edit Admin</h1><p>${esc(a.email)}</p></div><div class='ph-actions'><button class='btn ghost sm' data-act='goto' data-view='adminpanel'>← Administration</button></div></div>
+    <div class='card' style='max-width:720px'>
+      <div style='display:flex;gap:16px;align-items:center;flex-wrap:wrap'>
+        <div class='av' style='width:84px;height:84px;font-size:1.6rem;border-radius:18px;overflow:hidden;border:1px solid var(--line)'>${a.photo?`<img src='${esc(a.photo)}' alt='' style='width:100%;height:100%;object-fit:cover'/>`:esc(initials)}</div>
+        <div style='display:flex;gap:8px;flex-wrap:wrap'>
+          <button class='btn sm' type='button' data-act='admin-photo' data-id='${esc(a.email)}'>Add / Change photo (Gallery)</button>
+          ${a.photo?`<button class='btn ghost sm' type='button' data-act='admin-photo-rm' data-id='${esc(a.email)}'>Remove photo</button>`:''}
+        </div>
+      </div>
+      <div class='grid2' style='margin-top:18px'>
+        <div class='field'><label>Full name</label><input class='inp' id='aName' value='${esc(a.name||'')}'/></div>
+        <div class='field'><label>Email</label><input class='inp' id='aEmail' value='${esc(a.email||'')}'/></div>
+        <div class='field'><label>Phone number</label><input class='inp' id='aPhone' value='${esc(a.phone||'')}' inputmode='tel'/></div>
+        <div class='field'><label>User ID</label><input class='inp' value='${esc(a.userId||'—')}' readonly/></div>
+      </div>
+      <div style='margin-top:18px'><button class='btn' data-act='admin-save' data-id='${esc(a.email)}'>Save changes</button></div>
+    </div>`;
+}
+
 function viewMasjid(){
   const u = currentUser();
   const canEdit = isAdmin();
@@ -2294,7 +2496,7 @@ function viewAdminPanel(){
     <div class="page-head"><div><h1>Administration</h1><p>Admins, settings aur account.</p></div></div>
     <div class="card">
       <div class="sec-title" style="margin-top:0">Admins & approval</div>
-      <p class="muted small">Naye admins sirf owner approve kar sakta hai. <b>Owner: ${esc(ownerName())} (${esc(ownerEmail())})</b> — locked</p>
+      <p class="muted small">Naye admins sirf owner approve kar sakta hai. <b>Owner: ${esc(ownerName())} (${esc(ownerEmail())})</b> — locked<br><span class="small">Click sidebar logo to change website logo • Click your avatar to edit your profile • Owner can edit/remove other admins with photo/email/phone</span></p>
       <div style="margin-top:12px">${isOwner()?viewUsersTable():viewUsersReadonly()}</div>
     </div>
     ${viewSettingsCard('adminpanel')}
@@ -2322,8 +2524,8 @@ function viewUsersTable(){
     <td style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn sm" data-act="approve-admin" data-id="${esc(a.email)}">Approve</button><button class="btn sm ghost" data-act="reject-admin" data-id="${esc(a.email)}">Reject</button></td></tr>`).join('')}
     </tbody></table></div>`:`<p class="muted small">Koi pending request nahi.</p>`}
     <div class="sec-title">Active admins</div>
-    <div class="table-wrap"><table><thead><tr><th>User ID</th><th>Name</th><th>Email</th><th>Role</th><th>Action</th></tr></thead><tbody>
-    ${act.map(a=>{ const isO = String(a.email).toLowerCase()===owner || a.role==='owner'; return `<tr><td class="mono">${esc(a.userId||'—')}</td><td>${esc(a.name||'—')}</td><td>${esc(a.email)}</td><td>${isO?'<span class="badge">Owner</span>':'<span class="badge gray">Admin</span>'}</td><td>${isO?'—':`<button class="btn sm ghost" data-act="del-admin" data-id="${esc(a.email)}">Remove</button>`}</td></tr>`; }).join('')}
+    <div class="table-wrap"><table><thead><tr><th>User ID</th><th>Admin (Photo / Name / Email)</th><th>Phone Number</th><th>Role</th><th>Action</th></tr></thead><tbody>
+    ${act.map(a=>{ const isO = String(a.email).toLowerCase()===owner || a.role==='owner'; const ini=(a.name||a.email).split(/[ @.]/).filter(Boolean).map(w=>w[0]).slice(0,2).join('').toUpperCase(); return `<tr><td class="mono">${esc(a.userId||'—')}</td><td><div style="display:flex;gap:10px;align-items:center"><span class="av" style="width:36px;height:36px;font-size:.8rem;overflow:hidden;border-radius:12px;border:1px solid var(--line)">${a.photo?`<img src='${esc(a.photo)}' style='width:100%;height:100%;object-fit:cover'/>`:esc(ini)}</span><div><div style="font-weight:600">${esc(a.name||'—')}</div><div class="muted small">${esc(a.email)}</div></div></div></td><td>${esc(a.phone||'—')}</td><td>${isO?'<span class="badge">Owner</span>':'<span class="badge gray">Admin</span>'}</td><td style="display:flex;gap:6px;flex-wrap:wrap">${isO?'<span class="muted small">Locked</span>':`<button class="btn sm" data-act="admin-edit" data-id="${esc(a.email)}">Edit</button><button class="btn sm ghost" data-act="del-admin" data-id="${esc(a.email)}">Remove</button>`}</td></tr>`; }).join('')}
     </tbody></table></div>
   `;
 }
@@ -2509,7 +2711,15 @@ document.addEventListener('click', (e)=>{
   if (act==='close-auth'){ closeAuth(); return; }
   if (act==='auth-tab'){ pending=null; renderAuth(el.dataset.tab||'login'); return; }
   if (act==='auth-cancel'){ pending=null; renderAuth('login'); return; }
-  if (act==='admin-logout'){ clearSession(); state.draft=null; toast('Log out ho gaya'); renderShell(); go('dashboard'); return; }
+  if (act==='admin-logout'){ try { if(!isAdmin()){ clearSession(); renderShell(); go('dashboard'); return; } } catch(e){} clearSession(); state.draft=null; renderShell(); go('dashboard'); return; }
+  if (act==='myprofile'){ if(!isAdmin()){toast('Admin only','err');return;} go('myprofile'); return; }
+  if (act==='admin-edit'){ if(!isOwner()){toast('Sirf owner edit kar sakta hai','err');return;} go('admin-edit', el.dataset.id); return; }
+  if (act==='admin-photo'){ if(!isOwner()){toast('Sirf owner','err');return;} const email=el.dataset.id; const inp=document.createElement('input'); inp.type='file'; inp.accept='image/*'; inp.onchange=async e=>{ const f=e.target.files[0]; if(!f)return; let d=await readFileAsDataURL(f); d=await compressImageDataURL(d,256,0.7); const admins=DB.admins(); const i=admins.findIndex(a=>a.email===email); if(i>=0){ admins[i].photo=d; DB.setAdmins(admins); toast('Photo updated'); go('adminpanel'); }}; inp.click(); return; }
+  if (act==='admin-photo-rm'){ if(!isOwner()){toast('Sirf owner','err');return;} const email=el.dataset.id; const admins=DB.admins(); const i=admins.findIndex(a=>a.email===email); if(i>=0){ delete admins[i].photo; DB.setAdmins(admins); toast('Photo removed'); go('adminpanel'); } return; }
+  if (act==='admin-save'){ if(!isOwner()){toast('Sirf owner','err');return;} const email=el.dataset.id; const admins=DB.admins(); const i=admins.findIndex(a=>a.email===email); if(i>=0){ admins[i].name=$('#aName').value.trim(); admins[i].phone=$('#aPhone').value.trim(); admins[i].email=$('#aEmail').value.trim().toLowerCase(); DB.setAdmins(admins); toast('Saved'); go('adminpanel'); } return; }
+  if (act==='prof-photo'){ if(!isAdmin())return; const inp=document.createElement('input'); inp.type='file'; inp.accept='image/*'; inp.onchange=async e=>{ const f=e.target.files[0]; if(!f)return; let d=await readFileAsDataURL(f); d=await compressImageDataURL(d,256,0.7); const admins=DB.admins(); const u=currentUser(); const i=admins.findIndex(a=>(a.email===u.email)||(a.userId===u.userId)); if(i>=0){ admins[i].photo=d; DB.setAdmins(admins); if(getSession() && getSession().email===admins[i].email){ const s2=getSession(); s2.photo=d; localStorage.setItem(LS.session, JSON.stringify(s2)); } toast('Photo updated'); renderShell(); go('myprofile'); }}; inp.click(); return; }
+  if (act==='prof-photo-rm'){ if(!isAdmin())return; const admins=DB.admins(); const u=currentUser(); const i=admins.findIndex(a=>(a.email===u.email)||(a.userId===u.userId)); if(i>=0){ delete admins[i].photo; DB.setAdmins(admins); const ss=getSession(); if(ss){ delete ss.photo; localStorage.setItem(LS.session, JSON.stringify(ss)); } toast('Photo removed'); renderShell(); go('myprofile'); } return; }
+  if (act==='prof-save'){ if(!isAdmin())return; const admins=DB.admins(); const u=currentUser(); const i=admins.findIndex(a=>(a.email===u.email)||(a.userId===u.userId)); if(i<0)return; const name=$('#profName')?.value||''; const phone=$('#profPhone')?.value||''; if(isOwner() || admins[i].email===u.email){ admins[i].name=name.trim(); admins[i].phone=phone.trim(); DB.setAdmins(admins); const ss=getSession(); if(ss){ ss.name=name.trim(); ss.phone=phone.trim(); if(admins[i].photo) ss.photo=admins[i].photo; localStorage.setItem(LS.session, JSON.stringify(ss)); } toast('Profile updated successfully'); renderShell(); go('myprofile'); } else toast('Not allowed','err'); return; }
   if (act==='logout'){ clearSession(); state.draft=null; renderShell(); go('dashboard'); return; }
   if (act==='del-admin'){
     if (!isOwner()){ toast('Sirf owner admin hata sakta hai','err'); return; }
@@ -2525,6 +2735,7 @@ document.addEventListener('click', (e)=>{
   if (act==='export-excel'){ exportExcel(); return; }
   if (act==='print-all'){ printFamilies(DB.families(), 'All Households'); return; }
   if (act==='print-family'){ const f=DB.families().find(x=>x.id===id); if(f) printFamilies([f], f.houseName||f.id); return; }
+  if (act==='print-idcards'){ const f=DB.families().find(x=>x.id===id); if(f) printIdCards(f); return; }
   if (act==='backup-json'){ backupJSON(); return; }
   if (act==='restore-json'){ const inp=$('#restoreFile'); if(inp){ inp.value=''; inp.click(); } return; }
   if (act==='approve-admin'){
@@ -2588,8 +2799,52 @@ document.addEventListener('click', (e)=>{
     m.photos.splice(+el.dataset.i,1);
     DB.setMasjid(m); toast('Photo hata di'); go(state.view, state.param); return;
   }
-  if (act==='add-member'){ state.draft.members.push(blankMember()); renderMembers(); return; }
-  if (act==='remove-member'){ state.draft.members.splice(+el.dataset.idx,1); renderMembers(); return; }
+  if (act==='add-member'){ 
+    const t = prompt('Add member reason\n1) Birth (this month/year)\n2) Death (this month/year)\n3) Other\nEnter 1,2 or 3');
+    const map = {'1':'birth','2':'death','3':'other'};
+    const ty = map[String(t||'').trim()] || 'other';
+    recordEvent(ty, 'Member added to household');
+    state.draft.members.push(blankMember()); renderMembers(); return; 
+  }
+  if (act==='remove-member'){ 
+    const t = prompt('Remove member reason\n1) Birth (this month/year)\n2) Death (this month/year)\n3) Other\nEnter 1,2 or 3');
+    const map = {'1':'birth','2':'death','3':'other'};
+    const ty = map[String(t||'').trim()] || 'other';
+    recordEvent(ty, 'Member removed from household');
+    state.draft.members.splice(+el.dataset.idx,1); renderMembers(); return; 
+  }
+  if (act==='add-custom-doc'){
+    if(!state.draft) return;
+    if(!Array.isArray(state.draft.custom)) state.draft.custom = [];
+    if(state.draft.custom.length >= 12){ toast('Max 12 documents allowed','err'); return; }
+    state.draft.custom.push({label:'', value:'no'});
+    renderCustomDocs();
+    try { saveFormDraft(); } catch(ex){}
+    return;
+  }
+  if (act==='remove-custom-doc'){
+    if(!state.draft) return;
+    const ci = +el.dataset.ci;
+    if(Array.isArray(state.draft.custom)){
+      state.draft.custom.splice(ci,1);
+      renderCustomDocs();
+      try { saveFormDraft(); } catch(ex){}
+    }
+    return;
+  }
+  if (act==='toggle-custom-docs'){
+    const wrap = $('#customDocsWrap');
+    if(wrap){
+      if(wrap.style.display === 'none' || wrap.style.display === ''){
+        wrap.style.display = 'block';
+        el.textContent = '- Hide documents';
+      } else {
+        wrap.style.display = 'none';
+        el.textContent = '+ Add more documents';
+      }
+    }
+    return;
+  }
 });
 
 // masjid photo upload
@@ -2605,6 +2860,20 @@ document.addEventListener('change', async (e)=>{
 
 // per-member document pills (tap to toggle)
 document.addEventListener('click', (e)=>{
+  // custom doc toggle
+  const cpill = e.target.closest('.doc-row.custom .seg button');
+  if(cpill && state.draft){
+    const seg = cpill.closest('.seg');
+    if(seg && seg.dataset.doc && seg.dataset.doc.startsWith('custom:')){
+      const ci = +seg.dataset.doc.split(':')[1];
+      if(Array.isArray(state.draft.custom) && state.draft.custom[ci]){
+        state.draft.custom[ci].value = cpill.dataset.v;
+        seg.querySelectorAll('button').forEach(b=>b.classList.toggle('on', b===cpill));
+        try { saveFormDraft(); } catch(ex){}
+        return;
+      }
+    }
+  }
   const pill = e.target.closest('[data-doc-key]'); if(!pill || !state.draft) return;
   const wrap = pill.closest('[data-mdocs]'); if(!wrap) return;
   const i = +wrap.dataset.idx, key = pill.dataset.docKey;
@@ -2653,12 +2922,54 @@ function applyField(el){
 document.addEventListener('input', (e)=>{
   const el=e.target;
   if(el.dataset&&el.dataset.field){ applyField(el); if(el.dataset.field==='m.name'){ const h=el.closest('.member-card')&&el.closest('.member-card').querySelector('.idx'); if(h) h.textContent='Member '+(+el.dataset.idx+1)+' · '+el.value; } return; }
-  if(el.id==='famSearch') renderFamilyList();
+ 
+      // Auto-hide for age 1-5 or student
+      try {
+        const card = el.closest ? el.closest('.member-card') : null;
+        if(card){
+          const dob = card.querySelector('[data-field="m.dob"]')?.value;
+          let age = null;
+          if(dob){
+            const d = new Date(dob+'T00:00:00');
+            if(!isNaN(d)){ const now=new Date(); age = now.getFullYear()-d.getFullYear(); const mo=now.getMonth()-d.getMonth(); if(mo<0||(mo===0&&now.getDate()<d.getDate())) age--; }
+          }
+          const occ = (card.querySelector('[data-field="m.occupation"]')?.value||'').toLowerCase();
+          const hide = (age !== null && age >=0 && age <=5) || occ.includes('student');
+          card.querySelectorAll('.child-hide-edu, .child-hide-occ, .child-hide-deeni').forEach(x=>x.style.display = hide ? 'none' : 'block');
+          if(hide){
+            card.querySelectorAll('.child-hide-edu select, .child-hide-edu input').forEach(x=>{ if(x.tagName==='SELECT') x.value=''; if(x.tagName==='INPUT') x.value=''; });
+            card.querySelectorAll('.child-hide-occ input').forEach(x=>{ x.value=''; });
+            card.querySelectorAll('.child-hide-deeni select').forEach(x=>{ x.value=''; });
+          }
+        }
+      } catch(ex){}  if(el.id==='famSearch') renderFamilyList();
 });
 document.addEventListener('change', (e)=>{
   const el=e.target;
   if (el.id==='restoreFile'){ restoreJSON(el.files && el.files[0]); return; }
-  if(el.dataset&&el.dataset.field){ applyField(el); return; }
+  if(el.dataset&&el.dataset.field){ 
+    applyField(el); 
+    // Custom doc label
+    if(el.dataset.field === 'customLabel' && state.draft && Array.isArray(state.draft.custom)){
+      const ci = +el.dataset.ci;
+      if(state.draft.custom[ci]) state.draft.custom[ci].label = el.value;
+      try { saveFormDraft(); } catch(ex){}
+      return;
+    }
+    // Marital status - hide/show children
+    if(el.dataset.field === 'm.maritalStatus'){
+      const card = el.closest('.member-card');
+      if(card){
+        const kids = card.querySelector('.m-children');
+        if(kids){
+          if(el.value === 'Married'){ kids.style.display='block'; }
+          else { kids.style.display='none'; const inp=kids.querySelector('input'); if(inp) inp.value=''; }
+        }
+      }
+    }
+    // Education - no auto-hide
+    return; 
+  }
   if(el.id==='famGenderF'||el.id==='famMaritalF'||el.id==='famStreetF') renderFamilyList();
 });
 
@@ -2687,7 +2998,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
 /* ---------------- render side-effects ---------------- */
 function afterRender(view){
-  if (view==='add' && state.draft){ renderMembers(); }
+  if (view==='add' && state.draft){ renderMembers(); try { renderCustomDocs(); } catch(e){} }
   if (view==='detail'){ const f=DB.families().find(x=>x.id===state.param); const box=$('#qrBox'); if(f&&box){
     try {
       const url = location.origin + location.pathname + '#qedit=' + encodeURIComponent(f.id);
@@ -2726,6 +3037,30 @@ function renderQR(el, text){
 /* ============================================================
    SAVE HOUSEHOLD
    ============================================================ */
+
+function saveFormDraft(){
+  try {
+    if (!isAdmin()) return;
+    if (state.view !== 'add' || !state.draft) return;
+    localStorage.setItem(LS.formDraft, JSON.stringify({
+      draft: state.draft,
+      ts: Date.now(),
+      view: state.view,
+      param: state.param
+    }));
+  } catch(e){}
+}
+function loadFormDraft(){
+  try {
+    const raw = localStorage.getItem(LS.formDraft);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch(e){ return null; }
+}
+function clearFormDraft(){
+  try { localStorage.removeItem(LS.formDraft); } catch(e){}
+}
+
 function saveFamily(){
   const d = state.draft, u = currentUser();
   const alertBox = $('#formAlert');
@@ -2760,6 +3095,7 @@ function saveFamily(){
   DB.setFamilies(fams);
   const wasNew = !state.param;
   state.draft = null;
+  try { clearFormDraft(); } catch(e){}
   if (SYNC.on() && isAdmin()){
     SYNC.saveFamily(d).then(ok=>{ if (!ok) toast('Cloud me save nahi hua — baad me retry karega','err'); });
   }
@@ -3102,6 +3438,63 @@ function mjHead(){
     ${(m.photos||[]).length?`<div class="pphotos">${m.photos.map(src=>`<img src="${esc(src)}" />`).join('')}</div>`:''}
   </div>`;
 }
+
+function printIdCards(fam){
+  if(!fam) return;
+  const mem = fam.members || [];
+  if(!mem.length){ toast('No members to print','err'); return; }
+  const head = mem.find(m=>/(head|self)/i.test(m.relation||'')) || mem[0];
+  const addr = [fam.address, fam.houseNo?('House '+fam.houseNo):'', streetName(fam)].filter(Boolean).join(', ');
+  const a = ageFromDob(head.dob);
+  const qrText = location.origin + location.pathname + '#qedit=' + encodeURIComponent(fam.id);
+  const html = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ID Card - ${esc(fam.id)}</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family:Arial,Helvetica,sans-serif}
+body{background:#fff;padding:10px}
+.idcard{width:85.6mm;height:53.98mm;border:1px solid #111;border-radius:6px;display:flex;overflow:hidden;page-break-inside:avoid;margin:6px auto}
+.idleft{flex:1;padding:6px 8px;display:flex;flex-direction:column;gap:2px}
+.idright{width:28mm;border-left:1px solid #ddd;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:4px}
+.idtitle{font-size:7pt;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px}
+.idrow{font-size:6.3pt;line-height:1.28}
+.idrow b{font-weight:600}
+.idqr canvas{width:24mm;height:24mm}
+.idfid{font-size:5.8pt;font-weight:700;text-align:center;word-break:break-all}
+.hdr{font-size:8pt;font-weight:700;margin:6px 0 12px;text-align:center}
+@media print{
+  body{padding:0}
+  @page{size:auto;margin:8mm}
+}
+</style>
+<script src="vendor/qrcode.js"></script>
+</head><body>
+<div class="hdr">${esc(CFG.ORG_NAME||'Masjid e Mohammadi')} · ID CARD</div>
+<div class="idcard">
+  <div class="idleft">
+    <div class="idtitle">Mohalla Survey ID Card</div>
+    <div class="idrow"><b>Family ID:</b> ${esc(fam.id)}</div>
+    <div class="idrow"><b>Head of Family:</b> ${esc(head.name||'—')}</div>
+    <div class="idrow"><b>Name:</b> ${esc(head.name||'—')}</div>
+    <div class="idrow"><b>Relation:</b> ${esc(head.relation||'Self')}</div>
+    <div class="idrow"><b>Date of Birth:</b> ${esc(head.dob||'—')}${a!==null?' ('+a+' yrs)':''}</div>
+    <div class="idrow"><b>Phone No.:</b> ${esc(fam.phone||'—')}</div>
+    <div class="idrow"><b>Address:</b> ${esc(addr||'—')}</div>
+  </div>
+  <div class="idright">
+    <div class="idqr" id="idq"></div>
+    <div class="idfid">${esc(fam.id)}</div>
+  </div>
+</div>
+<script>
+try{ new QRCode(document.getElementById('idq'),{text:${JSON.stringify(qrText)},width:96,height:96,correctLevel:QRCode.CorrectLevel.M}); }catch(e){}
+setTimeout(()=>window.print(), 400);
+</script>
+</body></html>`;
+  const w = window.open('','_blank','width=900,height=700');
+  if(!w){ toast('Popup block hua hai - popup allow karo','err'); return; }
+  w.document.write(html);
+  w.document.close();
+}
+
 function printFamilies(fams, title){
   if (!fams.length){ toast('Nothing to print','err'); return; }
   const s = computeStats();
@@ -3234,6 +3627,8 @@ function loadSample(){
 
 /* email link se wapas aaya? → session se admin login */
 async function cloudAutoLogin(){
+  // DISABLED: prevent auto-login on refresh
+  return;
   if (!CLOUD.enabled()) return;
   try {
     const c = await CLOUD.get(); if (!c) return;
@@ -3285,6 +3680,18 @@ function init(){
   migrateAdmins();
   migrateOwner();
   purgeNonOwnerAdmins();
+  /* Security: validate session on boot */
+  try {
+    const ss = getSession();
+    if (ss && ss.kind === 'admin' && ss.email){
+      const a = DB.admins().find(x=>String(x.email).toLowerCase()===String(ss.email).toLowerCase());
+      if (!a || adminStatus(a) !== 'active' || String(a.email).toLowerCase() !== ownerEmail() && a.status === 'pending'){
+        clearSession();
+      } else if (!currentUser()){
+        clearSession();
+      }
+    }
+  } catch(e){}
   try {
     const h = (location.hash||'').replace(/^#/,'');
     if (h.indexOf('qedit=')===0){
@@ -3305,8 +3712,9 @@ function init(){
     const sel = $('#langSel');
     if (sel){ sel.value = LANG; sel.addEventListener('change', ()=> setLang(sel.value)); }
   } catch(e){}
+  // Don't auto-login on refresh - always show public dashboard first
   enterApp();   // public dashboard pehle — login optional
-  cloudAutoLogin();
+  // cloudAutoLogin() disabled - prevents auto-login on refresh
   try { new MutationObserver(()=>translateSoon()).observe(document.body, { childList:true, subtree:true }); } catch(e){}
   translateSoon();
 }
@@ -3493,3 +3901,12 @@ function renderFindResult(res){
   `;
 }
 
+window.addEventListener('beforeunload', function(){
+  try {
+    if (isAdmin() && state.view === 'add' && state.draft && !state.draft.id){
+      saveFormDraft();
+    }
+  } catch(e){}
+});
+
+window.onerror = function(msg, url, line){ console.error('ERR:', msg, line); return false; };

@@ -116,7 +116,7 @@ select.inp{appearance:none;background-image:linear-gradient(45deg,transparent 50
   radial-gradient(340px 200px at 100% 0%,var(--glow),transparent 60%);pointer-events:none}
 .auth-card>*{position:relative}
 .auth-brand{display:flex;align-items:center;gap:11px;margin-bottom:22px}
-.crest{width:40px;height:40px;border-radius:12px;flex:none;display:grid;place-items:center;
+.crest{width:40px;height:40px;border-radius:12px;flex:none;display:grid;place-items:center;overflow:hidden;} .sb-brand{cursor:pointer} .sb-brand:hover .crest{box-shadow:0 0 0 2px var(--accent-glow)}
   background:linear-gradient(145deg,var(--accent-2),var(--accent));color:var(--on-accent);font-family:var(--font-display);font-weight:700;font-size:19px}
 .auth-brand .t{font-family:var(--font-display);font-weight:600;font-size:.98rem;line-height:1.25}
 .auth-brand .s{font-size:.74rem;color:var(--muted)}
@@ -573,3 +573,58 @@ a:focus-visible,summary:focus-visible,[tabindex]:focus-visible{outline:2px solid
 .chip-logout{border:1px solid var(--line);background:var(--surface);color:var(--muted);border-radius:999px;width:28px;height:28px;display:grid;place-items:center;cursor:pointer;padding:0}
 .chip-logout svg{width:14px;height:14px}
 .chip-logout:hover{color:var(--danger);border-color:var(--danger-brd);background:var(--danger-bg)}
+
+/* profile chip */
+.chip-btn{display:flex;align-items:center;gap:8px;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:4px 10px 4px 4px;cursor:pointer;color:inherit;font:inherit}
+.chip-btn:hover{border-color:var(--accent)}
+.user-chip{display:flex;align-items:center;gap:8px}
+
+/* Responsive */
+@media (max-width: 980px){
+  .sidebar{transform:translateX(-100%);position:fixed;z-index:40;height:100dvh}
+  .sidebar.open{transform:translateX(0)}
+  .scrim-nav.show{display:block}
+  .main{margin-left:0}
+  .topbar{padding:0 10px}
+  .content{padding:14px 12px 40px}
+  .kpi-row{grid-template-columns:repeat(2,1fr)}
+  .grp-grid{grid-template-columns:1fr}
+  .masjid-hero .mh-grid{grid-template-columns:1fr}
+  .grid2{grid-template-columns:1fr}
+  .grid.g3{grid-template-columns:1fr}
+}
+@media (max-width: 640px){
+  .kpi-row{grid-template-columns:1fr}
+  .metrics.cols2{grid-template-columns:1fr}
+  .split{grid-template-columns:1fr}
+  .table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .table-wrap table{min-width:640px}
+  .topbar .title{font-size:.9rem}
+  .user-chip .nm{max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block}
+}
+
+/* Responsive admin tables */
+@media (max-width: 920px){
+  .table-wrap table{min-width:720px}
+}
+@media (max-width: 640px){
+  .table-wrap table{min-width:680px}
+  .sb-brand .t{font-size:.85rem}
+  .sb-brand .s{font-size:.68rem}
+  .crest{width:38px;height:38px}
+}
+
+/* Admin panel improvements */
+.sb-brand:hover{background:rgba(255,255,255,.02);border-radius:12px}
+.chip-btn{transition:all .2s ease}
+.chip-btn:hover{border-color:var(--accent);box-shadow:0 4px 12px rgba(14,124,102,.15)}
+.chip-btn .av{width:32px;height:32px;flex:none}
+.chip-btn .av img{width:100%;height:100%;object-fit:cover}
+/* Make tables scroll better on mobile */
+.table-wrap{border-radius:12px}
+@media (max-width: 720px){
+  .page-head{flex-direction:column;align-items:flex-start;gap:12px}
+  .ph-actions{width:100%;flex-wrap:wrap}
+  .card{padding:16px}
+  .grid2{grid-template-columns:1fr}
+}
