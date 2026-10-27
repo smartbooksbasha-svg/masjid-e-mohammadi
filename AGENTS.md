@@ -124,3 +124,18 @@ Open: wire Supabase keys; real OTP SMS later.
   grants se anon ke liye blocked, writes sirf `is_admin()`.
 - sw cache: `memc-app-v5`.
 - QA: jsdom smoke 97/97 (`$TMPDIR/zytest/smoke-survey.js`).
+
+## v17 — LANGUAGE SWITCH (2026-10-27)
+- Public UI has 3 languages: **Hinglish (default) / English / Tamil**, picked in the
+  topbar `#langSel` (persisted in `memc_lang`).
+- How it works (`app.js`, block "i18n" just before MASJID PROFILE): the Hinglish
+  strings already in the markup ARE the keys. `I18N.en` / `I18N.ta` map them;
+  `translateTree()` rewrites live text nodes + `placeholder/title/aria-label`.
+  Originals are kept in WeakMaps so switching back to Hinglish restores exactly.
+  `setLang()` → renderShell() → go() → translateTree(); a MutationObserver on
+  `document.body` re-translates after every render (`translateSoon`, 25ms debounce).
+- Rule for new UI text: write it in Hinglish and add the same string to both dicts;
+  anything missing simply stays Hinglish (safe fallback).
+- Split mixed text nodes when a label is glued to dynamic text (e.g. category page
+  uses `<span>public totals</span>`) — a text node only translates as a whole.
+- sw cache: `memc-app-v17`. QA: jsdom smoke **115/115**.
