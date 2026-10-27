@@ -1917,6 +1917,19 @@ function viewSettings(){
     </div>
 
     <div class="card" style="margin-top:16px">
+      <div class="sec-title" style="margin-top:0">Restore &amp; Google Drive</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button class="btn ghost sm" data-act="restore-json">⭱ Restore from backup file</button>
+        <button class="btn ghost sm" data-act="drive-connect">☁ ${driveConnected()?'Drive connected ✔':'Connect Google Drive'}</button>
+        <button class="btn ghost sm" data-act="drive-backup">☁ Backup to Drive</button>
+      </div>
+      <input type="file" id="restoreFile" accept="application/json,.json" hidden />
+      <p class="muted small" style="margin:12px 0 0">${esc(driveStatusText())}</p>
+      ${driveReady()?'':`<p class="muted small" style="margin-top:6px">Drive setup (ek baar, ~10 min): <span class="mono">console.cloud.google.com</span> → naya project → <b>APIs &amp; Services → Library</b> me <b>Google Drive API</b> enable → <b>OAuth consent screen</b> (External, apna email test user) → <b>Credentials → Create OAuth client ID → Web application</b> → <b>Authorized JavaScript origins</b> me <span class="mono">${esc(location.origin)}</span> daalo → Client ID copy karke <span class="mono">config.js</span> ke <span class="mono">GOOGLE_CLIENT_ID</span> me paste karo.</p>`}
+      <p class="muted small" style="margin-top:6px">Restore purana JSON backup wapas laata hai (is device ka data replace hota hai; admins sirf add hote hain).</p>
+    </div>
+
+    <div class="card" style="margin-top:16px">
       <div class="sec-title" style="margin-top:0">Cloud sync &amp; email (Supabase)</div>
       <p class="muted small">Status: <b style="color:${cloudOn?'var(--ok)':'var(--warn)'}">${cloudOn?'Connected':'Not connected — data is on this device only'}</b></p>
       <div class="kv" style="margin-top:10px">
@@ -1948,7 +1961,7 @@ document.addEventListener('click', (e)=>{
   const el = e.target.closest('[data-act]'); if(!el) return;
   const act = el.dataset.act;
   const id = el.dataset.id;
-  const ADMIN_ACTS = ['load-sample','clear-data','export-excel','print-all','backup-json','edit-family','del-family','del-admin','saveMasjid','delPhoto','print-family'];
+  const ADMIN_ACTS = ['load-sample','clear-data','export-excel','print-all','backup-json','restore-json','drive-connect','drive-backup','edit-family','del-family','del-admin','saveMasjid','delPhoto','print-family'];
   if (ADMIN_ACTS.includes(act) && !isAdmin()){ toast('Ye sirf admin kar sakta hai','err'); return; }
 
   if (act==='toggle-theme') { toggleTheme(); const b=$('#themeBtn2'); if(b) b.textContent = document.documentElement.getAttribute('data-theme')==='night'?'☾ Night':'☀ Day'; return; }
@@ -1998,6 +2011,9 @@ document.addEventListener('click', (e)=>{
   if (act==='print-all'){ printFamilies(DB.families(), 'All Households'); return; }
   if (act==='print-family'){ const f=DB.families().find(x=>x.id===id); if(f) printFamilies([f], f.houseName||f.id); return; }
   if (act==='backup-json'){ backupJSON(); return; }
+  if (act==='restore-json'){ const inp=$('#restoreFile'); if(inp){ inp.value=''; inp.click(); } return; }
+  if (act==='drive-connect'){ driveConnect(); return; }
+  if (act==='drive-backup'){ backupToDrive(); return; }
   if (act==='view-family'){ go('detail', id); return; }
   if (act==='edit-family'){ const f=DB.families().find(x=>x.id===id); if(f){ state.draft = JSON.parse(JSON.stringify(f)); state.draft.docs = Object.assign(Object.fromEntries(DOC_TYPES.map(d=>[d[0],'no'])), state.draft.docs||{}); state.draft.custom = padCustom(state.draft.custom); if(!state.draft.houseType) state.draft.houseType='moulding'; go('add', id); } return; }
   if (act==='del-family'){ if(confirm('Delete this household record permanently?')){
@@ -2086,6 +2102,7 @@ document.addEventListener('input', (e)=>{
 });
 document.addEventListener('change', (e)=>{
   const el=e.target;
+  if (el.id==='restoreFile'){ restoreJSON(el.files && el.files[0]); return; }
   if(el.dataset&&el.dataset.field){ applyField(el); return; }
   if(el.id==='famGenderF'||el.id==='famMaritalF'||el.id==='famStreetF') renderFamilyList();
 });
@@ -2300,13 +2317,194 @@ function backupHint(){
   return d===null ? 'Kabhi backup nahi liya' : (d===0 ? 'Aaj backup liya' : d+' din pehle backup liya');
 }
 
+function backupPayload(){
+  return { org:CFG.ORG_NAME, exportedAt:new Date().toISOString(), families:DB.families(), masjid:DB.masjid(),
+           admins:DB.admins().map(a=>({email:a.email,name:a.name,phone:a.phone,createdAt:a.createdAt})) };
+}
+
 function backupJSON(){
-  const data = { org:CFG.ORG_NAME, exportedAt:new Date().toISOString(), families:DB.families(), masjid:DB.masjid(), admins:DB.admins().map(a=>({email:a.email,name:a.name,phone:a.phone,createdAt:a.createdAt})) };
+  const data = backupPayload();
   const blob = new Blob([JSON.stringify(data,null,2)], {type:'application/json'});
   const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='masjid-survey-backup-'+todayStr()+'.json'; a.click(); URL.revokeObjectURL(a.href);
   try { localStorage.setItem(LS_LASTBACKUP, String(Date.now())); } catch(e){}
   toast('Backup downloaded — is file ko Google Drive / laptop me rakh do');
 }
+
+/* ---------------- RESTORE (backup file wapas) ---------------- */
+function restoreJSON(file){
+  if (!file) return;
+  const rd = new FileReader();
+  rd.onerror = ()=> toast('File padhi nahi ja saki','err');
+  rd.onload = ()=>{
+    let data = null;
+    try { data = JSON.parse(String(rd.result||'')); } catch(e){ toast('Ye JSON backup file nahi hai','err'); return; }
+    const fams = Array.isArray(data && data.families) ? data.families : (Array.isArray(data) ? data : null);
+    if (!fams){ toast('Backup file me families nahi mili','err'); return; }
+
+    const before = DB.families().length;
+    const when = data && data.exportedAt ? new Date(data.exportedAt).toLocaleString('en-GB') : 'date nahi hai';
+    const okToGo = confirm('Restore backup?\n\nBackup date: ' + when + '\nFamilies in file: ' + fams.length + '\nFamilies now on device: ' + before + '\n\nIs device ka current data backup se replace ho jayega.');
+    if (!okToGo) return;
+
+    const clean = fams.filter(f=>f && typeof f==='object' && (f.id||f.houseName||(f.members&&f.members.length)))
+      .map(f=> Object.assign({}, f, { id:String(f.id||'').trim() || ('MEMC-' + Date.now() + '-' + Math.floor(Math.random()*900+100)) }));
+
+    DB.setFamilies(clean);
+    if (data.masjid) DB.setMasjid(data.masjid);
+    const maxSeq = clean.reduce((n,f)=>{ const m = String(f.id||'').match(/(\d+)\s*$/); return m ? Math.max(n, Number(m[1])) : n; }, 0);
+    if (maxSeq) DB.setSeq(maxSeq);
+
+    /* admins: sirf missing wale add karo — khud ka login kabhi na toote */
+    const admins = DB.admins();
+    const seen = new Set(admins.map(a=>String(a.email||'').toLowerCase()));
+    let added = 0;
+    (Array.isArray(data.admins) ? data.admins : []).forEach(a=>{
+      const e = String(a && a.email || '').toLowerCase();
+      if (e && !seen.has(e)){ admins.push({ email:e, name:a.name||e.split('@')[0], phone:a.phone||'', createdAt:a.createdAt||Date.now(), verified:true }); seen.add(e); added++; }
+    });
+    if (added) DB.setAdmins(admins);
+
+    try { localStorage.setItem(LS_LASTBACKUP, String(Date.now())); } catch(e){}
+    toast('Restore ho gaya — ' + clean.length + ' families' + (added ? ' · ' + added + ' admin added' : ''), 'ok');
+    try { go('dashboard'); } catch(e){}
+
+    if (SYNC.on()){
+      (async ()=>{
+        for (const f of clean){ try { await SYNC.saveFamily(f); } catch(e){} }
+        try { if (data.masjid) await SYNC.saveMasjid(data.masjid); } catch(e){}
+        try { go(state.view, state.param); } catch(e){}
+      })();
+    }
+  };
+  rd.readAsText(file);
+}
+
+/* ---------------- GOOGLE DRIVE backup ----------------
+   Needs an OAuth Client ID (free) in config.js → GOOGLE_CLIENT_ID.
+   Scope `drive.file` = app sirf apni banayi files dekh/save kar sakti hai. */
+const LS_DRIVE = 'memc_drive';
+const DRIVE = { token:'', exp:0, folderId:'' };
+const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
+
+function driveMeta(){ try { return JSON.parse(localStorage.getItem(LS_DRIVE) || 'null'); } catch(e){ return null; } }
+function setDriveMeta(m){ try { localStorage.setItem(LS_DRIVE, JSON.stringify(m)); } catch(e){} }
+function driveReady(){ return !!(CFG.GOOGLE_CLIENT_ID && String(CFG.GOOGLE_CLIENT_ID).trim()); }
+function driveConnected(){ return !!(DRIVE.token && DRIVE.exp > Date.now() + 30000); }
+function driveLastText(){ const m = driveMeta(); return m && m.lastAt ? new Date(m.lastAt).toLocaleString('en-GB') : 'kabhi nahi'; }
+function driveStatusText(){
+  if (!driveReady()) return 'Drive setup baaki — config.js me GOOGLE_CLIENT_ID daalo (guide Settings me).';
+  if (driveConnected()) return 'Drive connected · last Drive backup: ' + driveLastText();
+  const m = driveMeta();
+  return (m && m.lastAt ? 'Last Drive backup: ' + driveLastText() + ' · ' : '') + 'Connect dabao to Drive on karein.';
+}
+
+function loadGis(){
+  return new Promise((res, rej)=>{
+    try { if (window.google && google.accounts && google.accounts.oauth2) return res(); } catch(e){}
+    const s = document.createElement('script');
+    s.src = 'https://accounts.google.com/gsi/client'; s.async = true; s.defer = true;
+    s.onload = ()=>res();
+    s.onerror = ()=>rej(new Error('Google script load nahi hua'));
+    document.head.appendChild(s);
+  });
+}
+
+async function driveToken(interactive){
+  if (driveConnected()) return DRIVE.token;
+  if (!driveReady()) throw new Error('setup');
+  await loadGis();
+  return new Promise((res, rej)=>{
+    let settled = false;
+    const tc = google.accounts.oauth2.initTokenClient({
+      client_id: CFG.GOOGLE_CLIENT_ID,
+      scope: DRIVE_SCOPE,
+      callback: (r)=>{
+        settled = true;
+        if (r && r.access_token){ DRIVE.token = r.access_token; DRIVE.exp = Date.now() + Number(r.expires_in||3600)*1000; res(r.access_token); }
+        else rej(new Error('cancelled'));
+      },
+      error_callback: ()=>{ if (!settled) rej(new Error('cancelled')); }
+    });
+    try { tc.requestAccessToken({ prompt: interactive ? 'consent' : 'none' }); }
+    catch(e){ rej(e); }
+  });
+}
+
+async function driveFindFolder(token){
+  const folder = CFG.DRIVE_FOLDER || 'Masjid Records Backup';
+  const q = encodeURIComponent("name = '" + folder.replace(/'/g,"\\'") + "' and mimeType = 'application/vnd.google-apps.folder' and trashed = false");
+  const r = await fetch('https://www.googleapis.com/drive/v3/files?fields=files(id,name)&q=' + q, { headers:{ Authorization:'Bearer ' + token } });
+  if (!r.ok) throw new Error('Drive folder check fail (' + r.status + ')');
+  const j = await r.json();
+  return (j.files && j.files[0] && j.files[0].id) || '';
+}
+async function driveMakeFolder(token){
+  const r = await fetch('https://www.googleapis.com/drive/v3/files?fields=id', {
+    method:'POST',
+    headers:{ Authorization:'Bearer ' + token, 'Content-Type':'application/json' },
+    body: JSON.stringify({ name: CFG.DRIVE_FOLDER || 'Masjid Records Backup', mimeType:'application/vnd.google-apps.folder' })
+  });
+  if (!r.ok) throw new Error('Drive folder banane me fail (' + r.status + ')');
+  const j = await r.json();
+  return j.id;
+}
+async function driveEnsureFolder(token){
+  if (DRIVE.folderId) return DRIVE.folderId;
+  const m = driveMeta();
+  let id = (m && m.folderId) || await driveFindFolder(token) || await driveMakeFolder(token);
+  DRIVE.folderId = id;
+  return id;
+}
+async function driveUpload(token, name, text, folderId){
+  const boundary = '----memc' + Date.now().toString(36) + Math.random().toString(36).slice(2);
+  const meta = { name: name, mimeType: 'application/json' };
+  if (folderId) meta.parents = [folderId];
+  const body = '--' + boundary + '\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n' + JSON.stringify(meta) +
+    '\r\n--' + boundary + '\r\nContent-Type: application/json\r\n\r\n' + text + '\r\n--' + boundary + '--';
+  const r = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,webViewLink', {
+    method:'POST',
+    headers:{ Authorization:'Bearer ' + token, 'Content-Type':'multipart/related; boundary=' + boundary },
+    body: body
+  });
+  if (!r.ok) throw new Error('Drive upload fail (' + r.status + ')');
+  return r.json();
+}
+
+async function backupToDrive(){
+  if (!driveReady()){ toast('Pehle Drive setup karo — config.js me GOOGLE_CLIENT_ID chahiye','err'); return false; }
+  toast('Google Drive se connect ho raha hai…');
+  try {
+    let token = '';
+    try { token = await driveToken(false); } catch(e){ token = await driveToken(true); }
+    const folderId = await driveEnsureFolder(token);
+    const data = backupPayload();
+    const stamp = new Date().toTimeString().slice(0,5).replace(':','');
+    const name = 'masjid-survey-backup-' + todayStr() + '-' + stamp + '.json';
+    const res = await driveUpload(token, name, JSON.stringify(data, null, 2), folderId);
+    setDriveMeta({ lastAt:Date.now(), fileName:name, fileId:res.id, link:res.webViewLink || '', folderId:folderId, families:(data.families||[]).length });
+    try { localStorage.setItem(LS_LASTBACKUP, String(Date.now())); } catch(e){}
+    toast('Drive backup ho gaya — ' + name, 'ok');
+    try { go(state.view, state.param); } catch(e){}
+    return true;
+  } catch(e){
+    const msg = String((e && e.message) || 'error');
+    toast(msg === 'setup' ? 'Drive setup baaki hai' : 'Drive backup fail: ' + msg, 'err');
+    return false;
+  }
+}
+
+async function driveConnect(){
+  if (!driveReady()){ toast('Drive ke liye Google OAuth Client ID chahiye (config.js me)','err'); return; }
+  try {
+    await driveToken(true);
+    try { await driveEnsureFolder(DRIVE.token); } catch(e){}
+    toast('Google Drive connected ✔', 'ok');
+    try { go('settings'); } catch(e){}
+  } catch(e){
+    toast('Connect nahi hua — dobara try karo', 'err');
+  }
+}
+
 function mjHead(){
   const m = masjidData();
   if (!m.name && !m.address && !m.imam && !(m.photos||[]).length) return '';

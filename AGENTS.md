@@ -149,3 +149,24 @@ Open: wire Supabase keys; real OTP SMS later.
   transparent → right visible), `.mh-text` z-index:1. `background-attachment:fixed`
   jaan-boojh ke nahi (mobile iOS repaint).
 - sw cache `memc-app-v18`. Smoke 115/115.
+
+## v19 — PDF report: full family details + QR (2026-10-27)
+- `printFamilies()` (app.js) ka card ab: header me **Family ID, street, house no,
+  house type, phone, address, members (men/women/children), registered date/by** +
+  right side **auto QR** (payload = `<FamilyID> | <house name> | <street>`, drawn by
+  `renderQR` after `innerHTML`, library = CDN `qrcode-generator`).
+- Member table (12 cols) ke neeche "Member details" list — DOB + age, gender, marital,
+  father, mother, children, disability, education, occupation, deeni, documents
+  (n/N + names), govt schemes (+ custom scheme name).
+- Family-level documents (DOC_TYPES) + custom boxes (Yes/No) + notes bhi print hote hain.
+- Print CSS: `.pchead`/`.pqr` page-break-inside avoid, `.pcard` auto, `tr` avoid.
+- PDF = print → "Save as PDF" (browser ka print dialog); no server, no jsPDF.
+- sw cache `memc-app-v19`. Smoke 121/121.
+
+## Backup model (fact, 2026-10-27)
+- `backupJSON()` → downloads `masjid-survey-backup-<date>.json` (families + masjid +
+  admins, no photos), stamps `memc_lastbackup`; reminder banner after 7 days.
+- Drive me rakhna MANUAL hai (Shan khud upload karta hai). Auto Drive upload nahi —
+  uske liye Google OAuth Client ID chahiye (Shan ke Google account se banana padega).
+- **Import/restore abhi nahi hai** (koi `restoreJSON` nahi) — backup file wapas
+  load karne ka button banana baaki kaam hai.
