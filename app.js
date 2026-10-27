@@ -1138,6 +1138,12 @@ function go(view, param){
   } catch(e){}
   const ADMIN_ONLY = ['add','users','settings','families','detail','masjid','adminpanel'];
   if (ADMIN_ONLY.includes(view) && !isAdmin()){ toast('Ye page sirf admin ke liye hai','err'); view='dashboard'; }
+  // Push history state for back button
+  try {
+    if (state.view !== view || state.param !== (param||null)){
+      history.pushState({view:view, param:param||null}, '', '#'+view+(param?'?'+encodeURIComponent(param):''));
+    }
+  } catch(e){}
   state.view = view; state.param = param||null;
   closeNav();
   const titles = { dashboard:'Survey Dashboard', families:'Households', add:(state.param?'Edit Household':'Add Household'), detail:'Household Record', find:'Find family', adminpanel:'Administration', users:'Admins', settings:'Settings', masjid:'Masjid Profile', cat:'Survey Category', myprofile:'My Profile', 'admin-edit':'Edit Admin' };
@@ -3800,6 +3806,45 @@ function init(){
   try { new MutationObserver(()=>translateSoon()).observe(document.body, { childList:true, subtree:true }); } catch(e){}
   translateSoon();
 }
+// Handle browser back button
+window.addEventListener('popstate', (e)=>{
+  try {
+    if (e.state && e.state.view){
+      state.view = e.state.view;
+      state.param = e.state.param||null;
+      // Re-render without pushing history
+      const view = state.view;
+      const ADMIN_ONLY = ['add','users','settings','families','detail','masjid','adminpanel'];
+      if (ADMIN_ONLY.includes(view) && !isAdmin()){ toast('Ye page sirf admin ke liye hai','err'); state.view='dashboard'; state.param=null; }
+      const titles = { dashboard:'Survey Dashboard', families:'Households', add:(state.param?'Edit Household':'Add Household'), detail:'Household Record', find:'Find family', adminpanel:'Administration', users:'Admins', settings:'Settings', masjid:'Masjid Profile', cat:'Survey Category', myprofile:'My Profile', 'admin-edit':'Edit Admin', memberlist:'Members' };
+      $('#pageTitle').textContent = titles[state.view] || 'Survey Dashboard';
+      let html='';
+      if (state.view==='dashboard') html = viewDashboard();
+      else if (state.view==='families') html = viewFamilies();
+      else if (state.view==='add') html = viewFamilyForm();
+      else if (state.view==='detail') html = viewFamilyDetail(state.param);
+      else if (state.view==='find') html = viewFind();
+      else if (state.view==='adminpanel') html = isAdmin()?viewAdminPanel():`<div class="empty"><h3>Admin only</h3></div>`;
+      else if (state.view==='users') html = isAdmin()?viewAdminPanel():`<div class="empty"><h3>Admin only</h3></div>`;
+      else if (state.view==='settings') html = isAdmin()?viewAdminPanel():`<div class="empty"><h3>Admin only</h3></div>`;
+      else if (state.view==='masjid') html = viewMasjid();
+      else if (state.view==='myprofile') html = isAdmin()?viewMyProfile():`<div class='empty'><h3>Admin only</h3></div>`;
+      else if (state.view==='admin-edit') html = isOwner()?viewAdminEdit(state.param):`<div class='empty'><h3>Owner only</h3></div>`;
+      else if (state.view==='cat') html = viewCat(state.param);
+      else if (state.view==='memberlist') html = viewMembersList(state.memberListFilter||(()=>true), state.memberListTitle||'Members');
+      $('#content').innerHTML = html;
+      $$('#nav .nav-item').forEach(a=>a.classList.toggle('active', a.dataset.view===state.view || (state.view==='detail'&&a.dataset.view==='families')||(state.view==='add'&&a.dataset.view==='add')));
+      afterRender(state.view);
+    } else {
+      // No state - go to dashboard
+      if (state.view !== 'dashboard'){ state.view='dashboard'; state.param=null; go('dashboard'); }
+    }
+  } catch(e){ console.error('popstate error:', e); }
+});
+
+// Prevent back button from closing app - push initial state
+try { history.replaceState({view:'dashboard', param:null}, '', '#dashboard'); } catch(e){}
+
 if (document.readyState==='loading') document.addEventListener('DOMContentLoaded', init);
 else init();
 
