@@ -1155,6 +1155,7 @@ function go(view, param){
   else if (view==='myprofile') html = isAdmin()?viewMyProfile():`<div class='empty'><h3>Admin only</h3></div>`;
   else if (view==='admin-edit') html = isOwner()?viewAdminEdit(state.param):`<div class='empty'><h3>Owner only</h3></div>`;
   else if (view==='cat') html = viewCat(state.param);
+  else if (view==='memberlist') html = viewMembersList(state.memberListFilter||(()=>true), state.memberListTitle||'Members');
   $('#content').innerHTML = html;
   $$('#nav .nav-item').forEach(a=>a.classList.toggle('active', a.dataset.view===view || (view==='detail'&&a.dataset.view==='families')||(view==='add'&&a.dataset.view==='add')));
   afterRender(view);
@@ -1246,6 +1247,7 @@ function computeStats(){
     st[ht]++;
 
     (f.members||[]).forEach(m=>{
+      if (m.deceased) { s.deceased = (s.deceased||0) + 1; return; }
       s.pop++;
       const g = (m.gender||'').toLowerCase();
       const bucket = g==='female' ? s.women : (g==='male' ? s.men : null);
@@ -1279,8 +1281,10 @@ function computeStats(){
         const row = occMap.get(key);
         row.total++;
         if (g==='female') row.women++; else if (g==='male') row.men++;
-        if (!/not working|housewife|student|retired/i.test(occ)) s.employed++;
       }
+      // employment tracking
+      if (m.employment === 'employed') s.employed++;
+      else s.unemployed = (s.unemployed||0) + 1;
 
       // basic government documents held by this member
       const md = m.docs || {};
@@ -1329,7 +1333,8 @@ function computeStats(){
 function icSmall(path){ return `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${path}</svg>`; }
 function metric(label, val, opts){
   const o = opts||{};
-  return `<div class="metric${o.hi?' hi':''}${o.sub?' sub':''}"><span>${label}</span><b>${val}</b></div>`;
+  const click = o.filter ? ` onclick="state.memberListFilter=window.MF['${o.filter}'];state.memberListTitle='${esc(o.title||label)}';go('memberlist');return false;" style="cursor:pointer;text-decoration:underline" ` : '';
+  return `<div class="metric${o.hi?' hi':''}${o.sub?' sub':''}"${click}><span>${label}</span><b>${val}</b></div>`;
 }
 
 function allMembers(){
@@ -1495,6 +1500,42 @@ function viewCat(param){
     <p class="muted small" style="margin-top:14px">Har ghar ki zaati tafseel (naam, umar, documents, schemes) sirf admin login ke andar hai.</p>`;
 }
 
+
+
+// Member filter functions for clickable dashboard metrics
+window.MF = {
+  allStudents: function(m){ return !m.deceased && m.educationLevel && m.educationLevel !== 'none' && (ageFromDob(m.dob) === null || ageFromDob(m.dob) < 26); },
+  primary: function(m){ return !m.deceased && m.educationLevel === 'primary'; },
+  higherSecondary: function(m){ return !m.deceased && m.educationLevel === 'higher_secondary'; },
+  college: function(m){ return !m.deceased && m.educationLevel === 'college'; },
+  madarsa: function(m){ return !m.deceased && m.educationLevel === 'madarsa'; },
+  aalimMen: function(m){ return !m.deceased && (m.religious === 'aalim' || m.religious === 'both') && m.gender === 'Male'; },
+  hafizMen: function(m){ return !m.deceased && (m.religious === 'hafiz' || m.religious === 'both') && m.gender === 'Male'; },
+  aalimWomen: function(m){ return !m.deceased && (m.religious === 'aalim' || m.religious === 'both') && m.gender === 'Female'; },
+  hafizWomen: function(m){ return !m.deceased && (m.religious === 'hafiz' || m.religious === 'both') && m.gender === 'Female'; },
+  employed: function(m){ return !m.deceased && m.employment === 'employed'; },
+  unemployed: function(m){ return !m.deceased && m.employment !== 'employed'; }
+};
+
+function viewMembersList(filterFn, title){
+  const arr = allMembers().filter(({m,f}) => filterFn(m,f));
+  const rows = arr.map(({m,f})=>{
+    const addr = [f.address, f.houseNo?('House '+f.houseNo):'', streetName(f)].filter(Boolean).join(', ');
+    return `<tr>
+      <td>${esc(m.name||'—')}</td>
+      <td>${esc(f.id)}</td>
+      <td>${esc(addr||'—')}</td>
+      <td><button class="btn ghost sm" data-act="detail" data-id="${esc(f.id)}">View</button></td>
+    </tr>`;
+  }).join('');
+  return `
+    <div class="page-head"><div><h1>${esc(title)}</h1><p>${arr.length} member(s) found</p></div>
+      <button class="btn ghost sm" data-act="goto" data-view="dashboard">← Back to Dashboard</button></div>
+    <div class="card">
+      ${arr.length ? `<div class="table-wrap"><table><thead><tr><th>Name</th><th>Family ID</th><th>Address</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>` : '<div class="empty"><h3>No members found</h3></div>'}
+    </div>`;
+}
+
 function viewDashboard(){
   if (!isAdmin()) return publicDashboard();
   const s = computeStats();
@@ -1583,11 +1624,11 @@ function viewDashboard(){
       <section class="grp" data-g="3" data-act="grp-toggle">
         ${grpHead(3,'Education','Total child / students')}
         <div class="metrics">
-          ${metric('Total students', s.students.total, {hi:true})}
-          ${metric('Primary students', s.students.primary)}
-          ${metric('Higher secondary students', s.students.higher_secondary)}
-          ${metric('College students', s.students.college)}
-          ${metric('Madarsa students', s.students.madarsa)}
+          ${metric('Total students', s.students.total, {hi:true, filter:'allStudents', title:'All Students'})}
+          ${metric('Primary students', s.students.primary, {filter:'primary', title:'Primary Students'})}
+          ${metric('Higher secondary students', s.students.higher_secondary, {filter:'higherSecondary', title:'Higher Secondary Students'})}
+          ${metric('College students', s.students.college, {filter:'college', title:'College Students'})}
+          ${metric('Madarsa students', s.students.madarsa, {filter:'madarsa', title:'Madarsa Students'})}
         </div>
       </section>
 
@@ -1599,17 +1640,17 @@ function viewDashboard(){
         </div>
         ${s.occupations.length ? `<div class="table-wrap small-table" style="margin-top:14px"><table>
           <thead><tr><th>Occupation</th><th>Men</th><th>Women</th><th>Total</th></tr></thead><tbody>
-          ${s.occupations.map(o=>`<tr><td><b>${esc(o.name)}</b></td><td>${o.men}</td><td>${o.women}</td><td><b>${o.total}</b></td></tr>`).join('')}
+          ${s.occupations.map(o=>`<tr style="cursor:pointer" onclick="state.memberListFilter=function(m){return !m.deceased && (m.occupation||'').toLowerCase()==='${esc(o.name).toLowerCase()}';};state.memberListTitle='${esc(o.name)}';go('memberlist');return false;"><td><b>${esc(o.name)}</b></td><td>${o.men}</td><td>${o.women}</td><td><b>${o.total}</b></td></tr>`).join('')}
           </tbody></table></div>` : `<p class="muted small" style="margin-top:12px">Abhi kisi ka occupation nahi bhara — member form me "Kaam / occupation" likho (jaise Plumber).</p>`}
       </section>
 
       <section class="grp wide" data-g="5" data-act="grp-toggle">
         ${grpHead(5,'Religious Education','Deeni taleem — Aalim & Hafiz')}
         <div class="metrics cols2">
-          ${metric('Men Aalim', s.deeni.menAalim)}
-          ${metric('Men Hafiz', s.deeni.menHafiz)}
-          ${metric('Women Aalim', s.deeni.womenAalim)}
-          ${metric('Women Hafiz', s.deeni.womenHafiz)}
+          ${metric('Men Aalim', s.deeni.menAalim, {filter:'aalimMen', title:'Men Aalim'})}
+          ${metric('Men Hafiz', s.deeni.menHafiz, {filter:'hafizMen', title:'Men Hafiz'})}
+          ${metric('Women Aalim', s.deeni.womenAalim, {filter:'aalimWomen', title:'Women Aalim'})}
+          ${metric('Women Hafiz', s.deeni.womenHafiz, {filter:'hafizWomen', title:'Women Hafiz'})}
         </div>
         <div class="metrics" style="margin-top:10px">
           ${metric('Total Aalim & Hafiz (men + women)', s.deeni.menAalim + s.deeni.menHafiz + s.deeni.womenAalim + s.deeni.womenHafiz, {hi:true})}
@@ -1740,7 +1781,7 @@ function renderFamilyList(){
 /* ============================================================
    HOUSEHOLD FORM
    ============================================================ */
-function blankMember(){ return { relation:'', name:'', fatherName:'', motherName:'', gender:'Male', dob:'', educationLevel:'', occupation:'', religious:'', maritalStatus:'Unmarried', children:'', disability:'no', schemes:{}, schemeName:'', docs:{} }; }
+function blankMember(){ return { relation:'', name:'', fatherName:'', motherName:'', gender:'Male', dob:'', educationLevel:'', occupation:'', religious:'', maritalStatus:'Unmarried', children:'', disability:'no', schemes:{}, schemeName:'', docs:{}, employment:'unemployed', deceased:false, deceasedDate:'' }; }
 
 /* occupation with legacy fallback (old records only had private/govt/business) */
 function occName(m){
@@ -1893,6 +1934,10 @@ function renderMembers(){
           ${EDU.map(([k,l])=>`<option value="${k}" ${edu===k?'selected':''}>${esc(l)}</option>`).join('')}</select></div>
         <div class="field child-hide-occ" style="display:${(isChild||isStudent)?'none':'block'}"><label>Kaam / occupation</label>
           <input class="inp" data-field="m.occupation" data-idx="${i}" list="occList" value="${esc(occName(m))}" placeholder="Plumber, Electrician, Painter, Helper…" /></div>
+        <div class="field child-hide-occ" style="display:${(isChild||isStudent)?'none':'block'}"><label>Employment status</label><select class="inp" data-field="m.employment" data-idx="${i}">
+          <option value="unemployed" ${(m.employment||'unemployed')==='unemployed'?'selected':''}>Unemployed</option>
+          <option value="employed" ${(m.employment||'')==='employed'?'selected':''}>Employed</option>
+        </select></div>
         <div class="field child-hide-deeni" style="display:${(isChild||isStudent)?'none':'block'}"><label>Deeni taleem</label><select class="inp" data-field="m.religious" data-idx="${i}">
           ${DEENI.map(([k,l])=>`<option value="${k}" ${(m.religious||'')===k?'selected':''}>${esc(l)}</option>`).join('')}</select></div>
         <div class="field"><label>Father name</label><input class="inp" data-field="m.fatherName" data-idx="${i}" value="${esc(m.fatherName)}" /></div>
@@ -2833,7 +2878,17 @@ document.addEventListener('click', (e)=>{
     const map = {'1':'birth','2':'death','3':'other'};
     const ty = map[String(t||'').trim()] || 'other';
     recordEvent(ty, 'Member removed from household');
-    state.draft.members.splice(+el.dataset.idx,1); renderMembers(); return; 
+    const idx = +el.dataset.idx;
+    if (ty === 'death'){
+      // Mark as deceased instead of removing - name stays in records
+      if (state.draft.members[idx]){
+        state.draft.members[idx].deceased = true;
+        state.draft.members[idx].deceasedDate = new Date().toISOString().slice(0,10);
+      }
+    } else {
+      state.draft.members.splice(idx,1);
+    }
+    renderMembers(); return; 
   }
   if (act==='add-custom-doc'){
     if(!state.draft) return;
