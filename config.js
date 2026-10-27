@@ -23,6 +23,8 @@ window.APP_CONFIG = {
   GOOGLE_CLIENT_ID: "206058317618-ts99lgaath602onml5t35g4o7r1oihfn.apps.googleusercontent.com",
   DRIVE_FOLDER: "Masjid Records Backup",
   ORG_NAME: "Masjid e Mohammadi",
+  /* committee owner — admin requests / approvals isi email par jaate hain */
+  OWNER_EMAIL: "smartbooksbasha@gmail.com",
   ORG_SUB: "Khidmath Committee",
   FAMILY_ID_PREFIX: "MEMC"
 };

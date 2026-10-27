@@ -208,7 +208,7 @@ function setSession(s){
   if (!s || s.kind !== 'admin' || !s.email) return;
   const e = String(s.email).toLowerCase();
   /* pehla login = owner (agar owner set nahi hai) */
-  try { if (!localStorage.getItem('memc_owner')) setOwnerEmail(e); } catch(x){}
+  /* owner email config se aata hai (Settings me user khud badal sakta hai) */
   /* temporary password sirf pehli baar ke liye — login hote hi hata do */
   try {
     const admins = DB.admins(); let ch = false;
@@ -300,13 +300,34 @@ function activeAdmins(){ return DB.admins().filter(a=>adminStatus(a)==='active')
 function pendingAdmins(){ return DB.admins().filter(a=>adminStatus(a)==='pending'); }
 function ownerEmail(){
   let o = ''; try { o = String(localStorage.getItem('memc_owner')||''); } catch(e){}
+  if (!o) o = String((typeof CFG!=='undefined' && CFG.OWNER_EMAIL) || '');
   if (!o){ const a = DB.admins()[0]; o = a ? String(a.email||'') : ''; }
-  return o.toLowerCase();
+  return String(o).toLowerCase();
 }
-function setOwnerEmail(e){ try { localStorage.setItem('memc_owner', String(e||'').toLowerCase()); } catch(x){} }
+function setOwnerEmail(e){ try {
+  localStorage.setItem('memc_owner', String(e||'').toLowerCase());
+  localStorage.setItem('memc_owner_src', 'user');   /* user ne Settings se set kiya */
+} catch(x){} }
+/* purane auto-set owner ko ek baar clear karo — owner ab config se aata hai */
+function migrateOwner(){
+  try {
+    if (localStorage.getItem('memc_owner_src')) return;
+    const cfgOwner = String((typeof CFG!=='undefined' && CFG.OWNER_EMAIL) || '');
+    if (!cfgOwner) return;
+    localStorage.removeItem('memc_owner');
+    localStorage.setItem('memc_owner_src','config');
+  } catch(e){}
+}
 function isOwner(){
   const u = currentUser(); if (!u) return false;
-  return String(u.email).toLowerCase() === ownerEmail();
+  const e = String(u.email||'').toLowerCase();
+  if (!e) return false;
+  if (e === ownerEmail()) return true;
+  const rec = adminByEmail(e);
+  if (rec && rec.role === 'owner') return true;
+  /* bootstrap: sabse pehla admin bhi owner hai (approval kabhi lock na ho) */
+  const act = activeAdmins().slice().sort((a,b)=>String(a.createdAt||a.userId||'').localeCompare(String(b.createdAt||b.userId||'')));
+  return !!(act[0] && String(act[0].email||'').toLowerCase() === e);
 }
 function genUserId(){
   let n = 1;
@@ -3093,12 +3114,18 @@ function migrateAdmins(){
       if (!a.userId){ n += 1; a.userId = 'ADM-' + new Date().getFullYear() + '-' + pad(n, 4); ch = true; }
       if (!a.status){ a.status = 'active'; ch = true; }
     });
+    /* koi owner nahi to sabse purana active admin owner ban jaata hai */
+    if (!admins.some(a=>a.role==='owner')){
+      const first = admins.slice().sort((a,b)=>String(a.createdAt||a.userId||'').localeCompare(String(b.createdAt||b.userId||'')))[0];
+      if (first){ first.role = 'owner'; ch = true; }
+    }
     if (ch) DB.setAdmins(admins);
   } catch(e){}
 }
 
 function init(){
   migrateAdmins();
+  migrateOwner();
   /* recovery link se aaya user: naya password set kare */
   try {
     if (/type=recovery/.test(location.hash) && CLOUD.enabled()){
