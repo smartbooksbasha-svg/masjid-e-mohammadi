@@ -552,3 +552,12 @@ Open: wire Supabase keys; real OTP SMS later.
 - Login lookup already case-insensitive hai aur `#` handle karta hai — koi change nahi chahiye tha.
 - Tests **148 asserts green** (format regex, do IDs kabhi same nahi, owner/admin prefix alag, prefix change →
   migrate, purani settings → naya style). Cache `memc-app-v100`, commit `39ac144`.
+
+## v101 — version stamp + Force update (2026-10-28)
+- Shan: "link click karne par kuch bhi update nahi hua" — code live tha, par phone me purana service-worker
+  cache chal raha tha, aur UI me version dikhne ka koi tareeka nahi tha (isliye "update hua ya nahi" pata nahi chalta).
+- `APP_VER = 'v101'` + `APP_VER_AT` (app.js top) → sidebar footer me `v101 · 2026-10-28` (`.sb-foot .ver`).
+- Settings me naya **App version** card: version + **Force update** button (`data-act="force-update"`) —
+  saare SW registrations unregister + `caches.delete()` sab keys + `?v=<timestamp>` ke saath reload.
+- Cache-busting link for the user: `https://smartbooksbasha-svg.github.io/masjid-e-mohammadi/?v=101#login`.
+- Tests **150 asserts green** (footer version, force-update button). Cache `memc-app-v101`, commit `d01eeff`.

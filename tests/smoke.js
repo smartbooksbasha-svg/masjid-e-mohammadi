@@ -425,6 +425,12 @@ const wait = ms => new Promise(r => setTimeout(r, ms || 120));
   V9.win.eval("go('settings')"); await wait(150);
   ok(!!V9.doc.querySelector('[data-act="force-update"]'), 'Settings me Force update button hai');
 
+  /* login field me nakli ID placeholder nahi (v102) */
+  const PH = await boot({});
+  PH.win.eval("openAuth('login')"); await wait(150);
+  const uidInp = PH.doc.querySelector('#loginForm input[name="email"]');
+  ok(!/#/.test(uidInp.getAttribute('placeholder') || ''), 'login placeholder me nakli User ID nahi: ' + uidInp.getAttribute('placeholder'));
+
   /* ---------------- 9. backup round trip ---------------- */
   const backup = A.win.eval("JSON.stringify({ families:DB.families(), masjid:DB.masjid() })");
   ok(JSON.parse(backup).families.length === 1, 'backup payload contains households');

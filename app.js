@@ -687,7 +687,7 @@ const IDSET_DEFAULT = {
   famPrefix:'MEMC', famRandom:true        /* family id = MEMC-<yy><4 random> */
 };
 /* app version — footer/settings me dikhta hai, update confirm karne ke liye */
-const APP_VER = 'v101';
+const APP_VER = 'v102';
 const APP_VER_AT = '2026-10-28';
 
 /* password input + show/hide eye button */
@@ -841,7 +841,7 @@ function renderLogin(){
     <h1>Admin login</h1>
     <p class="lead">Sirf admin / super admin ke liye. Baaki sab public dashboard dekh sakte hain.</p>
     <form id="loginForm">
-      <div class="field"><label>User ID / Email ID</label><input class="inp" name="email" type="text" required autocomplete="username" placeholder="AD102026#21200" /></div>
+      <div class="field"><label>User ID / Email ID</label><input class="inp" name="email" type="text" required autocomplete="username" placeholder="User ID ya email" /><span class="hint">Apni User ID login ke baad <b>My Profile</b> me dikhti hai — email se bhi login ho sakta hai.</span></div>
       <div class="field"><label>Password</label>${pwBox('<input class="inp" name="pass" type="password" required autocomplete="current-password" />')}</div>
       <div id="loginAlert"></div>
       <button class="btn block" type="submit">Login</button>
@@ -3071,6 +3071,7 @@ const I18N = {
 
     /* --- v93: ID & password format --- */
     'ID & password format':'ID & password format',
+    'User ID ya email':'User ID or email',
     'User ID style':'User ID style',
     'Random (recommended)':'Random (recommended)',
     'Number series':'Number series',
@@ -3444,7 +3445,12 @@ function viewMyProfile(){
         <div class='field'><label>Full name</label><input class='inp' id='profName' value='${esc(me.name||'')}'/></div>
         <div class='field'><label>Email (login)</label><input class='inp' value='${esc(me.email||'')}' readonly/></div>
         <div class='field'><label>Phone number</label><input class='inp' id='profPhone' value='${esc(me.phone||'')}' inputmode='tel'/></div>
-        <div class='field'><label>User ID</label><input class='inp' value='${esc(me.userId||u.userId||'—')}' readonly/></div>
+        <div class='field'><label>User ID</label>
+          <div style='display:flex;gap:8px'>
+            <input class='inp mono' value='${esc(me.userId||u.userId||'—')}' readonly/>
+            <button class='btn ghost sm' type='button' data-act='copy-uid' style='white-space:nowrap'>Copy</button>
+          </div>
+          <span class='hint'>Isi ID ya apne email se login hota hai.</span></div>
       </div>
       <div style='margin-top:18px'><button class='btn' data-act='prof-save'>Save changes</button></div>
     </div>
@@ -4151,6 +4157,15 @@ document.addEventListener('click', (e)=>{
     if (!isOwner()){ toast('Sirf owner reject kar sakta hai','err'); return; }
     const admins = DB.admins().filter(x=>String(x.userId||'').toLowerCase()!==String(id).toLowerCase() && String(x.email).toLowerCase()!==String(id).toLowerCase());
     DB.setAdmins(admins); toast('Request reject ho gayi'); go('users'); return;
+  }
+  if (act==='copy-uid'){
+    const u = currentUser();
+    const rec = u ? (DB.admins().find(a=>String(a.email).toLowerCase()===String(u.email).toLowerCase())||{}) : {};
+    const v = rec.userId || (u && u.userId) || '';
+    if (!v){ toast('User ID nahi mili','err'); return; }
+    try { navigator.clipboard.writeText(v); toast('User ID copy ho gayi: ' + v,'ok'); }
+    catch(e){ toast('Copy nahi hua — haath se likh lo: ' + v,'err'); }
+    return;
   }
   if (act==='force-update'){
     (async ()=>{
