@@ -292,3 +292,11 @@ Open: wire Supabase keys; real OTP SMS later.
   Family ID/Street + View button).
 - Yaad rakho: har bucket ke liye list ka title us row ka apna naam hona chahiye.
 - Proof: `schemes-smoke.js` 13/13, poora suite 167/72/21/12 green. Cache `memc-app-v82`.
+
+## v83 — "no scheme" row in the scheme-wise table (2026-10-28)
+- Shan: "ujjwala / ayushman / PM sab barabar, last scheme (no scheme) purana jaisa hai — thik karo".
+- Scheme-wise table ka aakhri row ab proper: **"Scheme nahi mili (koi scheme nahi)"** = `s.scheme.notApplied`,
+  `data-act="mlist" data-f="schemeNone"` → same member list (Name/Age/Gender/Family ID/Street + View).
+  Public category page me bhi wahi row (non-clickable). Style `tr.scheme-none` (italic, surface-2).
+- Rule: koi bhi table bucket bina row ke na chhoote — count dikhta hai to uski row + list bhi honi chahiye.
+- Suites: schemes 13, counts 72, scan 167, docs 21, features 12 — sab green. Cache `memc-app-v83`, commit `5a57551`.

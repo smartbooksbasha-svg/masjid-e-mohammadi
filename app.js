@@ -77,6 +77,9 @@ const SCHEMES = [
   ['bus_pass','Free bus pass'],
   ['other','Other scheme']
 ];
+/* legacy records (purane govtScheme='yes' bina naam) — ek hi label dono jagah */
+const LEGACY_SCHEME_LABEL = 'Scheme (old record)';
+
 const DEENI = [
   ['','— none / Quran nahi seekha —'],
   ['nazira','Nazira'],
@@ -1291,7 +1294,7 @@ function computeStats(){
         });
       } else if (m.govtScheme==='yes'){
         s.scheme.applied++;
-        const nm = String(m.schemeName||'').trim() || 'Scheme (old record)';
+        const nm = String(m.schemeName||'').trim() || LEGACY_SCHEME_LABEL;
         schemeMap.set(nm, (schemeMap.get(nm)||0) + 1);
       } else s.scheme.notApplied++;
 
@@ -1930,7 +1933,7 @@ function occName(m){
 /* schemes = new multi-select, or the old single govtScheme flag */
 function memberSchemes(m){
   const list = SCHEMES.filter(([k])=>m.schemes && m.schemes[k]==='yes').map(([,l])=>l);
-  if (!list.length && m.govtScheme==='yes') list.push(String(m.schemeName||'').trim() || 'Scheme');
+  if (!list.length && m.govtScheme==='yes') list.push(String(m.schemeName||'').trim() || LEGACY_SCHEME_LABEL);
   return list;
 }
 function blankDraft(){
