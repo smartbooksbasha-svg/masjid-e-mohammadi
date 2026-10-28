@@ -442,7 +442,7 @@ function credsMailto(rec){
   const sub = 'New admin request — ' + (rec.name||rec.email);
   const body = 'Masjid e Mohammadi · Mohalla Survey\n\n'
     + 'New admin request pending. Access granted only after approval.\n\n'
-    + 'Naam: ' + (rec.name||'—') + '\nEmail: ' + rec.email + '\nMobile: ' + (rec.phone||'—') + '\n'
+    + tStr('Naam: ') + (rec.name||'—') + '\nEmail: ' + rec.email + '\nMobile: ' + (rec.phone||'—') + '\n'
     + 'User ID: ' + rec.userId + '\nTemporary password: ' + (rec.tempPass||'(approve ke baad)') + '\n\n'
     + 'App → Admins → Pending requests → Approve.\n';
   return 'mailto:' + encodeURIComponent(owner) + '?subject=' + encodeURIComponent(sub) + '&body=' + encodeURIComponent(body);
@@ -598,7 +598,7 @@ function renderRequestSent(rec){
     <p class="muted small" style="margin-top:10px">Owner ko request email/WhatsApp par bhejni hai? Ye button dabao.</p>
     <div style="display:flex;gap:10px;flex-wrap:wrap">
       <a class="btn" href="${esc(mail)}">${ICON.mail} Email owner</a>
-      <a class="btn ghost" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent('Masjid Survey admin request\nNaam: '+rec.name+'\nEmail: '+rec.email+'\nUser ID: '+rec.userId)}">WhatsApp</a>
+      <a class="btn ghost" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent('Masjid Survey admin request\n'+tStr('Naam: ')+rec.name+'\nEmail: '+rec.email+'\nUser ID: '+rec.userId)}">WhatsApp</a>
       <button class="btn ghost" data-act="auth-cancel">Back to login</button>
     </div>`);
 }
@@ -1326,7 +1326,7 @@ function metric(label, val, opts){
   if (!o.f) return `<div class="${cls}"><span>${label}</span><b>${val}</b></div>`;
   const act = o.act || 'mlist';
   const title = esc(o.title || plain);
-  return `<div class="${cls}" role="button" tabindex="0" title="${title} — list dekho"
+  return `<div class="${cls}" role="button" tabindex="0" title="${title}"
      data-act="${act}" data-f="${esc(o.f)}" data-title="${title}"><span>${label}</span><b>${val}</b></div>`;
 }
 
@@ -1488,7 +1488,7 @@ function viewCat(param){
       + tbl(['Scheme','Members'], SCHEMES.filter(([k])=>k!=='other').map(([k,l])=>`<tr><td>${esc(l)}</td><td><b>${s.scheme.counts[k]||0}</b></td></tr>`).concat(s.scheme.byName.map(([nm,c])=>`<tr><td>${esc(nm)}</td><td><b>${c}</b></td></tr>`)).concat([`<tr class="scheme-none"><td>Scheme nahi mili <span class="muted small">(koi scheme nahi)</span></td><td><b>${s.scheme.notApplied}</b></td></tr>`]));
   }
 
-  return `<div class="page-head"><div><h1>${esc(cat[1])}</h1><p>${esc(cat[2])} · <span>public totals</span></p></div><div class="ph-actions">${back}</div></div>
+  return `<div class="page-head"><div><h1>${esc(cat[1])}</h1><p><span>${esc(cat[2])}</span> · <span>public totals</span></p></div><div class="ph-actions">${back}</div></div>
     <div class="card"><div class="metrics cols2">${metrics}</div>${extra}</div>
     <p class="muted small" style="margin-top:14px">Har ghar ki zaati tafseel (naam, umar, documents, schemes) sirf admin login ke andar hai.</p>`;
 }
@@ -1696,7 +1696,7 @@ function viewDashboard(){
 
   const backupBanner = (isAdmin() && needsBackup()) ? `
     <div class="alert warn" style="margin:0 0 14px;display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap">
-      <span><b>Backup reminder:</b> ${esc(backupHint())} — ek backup file download karke Drive me rakho.</span>
+      <span><b>Backup reminder:</b> ${esc(backupHint())} — <span>ek backup file download karke Drive me rakho.</span></span>
       <button class="btn sm" type="button" data-act="backup-json">${ICON.dl} Backup now</button>
     </div>` : '';
   return `${backupBanner}
@@ -1798,8 +1798,8 @@ function viewDashboard(){
         <div class="metrics cols2">
           ${metric('Members with all basic documents', s.membersWithAllDocs, {f:'docsAll', title:'Members with all basic documents'})}
           ${metric('Members with no basic document', s.membersWithNoDocs, {f:'docsNone', title:'Members with no basic document'})}
-          ${metric('Scheme mili', s.scheme.applied, {f:'schemeApplied', title:'Scheme mili — members'})}
-          ${metric('Scheme nahi mili', s.scheme.notApplied, {f:'schemeNone', title:'Scheme nahi mili — members'})}
+          ${metric('Scheme mili', s.scheme.applied, {f:'schemeApplied', title:'Scheme mili'})}
+          ${metric('Scheme nahi mili', s.scheme.notApplied, {f:'schemeNone', title:'Scheme nahi mili'})}
         </div>
         <div class="table-wrap small-table" style="margin-top:14px"><table>
           <thead><tr><th>Document</th><th>Have</th><th>Don't have</th></tr></thead><tbody>
@@ -2390,7 +2390,157 @@ const I18N = {
     'Email link se login (password ke bina)':'Log in with an email link (no password)',
     'Forgot password?':'Forgot password?',
     'Create admin':'Create admin',
-    'New captcha':'New captcha'
+    'New captcha':'New captcha',
+
+    /* --- English gaps (v85) --- */
+    '— none / Quran nahi seekha —':'— none / not studied —',
+    'Admins, settings aur account.':'Admins, settings and account.',
+    'Naye admins sirf owner approve kar sakta hai.':'Only the owner can approve new admins.',
+    'Koi pending request nahi.':'No pending requests.',
+    'Drive setup baaki — config.js me GOOGLE_CLIENT_ID daalo (guide Settings me).':'Drive setup pending — add GOOGLE_CLIENT_ID in config.js (guide in Settings).',
+    'Owner details lock hain, change nahi ho sakte.':'Owner details are locked and cannot be changed.',
+    'Add / Change photo (Gallery)':'Add / change photo (gallery)',
+    '(koi scheme nahi)':'(no scheme)',
+    'Kabhi backup nahi liya — ek backup file download karke Drive me rakho.':'No backup taken yet — download a backup file and keep it in Drive.',
+    'ek backup file download karke Drive me rakho.':'download a backup file and keep it in Drive.',
+    'Mohalla ka survey — har ghar, har fard, taleem, kaam aur deeni khidmat ka hisaab ek jagah.':'Mohalla survey — every house, every person, education, work and religious service in one place.',
+    'Kaam ke hisaab se ginti — plumber, electrician, painter, helper…':'Counts by occupation — plumber, electrician, painter, helper…',
+    'Deeni taleem — Aalim & Hafiz':'Religious education — Aalim & Hafiz',
+    'Kitne logon ke paas documents hain · kitne ne scheme li':'Who holds documents · who received a scheme',
+    'Custom ID likho ya khaali chhod do — system khud ID de dega. QR isi ID se banta hai.':'Enter a custom ID or leave it blank — the system generates one. The QR is built from this ID.',
+    'Kaam / occupation':'Work / occupation',
+    'Deeni taleem':'Religious education',
+    'Tap karke on/off karo — jo document jiske paas hai.':'Tap to switch on/off — the document that person holds.',
+    'Jitni scheme milti hai utni tap karo. "Other scheme" chuna to niche naam likho.':'Tap every scheme the family receives. If you pick "Other scheme", type the name below.',
+    '"Other scheme" ka naam':'"Other scheme" name',
+    'Jo document ghar ke paas hai wahi list me dikhega. Naya add karne ke liye "+ Add document" dabao.':'Only documents the household holds are listed. Tap "+ Add document" to add one.',
+    'Abhi koi document add nahi hua.':'No document added yet.',
+    'Jo list me nahi hai (jaise Caste Certificate) — yahan apne naam se add karo.':'Anything not in the list (e.g. Caste Certificate) — add it here with your own name.',
+    'Koi additional document nahi.':'No additional document.',
+    'Phone number daalo ya QR scan karo — sirf usi ghar ka read-only detail dikhega (edit nahi).':'Enter a phone number or scan a QR — it shows that household only, read-only (no editing).',
+    'Family ID daalo aur details dekho (sirf read-only).':'Enter a Family ID to view details (read-only).',
+    'Camera ya gallery se QR scan karke Family ID se details khol do.':'Scan a QR from camera or gallery to open that Family ID.',
+    'Masjid ki tafseel, imam/muazzin, tasveerein — report ke saath print hoti hain.':'Masjid details, imam/muazzin and photos — printed with the report.',
+    'Masjid ki poori tafseel aur tasveerein — survey report ke saath chhapti hain.':'Full masjid details and photos — printed with the survey report.',
+    'Masjid ka naam':'Masjid name',
+    'Masjid ka email ID':'Masjid email',
+    'Imam sahab ka naam':'Imam name',
+    'Muazzin ka naam':'Muazzin name',
+    'Masjid ki tasveerein':'Masjid photos',
+    'har photo phone me hi save hoti hai':'each photo stays on this phone',
+    'Abhi koi photo nahi':'No photo yet',
+    'Gallery se chuno':'Choose from gallery',
+    'Photo apne aap chhoti (compress) ho jati hai, isliye data bhi kam jagah leta hai.':'Photos are compressed automatically, so they take little space.',
+    'e.g. 60 bachche, 3 ustad':'e.g. 60 students, 3 teachers',
+    'Tareekh, khidmat, koi khaas baat':'Date, service, anything special',
+    'Note / khaas baat':'Note / special remark',
+    'Ghar, raste aur makan ki qism':'Houses, streets and house type',
+    'Ghar walon ki ginti, umar aur halat':'Household count, age and status',
+    'Padhne wale bachche aur students':'Children and students studying',
+    'Kaam ke hisaab se ginti':'Counts by occupation',
+    'Aalim aur Hafiz':'Aalim and Hafiz',
+    'Documents aur scheme ka hisaab':'Documents and scheme records',
+    'Deeni':'Religious',
+    'Naam ya Family ID se dhoondo…':'Search by name or Family ID…',
+    'Family ID / ghar / street se dhoondo…':'Search by Family ID / house / street…',
+    'Kisi street par tap karo → us street ke ghar dikhenge.':'Tap a street to see its households.',
+    'ghar':'houses',
+    'log kaam par':'people working',
+    'scheme li':'received scheme',
+    'aalim / hafiz':'aalim / hafiz',
+
+    /* --- runtime messages (toasts, errors, dialogs) --- */
+    'Abhi koi record nahi hai.':'No record yet.',
+    'Abhi koi scheme mark nahi hui — member form me scheme chips tap karo.':'No scheme marked yet — tap the scheme chips in the member form.',
+    'Admin approve ho gaya — credentials usko bhej do':'Admin approved — send them the credentials',
+    'Admin ban gaya — credentials dekho':'Admin created — check the credentials',
+    'Admin nahi mila.':'Admin not found.',
+    'Apna account nahi hata sakte':"You can't remove your own account",
+    'Backup downloaded — is file ko Google Drive / laptop me rakh do':'Backup downloaded — keep this file in Google Drive or on a laptop',
+    'Backup file me families nahi mili':'No households found in the backup file',
+    'Camera access nahi mila. Settings se allow karo.':'Camera access denied. Allow it in Settings.',
+    'Cloud connect nahi hua':'Cloud not connected',
+    'Cloud connect nahi hua — internet check karo.':'Cloud not connected — check your internet.',
+    'Cloud connect nahi hua.':'Cloud not connected.',
+    'Cloud me save nahi hua — baad me retry karega':'Not saved to cloud — it will retry later',
+    'Cloud off — public site ko totals nahi bheje ja sakte':'Cloud off — totals cannot be published to the public site',
+    'Code galat hai — dobara dekho.':'Code is wrong — check again.',
+    'Connect dabao to Drive on karein.':'Tap Connect to turn Drive on.',
+    'Connect nahi hua — dobara try karo':'Not connected — try again',
+    'Copy ho gaya':'Copied',
+    'Copy nahi hua — haath se likh lo':'Copy failed — write it down by hand',
+    'Deeni Taleem':'Religious Education',
+    'Drive backup ho gaya':'Drive backup done',
+    'Drive folder banane me fail (':'Failed to create the Drive folder (',
+    'Drive ke liye Google OAuth Client ID chahiye (config.js me)':'Google OAuth Client ID needed for Drive (in config.js)',
+    'Drive setup baaki hai':'Drive setup pending',
+    'Email login ke liye cloud on hona chahiye.':'Cloud must be on for email login.',
+    'Excel library load nahi hui — page refresh karo':'Excel library did not load — refresh the page',
+    'Family ID me sirf letters, numbers, - _ / chalega (3-32 characters).':'Family ID allows only letters, numbers, - _ / (3-32 characters).',
+    'File padhi nahi ja saki':'Could not read the file',
+    'Google Drive se connect ho raha hai…':'Connecting to Google Drive…',
+    'Google script load nahi hua':'Google script did not load',
+    'Image load nahi hua.':'Image did not load.',
+    'Is Family ID se koi ghar nahi mila.':'No household found for this Family ID.',
+    'Is browser me camera support nahi.':'This browser has no camera support.',
+    'Is email se koi admin nahi hai.':'No admin with this email.',
+    'Is image me QR nahi mila. Dusri image try karo.':'No QR found in this image. Try another image.',
+    'Kabhi backup nahi liya':'No backup yet',
+    'Kam se kam 6 characters.':'At least 6 characters.',
+    'Kam se kam ek admin rehna chahiye':'At least one admin must remain',
+    'Koi record nahi mila. Family ID ya phone number check karo.':'No record found. Check the Family ID or phone number.',
+    'Login link bhej diya':'Login link sent',
+    'Lookup nahi hua.':'Lookup failed.',
+    'Lookup nahi hua. Thodi der baad try karo.':'Lookup failed. Try again in a moment.',
+    'Masjid details save ho gayi':'Masjid details saved',
+    'Naam: ':'Name: ',
+    'Owner email save ho gaya':'Owner email saved',
+    'Owner — approvals bhi':'Owner — approvals too',
+    'Pehle Drive setup karo — config.js me GOOGLE_CLIENT_ID chahiye':'Set up Drive first — GOOGLE_CLIENT_ID needed in config.js',
+    'Pehle upar apna email daalo, phir ye button dabao.':'Enter your email above first, then tap this button.',
+    'Photo add ho gayi':'Photo added',
+    'Photo add nahi hui — dusri image try karo':'Photo not added — try another image',
+    'Popup block hua hai - popup allow karo':'Popup was blocked - allow popups',
+    'Public totals refresh ho gaye':'Public totals refreshed',
+    'QR image scan ho raha hai...':'Scanning the QR image...',
+    'QR mila':'QR found',
+    'QR mila: ':'QR found: ',
+    'QR scan ho raha hai...':'Scanning QR...',
+    'QR scanner load nahi hua.':'QR scanner did not load.',
+    'Refresh fail — schema v4 run hua hai?':'Refresh failed — has schema v4 been run?',
+    'Request nahi mili':'Request not found',
+    'Request reject ho gayi':'Request rejected',
+    'Reset link bhej diya':'Reset link sent',
+    'Restore ho gaya':'Restore complete',
+    'Save nahi hua — storage bhar gaya. Kuch photos hata ke dobara koshish karo.':'Not saved — storage is full. Remove some photos and try again.',
+    'Saved — next household ke liye form ready':'Saved — form ready for the next household',
+    'Scan nahi ho saka.':'Scan failed.',
+    'Scheme mili — members':'Scheme received — members',
+    'Scheme nahi mili — members':'Scheme not received — members',
+    'Sirf admin':'Admin only',
+    'Sirf owner':'Owner only',
+    'Sirf owner admin hata sakta hai':'Only the owner can remove an admin',
+    'Sirf owner approve kar sakta hai':'Only the owner can approve',
+    'Sirf owner badal sakta hai':'Only the owner can change it',
+    'Sirf owner edit kar sakta hai':'Only the owner can edit',
+    'Sirf owner naya admin add kar sakta hai':'Only the owner can add a new admin',
+    'Sirf owner reject kar sakta hai':'Only the owner can reject',
+    'Sirf totals (naam/phone kabhi nahi)':'Totals only (never names/phone)',
+    'User ID / email galat lag raha hai.':'User ID / email looks wrong.',
+    'Ye Family ID pehle se kisi ghar ke paas hai — koi aur do.':'This Family ID already belongs to a household — pick another.',
+    'Ye JSON backup file nahi hai':'This is not a JSON backup file',
+    'Ye account abhi approval pending hai — owner approve karega tabhi login hoga.':'This account is pending approval — you can log in after the owner approves.',
+    'Ye email approved admin list me nahi hai. “Request access” se owner ko request bhejo.':'This email is not an approved admin. Use “Request access” to ask the owner.',
+    'Ye email pehle se admin hai':'This email is already an admin',
+    'Ye email pehle se registered hai. Forgot password? par jao → email par link aayega → click karke password set karo, phir login.':'This email is already registered. Go to Forgot password? → a link comes by email → click it, set a password, then log in.',
+    'Ye page sirf admin ke liye hai':'This page is for admins only',
+    'Ye sirf admin kar sakta hai':'Only an admin can do this',
+    'Aaj backup liya':'Backed up today',
+    'din pehle backup liya':'days ago',
+    'date nahi hai':'no date',
+    'kabhi nahi':'never',
+    'Ye admin account hata dein?':'Remove this admin account?',
+    'Is device ka current data backup se replace ho jayega.':'Current data on this device will be replaced by the backup.'
   },
   ta: {
     'Dashboard':'டாஷ்போர்டு',
@@ -2702,7 +2852,7 @@ function viewMasjid(){
   </div>
 
   <div class="card">
-    <div class="card-h"><div><h3>Masjid ki tasveerein</h3><div class="hint">${m.photos.length}/6 photo · har photo phone me hi save hoti hai</div></div>
+    <div class="card-h"><div><h3>Masjid ki tasveerein</h3><div class="hint"><span>${m.photos.length}/6</span> · <span>har photo phone me hi save hoti hai</span></div></div>
       ${canEdit?'<span class="badge">Max 6</span>':''}</div>
     <div class="photo-grid" style="margin-top:12px">
       ${m.photos.length ? m.photos.map((src,i)=>`<div class="photo"><img src="${esc(src)}" alt="Masjid photo ${i+1}" />
@@ -2978,7 +3128,7 @@ document.addEventListener('click', (e)=>{
     const me = currentUser();
     if (String(id).toLowerCase()===String(me.email).toLowerCase()){ toast('Apna account nahi hata sakte','err'); return; }
     if (DB.admins().length <= 1){ toast('Kam se kam ek admin rehna chahiye','err'); return; }
-    if (!confirm('Ye admin account hata dein?')) return;
+    if (!confirm(tStr('Ye admin account hata dein?'))) return;
     DB.setAdmins(DB.admins().filter(a=>a.email!==id));
     toast('Admin hata diya'); go('users'); return;
   }
@@ -3546,7 +3696,7 @@ function backupAgeDays(){ const t=lastBackupAt(); return t ? Math.floor((Date.no
 function needsBackup(){ const d=backupAgeDays(); return d===null || d>=7; }
 function backupHint(){
   const d = backupAgeDays();
-  return d===null ? 'Kabhi backup nahi liya' : (d===0 ? 'Aaj backup liya' : d+' din pehle backup liya');
+  return d===null ? tStr('Kabhi backup nahi liya') : (d===0 ? tStr('Aaj backup liya') : d+' '+tStr('din pehle backup liya'));
 }
 
 function backupPayload(){
@@ -3574,8 +3724,8 @@ function restoreJSON(file){
     if (!fams){ toast('Backup file me families nahi mili','err'); return; }
 
     const before = DB.families().length;
-    const when = data && data.exportedAt ? new Date(data.exportedAt).toLocaleString('en-GB') : 'date nahi hai';
-    const okToGo = confirm('Restore backup?\n\nBackup date: ' + when + '\nFamilies in file: ' + fams.length + '\nFamilies now on device: ' + before + '\n\nIs device ka current data backup se replace ho jayega.');
+    const when = data && data.exportedAt ? new Date(data.exportedAt).toLocaleString('en-GB') : tStr('date nahi hai');
+    const okToGo = confirm('Restore backup?\n\nBackup date: ' + when + '\nFamilies in file: ' + fams.length + '\nFamilies now on device: ' + before + '\n\n' + tStr('Is device ka current data backup se replace ho jayega.'));
     if (!okToGo) return;
 
     const clean = fams.filter(f=>f && typeof f==='object' && (f.id||f.houseName||(f.members&&f.members.length)))
@@ -3597,7 +3747,7 @@ function restoreJSON(file){
     if (added) DB.setAdmins(admins);
 
     try { localStorage.setItem(LS_LASTBACKUP, String(Date.now())); } catch(e){}
-    toast('Restore ho gaya — ' + clean.length + ' families' + (added ? ' · ' + added + ' admin added' : ''), 'ok');
+    toast(tStr('Restore ho gaya')+' — ' + clean.length + ' families' + (added ? ' · ' + added + ' admin added' : ''), 'ok');
     try { go('dashboard'); } catch(e){}
 
     if (SYNC.on()){
@@ -3622,7 +3772,7 @@ function driveMeta(){ try { return JSON.parse(localStorage.getItem(LS_DRIVE) || 
 function setDriveMeta(m){ try { localStorage.setItem(LS_DRIVE, JSON.stringify(m)); } catch(e){} }
 function driveReady(){ return !!(CFG.GOOGLE_CLIENT_ID && String(CFG.GOOGLE_CLIENT_ID).trim()); }
 function driveConnected(){ return !!(DRIVE.token && DRIVE.exp > Date.now() + 30000); }
-function driveLastText(){ const m = driveMeta(); return m && m.lastAt ? new Date(m.lastAt).toLocaleString('en-GB') : 'kabhi nahi'; }
+function driveLastText(){ const m = driveMeta(); return m && m.lastAt ? new Date(m.lastAt).toLocaleString('en-GB') : tStr('kabhi nahi'); }
 function driveStatusText(){
   if (!driveReady()) return 'Drive setup baaki — config.js me GOOGLE_CLIENT_ID daalo (guide Settings me).';
   if (driveConnected()) return 'Drive connected · last Drive backup: ' + driveLastText();
@@ -3715,7 +3865,7 @@ async function backupToDrive(){
     const res = await driveUpload(token, name, JSON.stringify(data, null, 2), folderId);
     setDriveMeta({ lastAt:Date.now(), fileName:name, fileId:res.id, link:res.webViewLink || '', folderId:folderId, families:(data.families||[]).length });
     try { localStorage.setItem(LS_LASTBACKUP, String(Date.now())); } catch(e){}
-    toast('Drive backup ho gaya — ' + name, 'ok');
+    toast(tStr('Drive backup ho gaya')+' — ' + name, 'ok');
     try { go(state.view, state.param); } catch(e){}
     return true;
   } catch(e){
@@ -4131,7 +4281,7 @@ async function scanQrImage(file){
         const data = ctx.getImageData(0,0,canvas.width,canvas.height);
         const res = jsQR(data.data, data.width, data.height);
         if (res && res.data){
-          msg.textContent='QR mila';
+          msg.textContent=tStr('QR mila');
           handleQrFind(res.data);
         } else {
           msg.textContent='Is image me QR nahi mila. Dusri image try karo.';
@@ -4171,7 +4321,7 @@ function scanLoop(){
           if(res && res.data){
             const txt = String(res.data);
             stopQrScan();
-            if(msg) msg.textContent='QR mila: '+esc(txt);
+            if(msg) msg.textContent=tStr('QR mila: ')+esc(txt);
             handleQrFind(txt);
             return;
           }

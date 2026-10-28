@@ -300,3 +300,11 @@ Open: wire Supabase keys; real OTP SMS later.
   Public category page me bhi wahi row (non-clickable). Style `tr.scheme-none` (italic, surface-2).
 - Rule: koi bhi table bucket bina row ke na chhoote — count dikhta hai to uski row + list bhi honi chahiye.
 - Suites: schemes 13, counts 72, scan 167, docs 21, features 12 — sab green. Cache `memc-app-v83`, commit `5a57551`.
+
+## v84 — legacy "Scheme (old record)" row fixed (2026-10-28)
+- BUG: purane record (`govtScheme:'yes'`, koi `schemeName` nahi) ke liye dashboard bucket ka naam
+  `'Scheme (old record)'` tha, par `memberSchemes()` `'Scheme'` return karta tha → row count 1,
+  click par list 0. Ab dono jagah **`LEGACY_SCHEME_LABEL = 'Scheme (old record)'`** (ek const).
+- Rule: kisi bhi bucket ka label ek hi source se aaye — computeStats aur memberSchemes() kabhi
+  alag string na banayein, warna count aur list mismatch hoti hai.
+- Suites: schemes 17, counts 72, scan 167, docs 21, features 12 — green. Cache `memc-app-v84`, commit `39e1aac`.
