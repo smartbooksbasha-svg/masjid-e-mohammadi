@@ -2,12 +2,12 @@
    Strategy: network-first for app files (so updates are picked up
    immediately), falling back to cache when offline. Cross-origin
    requests (fonts, CDN libs) pass straight through. */
-const CACHE = 'memc-app-v97';
+const CACHE = 'memc-app-v98';
 const SHELL = [
   './', './index.html', './styles.css', './app.js', './config.js',
   './manifest.webmanifest',
   './icons/icon-192.png', './icons/icon-512.png', './icons/icon-maskable-512.png',
-  './vendor/qrcode.js', './vendor/xlsx.full.min.js'
+  './vendor/qrcode.js', './vendor/jsQR.js', './vendor/xlsx.full.min.js'
 ];
 
 self.addEventListener('install', (e) => {

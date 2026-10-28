@@ -323,6 +323,34 @@ const wait = ms => new Promise(r => setTimeout(r, ms || 120));
   AU.win.eval("auditSave([]); audit('audit_clear','Audit log','x')");
   ok(logs().length === 1 && logs()[0].a === 'audit_clear', 'audit clear leaves a single record of itself');
 
+  /* ---------------- 8bb. login guard: 3 try = 5 min lock, 6 = panel hide ---------------- */
+  const GD = await boot({});
+  GD.win.eval('guardReset()');
+  GD.win.eval('loginFailed(); loginFailed(); loginFailed()');
+  ok(GD.win.eval('guardLocked()') === true, '3 wrong attempts lock the login');
+  ok(GD.win.eval('guardHidden()') === false, 'panel still visible after 3 attempts');
+  GD.win.eval("openAuth('login')"); await wait(150);
+  const lockTxt = (GD.doc.querySelector('#loginAlert') || {}).textContent || '';
+  ok(/\d{2}:\d{2}/.test(lockTxt), 'countdown timer is shown (mm:ss): ' + lockTxt.trim().slice(0, 60));
+  ok(GD.doc.querySelector('#loginForm button[type=submit]').disabled === true, 'login button is disabled while locked');
+  const t1 = lockTxt;
+  await wait(1200);
+  const t2 = (GD.doc.querySelector('#loginAlert') || {}).textContent || '';
+  ok(t1 !== t2, 'countdown actually ticks');
+
+  GD.win.eval('loginFailed(); loginFailed(); loginFailed()');
+  ok(GD.win.eval('guardHidden()') === true, '6 wrong attempts hide the admin panel');
+  GD.win.eval('renderShell()'); await wait(80);
+  ok(!/data-act="open-auth"/.test(GD.doc.querySelector('#userChip').innerHTML), 'Admin button is hidden while locked out');
+  ok(!/Admin login/.test(GD.doc.querySelector('.sb-foot').textContent || ''), 'sidebar login link is hidden too');
+  GD.win.eval("openAuth('login')"); await wait(120);
+  ok(!GD.doc.querySelector('#loginForm'), 'login box cannot be opened while panel is hidden');
+
+  GD.win.eval('guardReset()');
+  ok(GD.win.eval('guardHidden()') === false && GD.win.eval('guardLocked()') === false, 'guard resets (successful login / expiry)');
+  GD.win.eval('loginOk()');
+  ok(GD.win.eval('guardGet().fails') === 0, 'successful login clears the counter');
+
   /* ---------------- 8c. direct admin login link ---------------- */
   const DL = await boot({ hash: '#login' });
   await wait(300);

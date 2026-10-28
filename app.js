@@ -176,14 +176,38 @@ async function checkPass(pw, admin){
   return false;
 }
 
-/* login brute-force lock: 5 galat try = 60 second rukna (per device) */
-const LOGIN_TRIES = { n:0, until:0 };
-function loginLocked(){ return Date.now() < LOGIN_TRIES.until; }
-function loginFailed(){
-  LOGIN_TRIES.n = (LOGIN_TRIES.n || 0) + 1;
-  if (LOGIN_TRIES.n >= 5){ LOGIN_TRIES.until = Date.now() + 60000; LOGIN_TRIES.n = 0; }
+/* ---------- login guard: 3 galat try = 5 min lock · 6 galat try = admin panel hide ---------- */
+const GUARD_KEY = 'memc_authguard';
+const GUARD_TRIES = 3;                       /* iske baad 5 minute ka lock */
+const GUARD_LOCK_MS = 5 * 60 * 1000;
+const GUARD_HIDE_AFTER = 6;                  /* 6 galat try = panel automatic hide */
+const GUARD_HIDE_MS = 30 * 60 * 1000;
+function guardGet(){
+  try {
+    const g = JSON.parse(localStorage.getItem(GUARD_KEY) || 'null') || {};
+    return { fails:+g.fails || 0, lockUntil:+g.lockUntil || 0, hiddenUntil:+g.hiddenUntil || 0 };
+  } catch(e){ return { fails:0, lockUntil:0, hiddenUntil:0 }; }
 }
-function loginOk(){ LOGIN_TRIES.n = 0; LOGIN_TRIES.until = 0; }
+function guardSet(g){ try { localStorage.setItem(GUARD_KEY, JSON.stringify(g)); } catch(e){} }
+function guardReset(){ guardSet({ fails:0, lockUntil:0, hiddenUntil:0 }); }
+function guardLeftMs(until){ return Math.max(0, (+until || 0) - Date.now()); }
+function guardHidden(){
+  const g = guardGet();
+  if (g.hiddenUntil && Date.now() >= g.hiddenUntil){ guardReset(); return false; }
+  return Date.now() < g.hiddenUntil;
+}
+function guardLocked(){ return Date.now() < guardGet().lockUntil; }
+function mmss(sec){ sec = Math.max(0, Math.round(sec)); return pad(Math.floor(sec/60),2) + ':' + pad(sec%60,2); }
+function loginLocked(){ return guardLocked(); }
+function loginFailed(){
+  const g = guardGet(); g.fails = (+g.fails || 0) + 1;
+  if (g.fails >= GUARD_HIDE_AFTER){ g.hiddenUntil = Date.now() + GUARD_HIDE_MS; g.lockUntil = g.hiddenUntil; }
+  else if (g.fails >= GUARD_TRIES){ g.lockUntil = Date.now() + GUARD_LOCK_MS; }
+  guardSet(g);
+  try { renderShell(); } catch(e){}
+  return g;
+}
+function loginOk(){ guardReset(); try { renderShell(); } catch(e){} }
 function ageFromDob(dob){
   if (!dob) return null; const d = new Date(dob); if (isNaN(d)) return null;
   const t = new Date(); let a = t.getFullYear()-d.getFullYear();
@@ -726,6 +750,12 @@ function authCard(inner){
 }
 
 function openAuth(tab){
+  if (guardHidden()){
+    try { clearInterval(_lockTimer); } catch(e){}
+    const box = $('#authScreen'); if (box){ box.classList.add('hidden'); box.innerHTML = ''; }
+    try { toast('Admin panel security lock me hai — ' + mmss(guardLeftMs(guardGet().hiddenUntil)/1000) + ' baad try karo', 'err'); } catch(e){}
+    return;
+  }
   renderAuth(tab || 'login');
 }
 function closeAuth(){
@@ -762,14 +792,57 @@ function renderLogin(){
     </form>`);
 
   $('#loginForm').addEventListener('submit', loginSubmit);
+  applyLoginGuard();
+}
+
+/* lock ka live countdown (05:00 → 00:00), khatam hote hi form wapas chalu */
+let _lockTimer = null;
+function applyLoginGuard(){
+  try { clearInterval(_lockTimer); } catch(e){}
+  _lockTimer = null;
+  const form = $('#loginForm'); if (!form) return;
+  const btn = form.querySelector('button[type="submit"]');
+  const box = $('#loginAlert');
+  const paint = ()=>{
+    const g = guardGet();
+    const hiddenLeft = guardLeftMs(g.hiddenUntil);
+    const lockLeft = guardLeftMs(g.lockUntil);
+    if (hiddenLeft > 0){
+      if (btn){ btn.disabled = true; btn.textContent = 'Locked'; }
+      if (box) box.innerHTML = '<div class="alert err">Security lock — admin panel <b>' + mmss(hiddenLeft/1000) + '</b> ke liye band hai.</div>';
+      return true;
+    }
+    if (lockLeft > 0){
+      if (btn){ btn.disabled = true; btn.textContent = 'Wait ' + mmss(lockLeft/1000); }
+      if (box) box.innerHTML = '<div class="alert err">3 galat try — <b>' + mmss(lockLeft/1000) + '</b> baad try karo.</div>';
+      return true;
+    }
+    if (btn){ btn.disabled = false; btn.textContent = 'Login'; }
+    if (box && /galat try|Security lock/.test(box.textContent || '')) box.innerHTML = '';
+    return false;
+  };
+  if (paint()){
+    _lockTimer = setInterval(()=>{
+      if (!paint()){
+        clearInterval(_lockTimer); _lockTimer = null;
+        try { renderShell(); } catch(e){}
+        try { toast('Ab try kar sakte ho'); } catch(e){}
+      }
+    }, 1000);
+  }
 }
 
 async function loginSubmit(e){
   e.preventDefault();
   const E = e.target.elements, alertBox = $('#loginAlert');
-  if (loginLocked()){
-    const left = Math.ceil((LOGIN_TRIES.until - Date.now())/1000);
-    alertBox.innerHTML='<div class="alert err">Bahut zyada galat try — <b>'+left+' second</b> ruk jao.</div>'; return;
+  if (guardHidden()){
+    alertBox.innerHTML='<div class="alert err">Admin panel abhi band hai (security lock) — <b>'+mmss(guardLeftMs(guardGet().hiddenUntil)/1000)+'</b> baad try karo.</div>';
+    return;
+  }
+  if (guardLocked()){
+    alertBox.innerHTML='<div class="alert err">3 galat try ho gaye — <b>'+mmss(guardLeftMs(guardGet().lockUntil)/1000)+'</b> baad try karo.</div>';
+    applyLoginGuard();
+    return;
   }
   const ident = E.email.value.trim(), pass = E.pass.value;
   const found = findAdminByIdentifier(ident);
@@ -785,7 +858,7 @@ async function loginSubmit(e){
     const c = await CLOUD.get();
     if (!c){ if (btn){ btn.disabled=false; btn.textContent='Login'; } alertBox.innerHTML='<div class="alert err">Cloud connect nahi hua — internet check karo.</div>'; return; }
     const { error } = await c.auth.signInWithPassword({ email, password: pass });
-    if (error){ loginFailed(); audit('login_fail', email, String(error.message||'cloud login failed'), { by:email, id:'', email }); if (btn){ btn.disabled=false; btn.textContent='Login'; } alertBox.innerHTML='<div class="alert err">'+esc(error.message)+'</div>'; return; }
+    if (error){ loginFailed(); audit('login_fail', email, String(error.message||'cloud login failed'), { by:email, id:'', email }); if (btn){ btn.disabled=false; btn.textContent='Login'; } alertBox.innerHTML='<div class="alert err">'+esc(error.message)+'</div>'; applyLoginGuard(); return; }
     loginOk();
     await cloudClaimAdmin(email, '', '');
     if (!adminByEmail(email)){
@@ -803,7 +876,13 @@ async function loginSubmit(e){
     loginFailed();
     audit('login_fail', admin.name || email, 'wrong password', { by:admin.name || email, id:admin.userId || '', email });
     if (btn){ btn.disabled=false; btn.textContent='Login'; }
-    alertBox.innerHTML='<div class="alert err">Incorrect password.' + (loginLocked()?' <b>60 second ruk jao.</b>':'') + '</div>';
+    const gg = guardGet();
+    let m;
+    if (guardHidden()) m = 'Incorrect password. <b>6 galat try</b> — admin panel <b>' + mmss(guardLeftMs(gg.hiddenUntil)/1000) + '</b> ke liye band.';
+    else if (guardLocked()) m = 'Incorrect password. <b>3 galat try</b> — <b>' + mmss(guardLeftMs(gg.lockUntil)/1000) + '</b> baad try karo.';
+    else m = 'Incorrect password. <b>' + Math.max(0, GUARD_TRIES - gg.fails) + ' try</b> bache.';
+    alertBox.innerHTML='<div class="alert err">' + m + '</div>';
+    applyLoginGuard();
     return;
   }
   loginOk();
@@ -1372,14 +1451,19 @@ function renderShell(){
     chip.innerHTML = `<button type="button" class="chip-btn" data-act="myprofile" title="My Profile - Edit photo/name/phone"><span class="av" style="overflow:hidden;border-radius:10px">${ph}</span><span><span class="nm">${esc(me.name||u.name||u.email)}</span><br><span class="rl">${roleName}</span></span></button> <button class="chip-logout" type="button" data-act="admin-logout" title="Log out">${ICON.exit}</button>`;
     chip.removeAttribute('data-act');
   } else {
-    chip.innerHTML = `<span class="public-chip">Public view</span><span class="btn ghost sm" data-act="open-auth" style="margin-left:8px">Admin</span>`;
+    const g = guardGet();
+    const lockTxt = guardHidden()
+      ? ''
+      : (guardLocked() ? `<span class="btn ghost sm" style="margin-left:8px;opacity:.6" data-act="open-auth">Admin · ${esc(mmss(guardLeftMs(g.lockUntil)/1000))}</span>`
+                       : `<span class="btn ghost sm" data-act="open-auth" style="margin-left:8px">Admin</span>`);
+    chip.innerHTML = `<span class="public-chip">Public view</span>${lockTxt}`;
     chip.removeAttribute('data-act');
     chip.title = 'Read-only public view';
   }
   const foot = document.querySelector('.sb-foot');
   if (foot) foot.innerHTML = u
     ? `Admin mode · you can add and edit`
-    : 'Public view · read only<br><button class="linklike" type="button" data-act="open-auth" style="margin-top:8px">Admin login</button>';
+    : ('Public view · read only' + (guardHidden() ? '' : '<br><button class="linklike" type="button" data-act="open-auth" style="margin-top:8px">Admin login</button>'));
   $$('#nav .nav-item').forEach(a=>a.classList.toggle('active', a.dataset.view===state.view || (state.view==='add' && a.dataset.view==='add')));
   closeNav();
 }

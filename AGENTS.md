@@ -498,3 +498,10 @@ Open: wire Supabase keys; real OTP SMS later.
   (`},` usse pehle aa gaya) — isliye audit/masjid keys ignore ho rahi thi; ab andar hai (en 392 keys).
   Masjid fields + audit sentences ki translations add.
 - Tests **113 asserts green**. Cache `memc-app-v96`, commit `050173c`.
+
+## v97 — direct admin link (2026-10-28)
+- `#login` / `#admin` par seedha login modal khulta hai → **https://smartbooksbasha-svg.github.io/masjid-e-mohammadi/#login**
+- Root cause: file ke aakhir me `history.replaceState({...}, '', '#dashboard')` parse-time par chalta tha, isliye
+  `init()` tak hash `login` nahi bachta. Fix: `BOOT_HASH` ko replaceState se PEHLE capture karo, init wahi padhe.
+- Login = **User ID ya email**; owner email `smartbooksbasha@gmail.com`, pehla admin ID `ADM-2026-0001`.
+- Cache `memc-app-v97`, commit `053e46d`, tests 115 green.

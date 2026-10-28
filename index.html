@@ -67,12 +67,25 @@
 <script src="config.js"></script>
 <script src="vendor/qrcode.js" defer></script>
 <script src="vendor/xlsx.full.min.js" defer></script>
-<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<script src="vendor/jsQR.js" defer></script>
   <script src="app.js" defer></script>
 <script>
+  /* app khud update hota rahe — naya version aate hi reload */
   if ('serviceWorker' in navigator) {
+    var hadSW = !!navigator.serviceWorker.controller;
+    var reloading = false;
+    navigator.serviceWorker.addEventListener('controllerchange', function () {
+      if (!hadSW || reloading) return;
+      reloading = true;
+      location.reload();
+    });
     window.addEventListener('load', function () {
-      navigator.serviceWorker.register('sw.js').catch(function () {});
+      navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then(function (reg) {
+        function check(){ try { reg.update(); } catch (e) {} }
+        setInterval(check, 5 * 60 * 1000);                       /* har 5 minute */
+        document.addEventListener('visibilitychange', function () { if (!document.hidden) check(); });
+        window.addEventListener('focus', check);
+      }).catch(function () {});
     });
   }
 </script>
