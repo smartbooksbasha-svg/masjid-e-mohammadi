@@ -415,3 +415,9 @@ Open: wire Supabase keys; real OTP SMS later.
 - Designer: "Card size" select me teeno options, hint "5×3 = chaudi card, QR bada aur text saaf".
 - Suites: idcard 58, auth 58, scan 169, counts 72, docs 21, features 12, schemes 17, i18n 38 = **445 green**.
 - Cache `memc-app-v91`, commit `7f04d81`.
+
+## Backup (2026-10-28)
+- Full backup Shan ke **Download folder** me: `masjid-survey-backup-<date>.zip` (source, .git chhod kar)
+  aur `masjid-survey-repo-<date>.bundle` (git history, `git bundle create ... --all`).
+  README: `Download/MASJID-SURVEY-BACKUP-README.txt`. Data (families) alag — app ke Settings → Backup (JSON).
+- Zip command: `zip -rq "$OUT" masjid-kidmat-records -x "masjid-kidmat-records/.git/*"` (Termux me `zip` pkg).
