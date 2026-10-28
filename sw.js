@@ -2,7 +2,7 @@
    Strategy: network-first for app files (so updates are picked up
    immediately), falling back to cache when offline. Cross-origin
    requests (fonts, CDN libs) pass straight through. */
-const CACHE = 'memc-app-v89';
+const CACHE = 'memc-app-v90';
 const SHELL = [
   './', './index.html', './styles.css', './app.js', './config.js',
   './manifest.webmanifest',

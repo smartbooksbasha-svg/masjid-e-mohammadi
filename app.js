@@ -2527,7 +2527,11 @@ const I18N = {
     'View admins':'View admins',
     'Hide admins':'Hide admins',
     '+ Add admin':'+ Add admin',
-    'Pending requests':'Pending requests'
+    'Pending requests':'Pending requests',
+    'Card size':'Card size',
+    '3 × 5 inch (default)':'3 × 5 inch (default)',
+    'ID-1 (85.6 × 54 mm)':'ID-1 (85.6 × 54 mm)',
+    '3×5 = bada card, QR bada aur text saaf':'3×5 = bigger card, bigger QR and clearer text'
   },
   ta: {
     'Dashboard':'டாஷ்போர்டு',
@@ -2947,6 +2951,7 @@ function saveIdcardForm(form){
   cur.accent = String(E.accent.value||'#0f5c47');
   cur.bgOpacity = Number(E.bgOpacity.value)||0;
   cur.scale = Number(E.scale.value)||1.12;
+  cur.size = (E.size && E.size.value==='id1') ? 'id1' : '3x5';
   DB.setIdcard(cur);
   toast('Card design save ho gaya','ok');
   go('idcard');
@@ -3005,6 +3010,12 @@ function viewIdCardDesign(){
         <div class="field"><label>Card colour</label>
           <input class="inp" type="color" name="accent" value="${esc(c.accent)}" style="height:44px;padding:4px" />
           <span class="hint">Header, Family ID aur lines ka rang</span></div>
+        <div class="field"><label>Card size</label>
+          <select class="inp" name="size">
+            <option value="3x5" ${c.size==='3x5'?'selected':''}>3 × 5 inch (default)</option>
+            <option value="id1" ${c.size==='id1'?'selected':''}>ID-1 (85.6 × 54 mm)</option>
+          </select>
+          <span class="hint">3×5 = bada card, QR bada aur text saaf</span></div>
         <div class="field"><label>Text size</label>
           <select class="inp" name="scale">
             <option value="1" ${c.scale===1?'selected':''}>Normal</option>
@@ -4171,7 +4182,7 @@ function mjHead(){
 
 /* ---- family ID card (v88): editable design + terms on the back ---- */
 const IDCARD_DEFAULT = {
-  org:'', sub:'', tag:'Family ID Card',
+  org:'', sub:'', tag:'Family ID Card', size:'3x5',
   logo:'', bg:'', bgOpacity:14, accent:'#0f5c47',
   scale:1.12,
   footLeft:'', footRight:'',
@@ -4186,6 +4197,7 @@ function idcardCfg(){
   c.scale = Math.min(1.4, Math.max(1, sc));
   c.bgOpacity = Math.min(60, Math.max(0, Number(c.bgOpacity)||0));
   if (!/^#[0-9a-f]{3,8}$/i.test(c.accent||'')) c.accent = '#0f5c47';
+  c.size = (c.size==='id1') ? 'id1' : '3x5';
   return c;
 }
 function idCrestSVG(cfg){
@@ -4208,7 +4220,12 @@ function girihBg(color){
 }
 function idCardCSS(c){
   const k = c.scale;
-  const pt = n => (n*k).toFixed(2)+'pt';
+  const portrait = String(c.size||'3x5') !== 'id1';
+  /* 3x5 card (76.2 x 127 mm) me jagah zyada hai -> text bhi bada */
+  const s = portrait ? 1.5 : 1;
+  const pt = n => (n*k*s).toFixed(2)+'pt';
+  const W = portrait ? '76.2mm' : '85.6mm';
+  const H = portrait ? '127mm'  : '53.98mm';
   return `
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:#eef2f0;padding:16px;font-family:"Segoe UI",Roboto,Arial,Helvetica,sans-serif;color:#0d2b22}
@@ -4216,8 +4233,9 @@ body{background:#eef2f0;padding:16px;font-family:"Segoe UI",Roboto,Arial,Helveti
 .bar button{padding:9px 16px;border-radius:9px;border:1px solid ${c.accent};background:${c.accent};color:#fff;font-size:13px;font-weight:600;cursor:pointer}
 .bar button.ghost{background:#fff;color:${c.accent}}
 
-.idcard{position:relative;width:85.6mm;height:53.98mm;margin:0 auto;border-radius:3.2mm;overflow:hidden;
-  background:#fff;box-shadow:0 6px 22px rgba(6,32,24,.22);page-break-inside:avoid;break-inside:avoid;
+.idcard{position:relative;width:${W};height:${H};margin:0 auto;border-radius:3.2mm;overflow:hidden;
+  display:flex;flex-direction:column;background:#fff;
+  box-shadow:0 6px 22px rgba(6,32,24,.22);page-break-inside:avoid;break-inside:avoid;
   border:0.3mm solid ${c.accent}}
 .idcard+.idcard{margin-top:6mm}
 .idcard .photo{position:absolute;inset:0;background-size:cover;background-position:center;opacity:${(c.bgOpacity/100).toFixed(2)};pointer-events:none}
@@ -4225,51 +4243,56 @@ body{background:#eef2f0;padding:16px;font-family:"Segoe UI",Roboto,Arial,Helveti
 .idcard .glow{position:absolute;inset:0;background:
   radial-gradient(70mm 40mm at 100% 0%, ${c.accent}22, transparent 60%),
   radial-gradient(60mm 40mm at 0% 100%, ${c.accent}18, transparent 62%);pointer-events:none}
-.idcard .dome{position:absolute;right:15mm;bottom:-7mm;width:36mm;height:36mm;color:${c.accent};opacity:.06;pointer-events:none}
+.idcard .dome{position:absolute;right:${portrait?'9mm':'15mm'};bottom:-7mm;width:${portrait?'48mm':'36mm'};height:${portrait?'48mm':'36mm'};color:${c.accent};opacity:.06;pointer-events:none}
 .idcard .dome svg{width:100%;height:100%}
 
-.idtop{position:relative;height:11.6mm;display:flex;align-items:center;gap:2.3mm;padding:0 3mm;
+.idtop{position:relative;flex:none;display:flex;align-items:center;gap:2.3mm;
+  height:${portrait?'auto':'11.6mm'};padding:${portrait?'2.6mm 3mm':'0 3mm'};
   background:linear-gradient(100deg,${c.accent} 0%,${c.accent}dd 100%);color:#fff}
-.crest{width:7.8mm;height:7.8mm;flex:none;border-radius:2mm;background:#fff;color:${c.accent};display:grid;place-items:center;overflow:hidden;box-shadow:0 0 0 .3mm rgba(255,255,255,.55)}
-.crest svg{width:6mm;height:6mm}
+.crest{width:${portrait?'10mm':'7.8mm'};height:${portrait?'10mm':'7.8mm'};flex:none;border-radius:2mm;background:#fff;color:${c.accent};display:grid;place-items:center;overflow:hidden;box-shadow:0 0 0 .3mm rgba(255,255,255,.55)}
+.crest svg{width:${portrait?'7.6mm':'6mm'};height:${portrait?'7.6mm':'6mm'}}
 .crest img{width:100%;height:100%;object-fit:cover}
-.org{min-width:0;line-height:1.18}
+.org{min-width:0;line-height:1.2}
 .org b{display:block;font-size:${pt(6.9)};letter-spacing:.3pt;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .org span{display:block;font-size:${pt(4.7)};letter-spacing:.45pt;text-transform:uppercase;opacity:.86}
 .tag{margin-left:auto;font-size:${pt(4.4)};letter-spacing:.6pt;text-transform:uppercase;border:0.25mm solid rgba(255,255,255,.55);
-  border-radius:1.2mm;padding:.8mm 1.5mm;white-space:nowrap}
+  border-radius:1.2mm;padding:${portrait?'1mm 1.8mm':'.8mm 1.5mm'};white-space:nowrap}
 
-.idbody{position:relative;display:flex;height:calc(53.98mm - 11.6mm - 5.2mm)}
-.idleft{flex:1;min-width:0;padding:2.6mm 2.4mm 1.6mm 3.2mm;display:flex;flex-direction:column}
+.idbody{position:relative;flex:1;min-height:0;display:flex;flex-direction:${portrait?'column':'row'}}
+.idleft{flex:1;min-width:0;display:flex;flex-direction:column;
+  padding:${portrait?'3.4mm 3.2mm 2mm':'2.6mm 2.4mm 1.6mm 3.2mm'}}
 .fidlab{font-size:${pt(4.3)};letter-spacing:.8pt;text-transform:uppercase;color:#5c7a70;font-weight:700}
 .fid{font-family:"Courier New",monospace;font-size:${pt(9.4)};font-weight:700;letter-spacing:.1pt;color:${c.accent};line-height:1.15;word-break:break-all}
-.rule{height:0.3mm;background:linear-gradient(90deg,${c.accent},${c.accent}22);margin:1.4mm 0 1.2mm}
-.rows{display:flex;flex-direction:column;gap:1.05mm}
-.r{display:flex;gap:1.6mm;font-size:${pt(6.1)};line-height:1.22;align-items:baseline}
-.r .k{color:#63837a;min-width:17mm;flex:none;font-size:${pt(4.7)};letter-spacing:.15pt;text-transform:uppercase;font-weight:700}
+.rule{height:0.3mm;background:linear-gradient(90deg,${c.accent},${c.accent}22);margin:${portrait?'2mm 0 1.8mm':'1.4mm 0 1.2mm'}}
+.rows{display:flex;flex-direction:column;gap:${portrait?'1.6mm':'1.05mm'}}
+.r{display:flex;gap:1.8mm;font-size:${pt(6.1)};line-height:1.24;align-items:baseline}
+.r .k{color:#63837a;min-width:${portrait?'23mm':'17mm'};flex:none;font-size:${pt(4.7)};letter-spacing:.15pt;text-transform:uppercase;font-weight:700}
 .r .v{color:#0d2b22;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
-.idright{width:27.4mm;flex:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1.3mm;
-  padding:1.8mm 2mm;border-left:0.25mm dashed ${c.accent}55;background:rgba(255,255,255,.8)}
-.qrbox{width:21mm;height:21mm;background:#fff;padding:1.1mm;border-radius:1.2mm;box-shadow:0 0 0 .25mm ${c.accent}33}
-.qrbox canvas,.qrbox img{width:100%!important;height:100%!important;display:block}
+.idright{flex:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:${portrait?'1.8mm':'1.3mm'};
+  width:${portrait?'auto':'27.4mm'};padding:${portrait?'2mm 3mm 3mm':'1.8mm 2mm'};
+  border-left:${portrait?'0':'0.25mm dashed '+c.accent+'55'};
+  border-top:${portrait?'0.25mm dashed '+c.accent+'55':'0'};
+  background:rgba(255,255,255,.8)}
+.qrbox{width:${portrait?'33mm':'21mm'};height:${portrait?'33mm':'21mm'};background:#fff;padding:1.1mm;border-radius:1.2mm;box-shadow:0 0 0 .25mm ${c.accent}33}
+.qrbox canvas,.qrbox img{width:100%!important;height:100%!important;display:block;object-fit:contain}
 .qrlab{font-size:${pt(4.2)};letter-spacing:.5pt;text-transform:uppercase;color:#5c7a70;font-weight:700}
-.qrid{font-family:"Courier New",monospace;font-size:${pt(4.6)};font-weight:700;color:${c.accent};text-align:center;max-width:24mm;word-break:break-all;line-height:1.15}
+.qrid{font-family:"Courier New",monospace;font-size:${pt(4.6)};font-weight:700;color:${c.accent};text-align:center;max-width:${portrait?'60mm':'24mm'};word-break:break-all;line-height:1.15}
 
-.idfoot{position:relative;height:5.2mm;display:flex;align-items:center;justify-content:space-between;gap:2mm;
-  padding:0 3mm;background:#f3f7f5;border-top:0.25mm solid ${c.accent}28;
+.idfoot{position:relative;flex:none;display:flex;align-items:center;justify-content:space-between;gap:2mm;
+  height:${portrait?'8.4mm':'5.2mm'};padding:0 3mm;background:#f3f7f5;border-top:0.25mm solid ${c.accent}28;
   font-size:${pt(4.3)};color:#5c7a70;letter-spacing:.2pt}
 .idfoot b{color:${c.accent}}
 
 /* back side */
-.idterms{position:relative;height:calc(53.98mm - 11.6mm - 5.2mm);padding:2.4mm 3.2mm;overflow:hidden;
+.idterms{position:relative;flex:1;min-height:0;padding:${portrait?'3.4mm 3.4mm':'2.4mm 3.2mm'};overflow:hidden;
   display:flex;flex-direction:column}
-.idterms h4{font-size:${pt(5.4)};letter-spacing:.5pt;text-transform:uppercase;color:${c.accent};margin-bottom:1.2mm;flex:none}
-.idterms p{font-size:${pt(5.2)};line-height:1.42;color:#173a2f;white-space:pre-wrap;word-break:break-word;
+.idterms h4{font-size:${pt(5.4)};letter-spacing:.5pt;text-transform:uppercase;color:${c.accent};margin-bottom:${portrait?'2mm':'1.2mm'};flex:none}
+.idterms p{font-size:${pt(5.2)};line-height:1.45;color:#173a2f;white-space:pre-wrap;word-break:break-word;
   flex:1;min-height:0;overflow:hidden}
-.idsign{display:flex;gap:4.5mm;margin-top:1.4mm;font-size:${pt(4.3)};color:#5c7a70;flex:none}
-.idsign .sg{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:10.5mm}
-.idsign .sg img{max-width:96%;max-height:7.4mm;object-fit:contain;margin-bottom:.3mm}
+.idsign{display:flex;gap:4.5mm;margin-top:${portrait?'3mm':'1.4mm'};font-size:${pt(4.3)};color:#5c7a70;flex:none}
+.idsign .sg{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:${portrait?'17mm':'10.5mm'}}
+.idsign .sg img{max-width:96%;max-height:${portrait?'13mm':'7.4mm'};object-fit:contain;margin-bottom:.3mm}
 .idsign .sg em{width:100%;text-align:center;border-top:0.25mm solid #9db3aa;padding-top:.6mm;font-style:normal;line-height:1.1}
 
 @media print{
@@ -4279,6 +4302,22 @@ body{background:#eef2f0;padding:16px;font-family:"Segoe UI",Roboto,Arial,Helveti
   .idcard+.idcard{margin-top:0;page-break-before:always;break-before:page}
   @page{size:auto;margin:8mm}
 }`;
+}
+/* QR ko pehle se image bana lete hain — print popup me hamesha dikhega */
+function qrDataURL(text, px){
+  try{
+    if (typeof QRCode === 'undefined') return '';
+    const holder = document.createElement('div');
+    holder.style.cssText = 'position:fixed;left:-9999px;top:0;width:1px;height:1px;overflow:hidden';
+    document.body.appendChild(holder);
+    new QRCode(holder, { text:String(text||''), width:px||600, height:px||600,
+      correctLevel:QRCode.CorrectLevel.M, colorDark:'#0d2b22', colorLight:'#ffffff' });
+    const cv = holder.querySelector('canvas');
+    let url = cv ? cv.toDataURL('image/png') : '';
+    if (!url){ const im = holder.querySelector('img'); url = im ? im.src : ''; }
+    holder.remove();
+    return url;
+  }catch(e){ return ''; }
 }
 function idCardFront(fam, c, base){
   const mem = fam.members || [];
@@ -4290,6 +4329,7 @@ function idCardFront(fam, c, base){
   const footL = String(c.footLeft||'').trim() || ('Members '+mem.length+' · Issued '+issued);
   const footR = String(c.footRight||'').trim() || (c.org+' · '+c.sub);
   const qrText = location.origin + location.pathname + '#qedit=' + encodeURIComponent(fam.id);
+  const qrImg = qrDataURL(qrText, 700);
   return `
 <div class="idcard">
   ${c.bg?`<div class="photo" style="background-image:url('${esc(c.bg)}')"></div>`:''}
@@ -4314,7 +4354,7 @@ function idCardFront(fam, c, base){
       </div>
     </div>
     <div class="idright">
-      <div class="qrbox" id="idq"></div>
+      <div class="qrbox" data-qr="${esc(qrText)}">${qrImg?`<img src="${qrImg}" alt="QR ${esc(fam.id)}" />`:'<div style="font-size:6pt;color:#0f5c47;text-align:center;padding:4mm 1mm">QR unavailable</div>'}</div>
       <div class="qrlab">Scan to verify</div>
       <div class="qrid">${esc(fam.id)}</div>
     </div>
@@ -4364,17 +4404,8 @@ function printIdCards(fam){
 </div>
 ${idCardFront(fam, c, base)}
 ${idCardBack(c)}
-<script src="${base}vendor/qrcode.js"></script>
 <script>
-(function(){
-  var el = document.getElementById('idq');
-  try{
-    new QRCode(el,{text:${JSON.stringify(qrText)},width:240,height:240,correctLevel:QRCode.CorrectLevel.M,colorDark:'#0d2b22',colorLight:'#ffffff'});
-  }catch(e){
-    el.innerHTML = '<div style="font-size:6px;color:#0f5c47;text-align:center;padding:4px">QR unavailable</div>';
-  }
-})();
-setTimeout(function(){ try{ window.print(); }catch(e){} }, 650);
+setTimeout(function(){ try{ window.print(); }catch(e){} }, 400);
 </script>
 </body></html>`;
   const w = window.open('','_blank','width=900,height=760');
