@@ -1480,7 +1480,7 @@ function viewCat(param){
     metrics = [['Nazira (men)',s.deeni.menNazira||0],['Nazira (women)',s.deeni.womenNazira||0],['Hafiz (men)',s.deeni.menHafiz],['Hafiz (women)',s.deeni.womenHafiz],['Aalim (men)',s.deeni.menAalim],['Aalim (women)',s.deeni.womenAalim],['Aalima (women)',s.deeni.womenAalima||0],['Mufti (men)',s.deeni.menMufti||0]].map(([l,v])=>metric(l,v)).join('');
   }
   if (n===6){
-    metrics = [['Members with all basic documents',s.membersWithAllDocs],['Members with no basic document',s.membersWithNoDocs],['Scheme applied',s.scheme.applied],['Scheme not applied',s.scheme.notApplied]].map(([l,v])=>metric(l,v)).join('');
+    metrics = [['Members with all basic documents',s.membersWithAllDocs],['Members with no basic document',s.membersWithNoDocs],['Scheme mili',s.scheme.applied],['Scheme nahi mili',s.scheme.notApplied]].map(([l,v])=>metric(l,v)).join('');
     extra = tbl(['Document','Have','Don\'t have'], BASIC_DOCS.map(([k,l])=>`<tr><td>${esc(l)}</td><td><b>${s.docs[k]}</b></td><td>${Math.max(0,s.pop-s.docs[k])}</td></tr>`))
       + tbl(['Scheme','Members'], SCHEMES.filter(([k])=>k!=='other').map(([k,l])=>`<tr><td>${esc(l)}</td><td><b>${s.scheme.counts[k]||0}</b></td></tr>`).concat(s.scheme.byName.map(([nm,c])=>`<tr><td>${esc(nm)}</td><td><b>${c}</b></td></tr>`)));
   }
@@ -1788,8 +1788,8 @@ function viewDashboard(){
         <div class="metrics cols2">
           ${metric('Members with all basic documents', s.membersWithAllDocs, {f:'docsAll', title:'Members with all basic documents'})}
           ${metric('Members with no basic document', s.membersWithNoDocs, {f:'docsNone', title:'Members with no basic document'})}
-          ${metric('Scheme applied', s.scheme.applied, {f:'schemeApplied', title:'Scheme applied'})}
-          ${metric('Scheme not applied', s.scheme.notApplied, {f:'schemeNone', title:'Scheme not applied'})}
+          ${metric('Scheme mili', s.scheme.applied, {f:'schemeApplied', title:'Scheme mili — members'})}
+          ${metric('Scheme nahi mili', s.scheme.notApplied, {f:'schemeNone', title:'Scheme nahi mili — members'})}
         </div>
         <div class="table-wrap small-table" style="margin-top:14px"><table>
           <thead><tr><th>Document</th><th>Have</th><th>Don't have</th></tr></thead><tbody>
@@ -2340,6 +2340,8 @@ const I18N = {
     'Members with no basic document':'Members with no basic document',
     'Scheme applied':'Scheme applied',
     'Scheme not applied':'Scheme not applied',
+    'Scheme mili':'Scheme received',
+    'Scheme nahi mili':'No scheme received',
     'Aalim (men)':'Aalim (men)',
     'Hafiz (men)':'Hafiz (men)',
     'Aalim (women)':'Aalim (women)',
@@ -2463,6 +2465,8 @@ const I18N = {
     'Members with no basic document':'எந்த ஆவணமும் இல்லாதவர்கள்',
     'Scheme applied':'திட்டம் பெற்றவர்',
     'Scheme not applied':'திட்டம் பெறாதவர்',
+    'Scheme mili':'திட்டம் பெற்றவர்',
+    'Scheme nahi mili':'திட்டம் பெறாதவர்',
     'Aalim (men)':'ஆலிம் (ஆண்)',
     'Hafiz (men)':'ஹாபிழ் (ஆண்)',
     'Aalim (women)':'ஆலிம் (பெண்)',
@@ -3492,8 +3496,8 @@ function summaryRows(){
     ['5 · Religious Education','Women Hafiz', s.deeni.womenHafiz],
     ['6 · Documents & Schemes','Members with all basic documents', s.membersWithAllDocs],
     ['6 · Documents & Schemes','Members with no basic document', s.membersWithNoDocs],
-    ['6 · Documents & Schemes','Scheme applied', s.scheme.applied],
-    ['6 · Documents & Schemes','Scheme not applied', s.scheme.notApplied],
+    ['6 · Documents & Schemes','Scheme mili', s.scheme.applied],
+    ['6 · Documents & Schemes','Scheme nahi mili', s.scheme.notApplied],
     ...BASIC_DOCS.map(([k,l])=>['6 · Documents & Schemes','Have '+l, s.docs[k]]),
     ...SCHEMES.filter(([k])=>k!=='other').map(([k,l])=>['6 · Documents & Schemes','Scheme: '+l, s.scheme.counts[k]||0]),
     ...s.scheme.byName.map(([nm,n])=>['6 · Documents & Schemes','Scheme: '+nm, n])

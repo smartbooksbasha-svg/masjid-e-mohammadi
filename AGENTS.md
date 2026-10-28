@@ -261,3 +261,20 @@ Open: wire Supabase keys; real OTP SMS later.
 - `window.navTo` ke debug `alert()` hata diye (2 alert per sidebar click).
 - sw cache `memc-app-v79`. Headless jsdom proof: **72/72** — har metric click karke
   list rows == dashboard number match kiya (`$TMPDIR/zyvo/zycount/count-smoke.js`).
+
+## v80 — documents cleaned up + full app scan (2026-10-28)
+- Shan: "documents me 12 empty boxes hain, hide karo — add document click se add ho".
+- **Documents held** section ab: sirf wo document dikhta hai jo mark hai. `+ Add document`
+  → inline picker (`#docsPicker`, `.dp-chips`) me bache hue DOC_TYPES; chip tap → `docs[k]='yes'`
+  → row me aa jaata hai; `Remove` → wapas `'no'`. Khaali state me `.empty-mini` hint.
+  Handlers: `add-doc` (open), `close-docs`, `pick-doc`, `unpick-doc`; `renderDocs()`.
+- **Custom documents**: `padCustom()` (12 empty rows) hata diya → `normCustom()` sirf
+  bhare hue rows rakhta hai (save par bhi strip). Purane 12-box records edit kholte hi saaf.
+- Fixed: Family ID hint me toota text ("MEMC-2026-000101), warna…") — saaf Hinglish.
+- Removed: dead `toggle-custom-docs` branch, `padCustom`, sample seed padding.
+- **New features**: member/household list me live search (`filterRows(value, '#mlistTable')`);
+  add-form me **Save & add another** (street + house type carry, baaki khaali) — survey speed.
+- Verification (harness `$TMPDIR/zyvo/zycount/`): scan **167/167** (admin+public, saare views,
+  zero runtime errors, no undefined/NaN/[object Object], no duplicate ids, har `data-act` handled),
+  dashboard counts **72/72**, documents **21/21**, features **12/12**.
+- sw cache `memc-app-v80`, commit `74fccdc`.
