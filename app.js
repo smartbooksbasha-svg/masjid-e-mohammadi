@@ -7,7 +7,7 @@
 /* ---------------- config / constants ---------------- */
 const CFG = window.APP_CONFIG || {};
 const PREFIX = CFG.FAMILY_ID_PREFIX || 'MEMC';
-const LS = { admins:'memc_admins', families:'memc_families', seq:'memc_seq', session:'memc_session', theme:'memc_theme', seeded:'memc_seeded', masjid:'memc_masjid', events:'memc_events', logo:'memc_logo', formDraft:'memc_form_draft' };
+const LS = { admins:'memc_admins', families:'memc_families', seq:'memc_seq', session:'memc_session', theme:'memc_theme', seeded:'memc_seeded', masjid:'memc_masjid', events:'memc_events', logo:'memc_logo', formDraft:'memc_form_draft', idcard:'memc_idcard' };
 
 const DOC_TYPES = [
   ['aadhaar','Aadhaar Card'], ['pan','PAN Card'], ['passport','Passport'],
@@ -254,7 +254,9 @@ const DB = {
   events(){ try{ return JSON.parse(localStorage.getItem(LS.events)||'[]'); }catch(e){ return []; } },
   setEvents(v){ localStorage.setItem(LS.events, JSON.stringify(v)); },
   logo(){ try{ return localStorage.getItem(LS.logo)||''; }catch(e){ return ''; } },
-  setLogo(v){ if(!v) localStorage.removeItem(LS.logo); else localStorage.setItem(LS.logo, String(v)); }
+  setLogo(v){ if(!v) localStorage.removeItem(LS.logo); else localStorage.setItem(LS.logo, String(v)); },
+  idcard(){ try{ return JSON.parse(localStorage.getItem(LS.idcard)||'null') || null; }catch(e){ return null; } },
+  setIdcard(v){ if(!v) localStorage.removeItem(LS.idcard); else localStorage.setItem(LS.idcard, JSON.stringify(v)); }
 };
 
 function getSession(){ try{ return JSON.parse(localStorage.getItem(LS.session)||'null'); }catch(e){ return null; } }
@@ -376,34 +378,37 @@ function setOwnerEmail(e){ /* locked - cannot change */ return false; }
 /* purane auto-set owner ko ek baar clear karo — owner ab config se aata hai */
 
 /* PURGE: sirf fixed owner rakho, baaki sab admins hata do */
+/* owner sirf ek — fixed email. Baaki sab admin rehte hain (delete NAHI hote). */
 function purgeNonOwnerAdmins(){
   try {
-    const FIXED = 'smartbooksbasha@gmail.com';
-    const FIXED_NAME = 'Isthiyaque Basha';
+    const FIXED = String(FIXED_OWNER_EMAIL||'').toLowerCase();
     const admins = DB.admins();
-    const kept = admins.filter(a => String(a.email||'').toLowerCase() === FIXED);
-    if (kept.length === 0){
-      kept.push({ email: FIXED, name: FIXED_NAME, role: 'owner', status: 'active', userId: 'ADM-OWNER-0001', createdAt: Date.now(), phone: '' });
-    } else {
-      kept[0].email = FIXED;
-      kept[0].name = FIXED_NAME;
-      kept[0].role = 'owner';
-      kept[0].status = 'active';
-      if (!kept[0].userId) kept[0].userId = 'ADM-OWNER-0001';
+    let changed = false;
+    const ownerRec = admins.find(a=>String(a.email||'').toLowerCase() === FIXED);
+    if (!ownerRec){
+      admins.push({ email: FIXED, name: 'Isthiyaque Basha', role: 'owner', status: 'active',
+        userId: 'ADM-OWNER-0001', createdAt: Date.now(), phone: '' });
+      changed = true;
     }
-    if (JSON.stringify(admins) !== JSON.stringify(kept)){
-      DB.setAdmins(kept);
-      try {
-        const sess = getSession();
-        if (sess && String(sess.email||'').toLowerCase() !== FIXED){
-          localStorage.removeItem(LS.session);
-        }
-      } catch(e){}
-      console.log('[purge] Purane admins hata diye gaye, sirf owner baki');
-    }
+    admins.forEach(a=>{
+      const isOwnerRow = String(a.email||'').toLowerCase() === FIXED;
+      if (isOwnerRow){
+        if (a.role !== 'owner' || a.status !== 'active'){ a.role='owner'; a.status='active'; changed = true; }
+        if (!a.userId){ a.userId = 'ADM-OWNER-0001'; changed = true; }
+      } else if (a.role === 'owner'){       /* koi aur khud ko owner na bana sake */
+        a.role = 'admin'; changed = true;
+      }
+    });
+    /* purge sirf tab jab data placeholders ho (demo/legacy) — asli admins safe */
+    const keep = admins.filter(a=>{
+      const e = String(a.email||'').toLowerCase();
+      if (e === FIXED) return true;
+      return !!(a.passHash || a.cloud || a.status === 'pending');
+    });
+    if (keep.length !== admins.length){ changed = true; }
+    if (changed) DB.setAdmins(keep);
   } catch(e){}
 }
-
 function migrateOwner(){
   try {
     if (localStorage.getItem('memc_owner_src')) return;
@@ -1005,7 +1010,7 @@ function go(view, param){
       saveFormDraft();
     }
   } catch(e){}
-  const ADMIN_ONLY = ['add','users','settings','families','detail','masjid','adminpanel'];
+  const ADMIN_ONLY = ['add','users','settings','families','detail','masjid','adminpanel','idcard'];
   if (ADMIN_ONLY.includes(view) && !isAdmin()){ toast('Ye page sirf admin ke liye hai','err'); view='dashboard'; }
   // Push history state for back button
   try {
@@ -1015,7 +1020,7 @@ function go(view, param){
   } catch(e){}
   state.view = view; state.param = param||null;
   closeNav();
-  const titles = { dashboard:'Survey Dashboard', families:'Households', add:(state.param?'Edit Household':'Add Household'), detail:'Household Record', find:'Find family', adminpanel:'Administration', users:'Admins', settings:'Settings', masjid:'Masjid Profile', cat:'Survey Category', myprofile:'My Profile', 'admin-edit':'Edit Admin', memberlist:'Members', familylist:'Households list', streetlist:'Streets' };
+  const titles = { dashboard:'Survey Dashboard', families:'Households', add:(state.param?'Edit Household':'Add Household'), detail:'Household Record', find:'Find family', adminpanel:'Administration', users:'Admins', settings:'Settings', masjid:'Masjid Profile', cat:'Survey Category', myprofile:'My Profile', 'admin-edit':'Edit Admin', idcard:'ID Card Design', memberlist:'Members', familylist:'Households list', streetlist:'Streets' };
   $('#pageTitle').textContent = titles[view] || 'Survey Dashboard';
   let html='';
   if (view==='dashboard') html = viewDashboard();
@@ -1029,6 +1034,7 @@ function go(view, param){
   else if (view==='masjid') html = viewMasjid();
   else if (view==='myprofile') html = isAdmin()?viewMyProfile():`<div class='empty'><h3>Admin only</h3></div>`;
   else if (view==='admin-edit') html = isOwner()?viewAdminEdit(state.param):`<div class='empty'><h3>Owner only</h3></div>`;
+  else if (view==='idcard') html = isOwner()?viewIdCardDesign():`<div class='empty'><h3>Super admin only</h3></div>`;
   else if (view==='cat') html = viewCat(state.param);
   else if (view==='memberlist') html = viewMembersList(state.memberListFilter||(()=>true), state.memberListTitle||'Members');
   else if (view==='familylist') html = viewFamilyList(state.familyListFilter||(()=>true), state.familyListTitle||'Households');
@@ -2456,7 +2462,53 @@ const I18N = {
     'Password updated':'Password updated',
     'Aapko admin access de diya gaya hai.':'You have been given admin access.',
     'Topbar me "Admin" dabao → User ID + password se login karo.':'Tap "Admin" in the topbar → log in with your User ID and password.',
-    'Login ke baad My Profile se apna password badal lo.':'After logging in, change your password from My Profile.'
+    'Login ke baad My Profile se apna password badal lo.':'After logging in, change your password from My Profile.',
+
+    /* --- v88: ID card designer --- */
+    'ID Card Design':'ID Card Design',
+    'Card ka logo, background, text aur terms — sab yahan se badlo.':'Change the card logo, background, text and terms from here.',
+    'Logo, background photo, colour, text aur back-side terms — sab editable.':'Logo, background photo, colour, text and back-side terms — all editable.',
+    'Open designer':'Open designer',
+    'Logo & background':'Logo & background',
+    'Committee logo (card ke header me)':'Committee logo (in the card header)',
+    'Upload logo':'Upload logo',
+    'Card background photo':'Card background photo',
+    'Upload background':'Upload background',
+    'Remove':'Remove',
+    'None':'None',
+    'Background photo strength':'Background photo strength',
+    '0 = sirf pattern · 60 = photo zyada dikhe':'0 = pattern only · 60 = photo shows more',
+    'Card colour':'Card colour',
+    'Header, Family ID aur lines ka rang':'Colour of the header, Family ID and lines',
+    'Text size':'Text size',
+    'Normal':'Normal',
+    'Bada (default)':'Large (default)',
+    'Bahut bada':'Extra large',
+    'Sabse bada':'Largest',
+    'Card par likha text':'Text printed on the card',
+    'Committee / masjid naam':'Committee / masjid name',
+    'Chhota naam (committee)':'Short name (committee)',
+    'Card ka tag':'Card tag',
+    'Footer — left':'Footer — left',
+    'Footer — right':'Footer — right',
+    'Khaali = members + date':'Empty = members + date',
+    'Khaali = committee naam':'Empty = committee name',
+    'Back side — Terms & Conditions':'Back side — Terms & Conditions',
+    'Terms (card ke peeche chhapte hain)':'Terms (printed on the back of the card)',
+    'Mutavalli se approve hone ke baad yahan final terms likh do — card ke back side par wahi chhapega.':'Once the mutavalli approves the wording, paste the final terms here — they print on the back of the card.',
+    'Save card design':'Save card design',
+    'Preview card':'Preview card',
+    'Reset to default':'Reset to default',
+    'Preview ke liye pehle ek family add karo.':'Add a family first to preview.',
+    'Super admin only':'Super admin only',
+    'Card design sirf super admin badal sakta hai.':'Only the super admin can change the card design.',
+    'Card design save ho gaya':'Card design saved',
+    'Card design reset ho gaya':'Card design reset',
+    'Logo lag gaya':'Logo added',
+    'Background lag gaya':'Background added',
+    'Hata diya':'Removed',
+    'Pehle ek family add karo':'Add a family first',
+    'Sirf super admin':'Super admin only'
   },
   ta: {
     'Dashboard':'டாஷ்போர்டு',
@@ -2813,6 +2865,11 @@ function viewAdminPanel(){
   return `
     <div class="page-head"><div><h1>Administration</h1><p>Super admin panel — admins, settings aur account.</p></div></div>
     ${credsCard()}
+    ${isOwner()?`<div class="card">
+      <div class="card-h"><div><h3>ID Card Design</h3>
+        <div class="hint">Logo, background photo, colour, text aur back-side terms — sab editable.</div></div>
+        <button class="btn sm" data-act="goto" data-view="idcard">Open designer</button></div>
+    </div>`:''}
     <div class="card">
       <div class="sec-title" style="margin-top:0">Admins & approval</div>
       <p class="muted small"><span>Super admin naye admins banata hai, password reset karta hai aur website control karta hai.</span> <b>Super Admin: ${esc(ownerName())} (${esc(ownerEmail())})</b> — locked<br><span class="small">Click sidebar logo to change website logo • Click your avatar to edit your profile • Super admin can add/edit/remove admins with photo, email, phone and age</span></p>
@@ -2829,6 +2886,95 @@ function viewAdminPanel(){
       <div style="margin-top:14px"><button class="btn danger" data-act="admin-logout">${ICON.exit} Log out</button></div>
     </div>
   `;
+}
+function saveIdcardForm(form){
+  if (!isOwner()){ toast('Sirf super admin','err'); return; }
+  const E = form.elements;
+  const cur = Object.assign({}, DB.idcard()||{});
+  cur.org = String(E.org.value||'').trim();
+  cur.sub = String(E.sub.value||'').trim();
+  cur.tag = String(E.tag.value||'').trim();
+  cur.footLeft = String(E.footLeft.value||'').trim();
+  cur.footRight = String(E.footRight.value||'').trim();
+  cur.terms = String(E.terms.value||'');
+  cur.accent = String(E.accent.value||'#0f5c47');
+  cur.bgOpacity = Number(E.bgOpacity.value)||0;
+  cur.scale = Number(E.scale.value)||1.12;
+  DB.setIdcard(cur);
+  toast('Card design save ho gaya','ok');
+  go('idcard');
+}
+function saveIdcardDraft(){
+  const form = $('#idcardForm'); if (form) saveIdcardForm(form);
+}
+function viewIdCardDesign(){
+  if (!isOwner()) return `<div class='empty'><h3>Super admin only</h3><p>Card design sirf super admin badal sakta hai.</p></div>`;
+  const c = idcardCfg();
+  const fam = DB.families()[0] || null;
+  return `
+    <div class="page-head"><div><h1>ID Card Design</h1><p>Card ka logo, background, text aur terms — sab yahan se badlo.</p></div>
+      <div class="ph-actions">
+        <button class="btn ghost sm" data-act="goto" data-view="adminpanel">← Administration</button>
+        <button class="btn sm" data-act="idc-preview" ${fam?'':'disabled'}>Preview card</button>
+      </div></div>
+
+    <form id="idcardForm" class="card">
+      <div class="sec-title" style="margin-top:0">Logo &amp; background</div>
+      <div class="grid g2" style="align-items:start">
+        <div>
+          <label class="small muted">Committee logo (card ke header me)</label>
+          <div style="display:flex;gap:12px;align-items:center;margin-top:8px;flex-wrap:wrap">
+            <span class="av" style="width:64px;height:64px;border-radius:16px;overflow:hidden;border:1px solid var(--line);display:grid;place-items:center">${c.logo?`<img src="${esc(c.logo)}" alt="" style="width:100%;height:100%;object-fit:cover"/>`:'<span class="muted small">Masjid</span>'}</span>
+            <button class="btn ghost sm" type="button" data-act="idc-logo">${ICON.image||ICON.dl} Upload logo</button>
+            ${c.logo?'<button class="btn ghost sm" type="button" data-act="idc-logo-rm">Remove</button>':''}
+          </div>
+        </div>
+        <div>
+          <label class="small muted">Card background photo</label>
+          <div style="display:flex;gap:12px;align-items:center;margin-top:8px;flex-wrap:wrap">
+            <span class="av" style="width:64px;height:64px;border-radius:16px;overflow:hidden;border:1px solid var(--line);display:grid;place-items:center">${c.bg?`<img src="${esc(c.bg)}" alt="" style="width:100%;height:100%;object-fit:cover"/>`:'<span class="muted small">None</span>'}</span>
+            <button class="btn ghost sm" type="button" data-act="idc-bg">${ICON.image||ICON.dl} Upload background</button>
+            ${c.bg?'<button class="btn ghost sm" type="button" data-act="idc-bg-rm">Remove</button>':''}
+          </div>
+        </div>
+      </div>
+      <div class="grid g3" style="margin-top:14px">
+        <div class="field"><label>Background photo strength</label>
+          <input class="inp" type="range" name="bgOpacity" min="0" max="60" step="2" value="${Number(c.bgOpacity)||0}" />
+          <span class="hint">0 = sirf pattern · 60 = photo zyada dikhe</span></div>
+        <div class="field"><label>Card colour</label>
+          <input class="inp" type="color" name="accent" value="${esc(c.accent)}" style="height:44px;padding:4px" />
+          <span class="hint">Header, Family ID aur lines ka rang</span></div>
+        <div class="field"><label>Text size</label>
+          <select class="inp" name="scale">
+            <option value="1" ${c.scale===1?'selected':''}>Normal</option>
+            <option value="1.12" ${c.scale===1.12?'selected':''}>Bada (default)</option>
+            <option value="1.24" ${c.scale===1.24?'selected':''}>Bahut bada</option>
+            <option value="1.32" ${c.scale===1.32?'selected':''}>Sabse bada</option>
+          </select></div>
+      </div>
+
+      <div class="sec-title">Card par likha text</div>
+      <div class="grid g2">
+        <div class="field"><label>Committee / masjid naam</label><input class="inp" name="org" value="${esc(c.org)}" placeholder="Masjid e Mohammadi" /></div>
+        <div class="field"><label>Chhota naam (committee)</label><input class="inp" name="sub" value="${esc(c.sub)}" placeholder="Khidmat Committee" /></div>
+        <div class="field"><label>Card ka tag</label><input class="inp" name="tag" value="${esc(c.tag)}" placeholder="Family ID Card" /></div>
+        <div class="field"><label>Footer — left</label><input class="inp" name="footLeft" value="${esc(c.footLeft||'')}" placeholder="Khaali = members + date" /></div>
+        <div class="field"><label>Footer — right</label><input class="inp" name="footRight" value="${esc(c.footRight||'')}" placeholder="Khaali = committee naam" /></div>
+      </div>
+
+      <div class="sec-title">Back side — Terms &amp; Conditions</div>
+      <div class="field"><label>Terms (card ke peeche chhapte hain)</label>
+        <textarea class="inp" name="terms" rows="7">${esc(c.terms||'')}</textarea>
+        <span class="hint">Mutavalli se approve hone ke baad yahan final terms likh do — card ke back side par wahi chhapega.</span></div>
+
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:16px">
+        <button class="btn" type="submit">Save card design</button>
+        <button class="btn ghost" type="button" data-act="idc-preview" ${fam?'':'disabled'}>Preview card</button>
+        <button class="btn ghost" type="button" data-act="idc-reset">Reset to default</button>
+      </div>
+      ${fam?'':'<p class="muted small" style="margin-top:10px">Preview ke liye pehle ek family add karo.</p>'}
+    </form>`;
 }
 function credsCard(){
   const c = state.newCreds; if (!c) return '';
@@ -3118,6 +3264,31 @@ document.addEventListener('click', (e)=>{
   if (act==='print-all'){ printFamilies(DB.families(), 'All Households'); return; }
   if (act==='print-family'){ const f=DB.families().find(x=>x.id===id); if(f) printFamilies([f], f.houseName||f.id); return; }
   if (act==='print-idcards'){ const f=DB.families().find(x=>x.id===id); if(f) printIdCards(f); return; }
+  if (act==='idc-preview'){ if(!isOwner()){ toast('Sirf super admin','err'); return; } const f=DB.families()[0]; if(!f){ toast('Pehle ek family add karo','err'); return; } if(state.view==='idcard'){ try{ saveIdcardDraft(); }catch(e){} } printIdCards(f); return; }
+  if (act==='idc-reset'){ if(!isOwner()){ toast('Sirf super admin','err'); return; } DB.setIdcard(null); toast('Card design reset ho gaya','ok'); go('idcard'); return; }
+  if (act==='idc-logo' || act==='idc-bg'){
+    if(!isOwner()){ toast('Sirf super admin','err'); return; }
+    const which = act==='idc-logo' ? 'logo' : 'bg';
+    const inp=document.createElement('input'); inp.type='file'; inp.accept='image/*';
+    inp.onchange=async ev=>{
+      const f=ev.target.files[0]; if(!f) return;
+      try{
+        let d=await readFileAsDataURL(f);
+        d=await compressImageDataURL(d, which==='logo'?420:1200, which==='logo'?0.86:0.72);
+        const cur = Object.assign({}, DB.idcard()||{});
+        cur[which]=d; DB.setIdcard(cur);
+        toast(which==='logo'?'Logo lag gaya':'Background lag gaya','ok');
+        go('idcard');
+      }catch(e){ toast('Image load nahi hua.','err'); }
+    };
+    inp.click(); return;
+  }
+  if (act==='idc-logo-rm' || act==='idc-bg-rm'){
+    if(!isOwner()){ toast('Sirf super admin','err'); return; }
+    const which = act==='idc-logo-rm' ? 'logo' : 'bg';
+    const cur = Object.assign({}, DB.idcard()||{}); delete cur[which]; DB.setIdcard(cur);
+    toast('Hata diya','ok'); go('idcard'); return;
+  }
   if (act==='backup-json'){ backupJSON(); return; }
   if (act==='restore-json'){ const inp=$('#restoreFile'); if(inp){ inp.value=''; inp.click(); } return; }
   if (act==='approve-admin'){
@@ -3396,6 +3567,7 @@ document.addEventListener('submit', async (e)=>{
   const form = e.target;
   if (form.id==='famForm'){ e.preventDefault(); saveFamily(); }
   else if (form.id==='addAdminForm'){ e.preventDefault(); await addAdmin(form); }
+  else if (form.id==='idcardForm'){ e.preventDefault(); saveIdcardForm(form); }
   else if (form.id==='profPassForm'){ e.preventDefault();
     const u = currentUser(); if (!u) return;
     const E = form.elements, box = form;
@@ -3894,9 +4066,27 @@ function mjHead(){
   </div>`;
 }
 
-/* ---- family ID card: logo crest + QR right, details left (v87) ---- */
-function idCrestSVG(){
-  const logo = DB.logo();
+/* ---- family ID card (v88): editable design + terms on the back ---- */
+const IDCARD_DEFAULT = {
+  org:'', sub:'', tag:'Family ID Card',
+  logo:'', bg:'', bgOpacity:14, accent:'#0f5c47',
+  scale:1.12,
+  footLeft:'', footRight:'',
+  terms:'1. Ye card is mohalla ke survey record ka proof hai — kisi aur kaam ke liye valid nahi.\n2. Card sirf head of family ke naam par jari hota hai; ghar badalne par committee ko batana zaroori hai.\n3. QR scan karne par sirf is ghar ki registered tafseel dikhti hai.\n4. Card kho jaye to turant Masjid e Mohammadi Khidmat Committee ko suchit karein.\n5. Committee ka faisla final hoga — galat jaankari par card cancel ho sakta hai.\n\n(Mutavalli se approve hone ke baad ye terms update honge.)'
+};
+function idcardCfg(){
+  const c = Object.assign({}, IDCARD_DEFAULT, DB.idcard() || {});
+  c.org = String(c.org||'').trim() || (CFG.ORG_NAME || 'Masjid e Mohammadi');
+  c.sub = String(c.sub||'').trim() || (CFG.ORG_SUB || 'Khidmat Committee');
+  c.tag = String(c.tag||'').trim() || 'Family ID Card';
+  const sc = Number(c.scale)||1.12;
+  c.scale = Math.min(1.4, Math.max(1, sc));
+  c.bgOpacity = Math.min(60, Math.max(0, Number(c.bgOpacity)||0));
+  if (!/^#[0-9a-f]{3,8}$/i.test(c.accent||'')) c.accent = '#0f5c47';
+  return c;
+}
+function idCrestSVG(cfg){
+  const logo = (cfg && cfg.logo) || DB.logo();
   if (logo) return `<img src="${esc(logo)}" alt="" />`;
   return `<svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
     <path d="M24 7c4.2 3.6 6.4 7.6 6.4 11.4 0 2.3-.9 4.3-2.4 5.9h-8c-1.5-1.6-2.4-3.6-2.4-5.9C17.6 14.6 19.8 10.6 24 7z"/>
@@ -3908,97 +4098,101 @@ function idCrestSVG(){
     <path d="M20.5 37.7v-6.1c0-1.9 1.6-3.4 3.5-3.4s3.5 1.5 3.5 3.4v6.1"/>
   </svg>`;
 }
-function girihBg(){
-  const star = `<svg xmlns='http://www.w3.org/2000/svg' width='34' height='34' viewBox='0 0 34 34'><g fill='none' stroke='%230f5c47' stroke-opacity='.16' stroke-width='1'><path d='M17 3l3.4 6.8L28 7l-2.8 7 7 2.9-6.8 3.4L28 28l-7.6-2.8L17 32l-3.4-6.8L6 28l2.8-7L1.8 18l6.8-3.4L6 7l7.6 2.8z'/></g></svg>`;
+function girihBg(color){
+  const c = encodeURIComponent(color || '#0f5c47');
+  const star = `<svg xmlns='http://www.w3.org/2000/svg' width='34' height='34' viewBox='0 0 34 34'><g fill='none' stroke='${c}' stroke-opacity='.18' stroke-width='1'><path d='M17 3l3.4 6.8L28 7l-2.8 7 7 2.9-6.8 3.4L28 28l-7.6-2.8L17 32l-3.4-6.8L6 28l2.8-7L1.8 18l6.8-3.4L6 7l7.6 2.8z'/></g></svg>`;
   return `url("data:image/svg+xml;utf8,${star}")`;
 }
-function printIdCards(fam){
-  if(!fam) return;
-  const mem = fam.members || [];
-  if(!mem.length){ toast('No members to print','err'); return; }
-  const head = mem.find(m=>/(head|self)/i.test(m.relation||'')) || mem[0];
-  const addr = [fam.houseNo?('House '+fam.houseNo):'', streetName(fam), fam.address && fam.address!==streetName(fam) ? fam.address : ''].filter(Boolean).join(', ');
-  const a = ageFromDob(head.dob);
-  const dobText = head.dob ? (fmtDate(head.dob) || head.dob) : '—';
-  const org = CFG.ORG_NAME || 'Masjid e Mohammadi';
-  const sub = CFG.ORG_SUB || 'Khidmat Committee';
-  const qrText = location.origin + location.pathname + '#qedit=' + encodeURIComponent(fam.id);
-  const base = location.href.replace(/[^/]*$/,'');
-  const issued = new Date().toLocaleDateString('en-GB').split('/').join('-');
-
-  const html = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Family ID Card - ${esc(fam.id)}</title>
-<style>
+function idCardCSS(c){
+  const k = c.scale;
+  const pt = n => (n*k).toFixed(2)+'pt';
+  return `
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:#eef2f0;padding:16px;font-family:"Segoe UI",Roboto,Arial,Helvetica,sans-serif;color:#0d2b22}
-.bar{display:flex;gap:10px;justify-content:center;margin-bottom:14px}
-.bar button{padding:9px 16px;border-radius:9px;border:1px solid #0f5c47;background:#0f5c47;color:#fff;font-size:13px;font-weight:600;cursor:pointer}
-.bar button.ghost{background:#fff;color:#0f5c47}
+.bar{display:flex;gap:10px;justify-content:center;margin-bottom:14px;flex-wrap:wrap}
+.bar button{padding:9px 16px;border-radius:9px;border:1px solid ${c.accent};background:${c.accent};color:#fff;font-size:13px;font-weight:600;cursor:pointer}
+.bar button.ghost{background:#fff;color:${c.accent}}
 
 .idcard{position:relative;width:85.6mm;height:53.98mm;margin:0 auto;border-radius:3.2mm;overflow:hidden;
   background:#fff;box-shadow:0 6px 22px rgba(6,32,24,.22);page-break-inside:avoid;break-inside:avoid;
-  border:0.3mm solid #0f5c47}
-.idcard .bg{position:absolute;inset:0;background-image:${girihBg()};background-size:9mm 9mm;opacity:.5;pointer-events:none}
+  border:0.3mm solid ${c.accent}}
+.idcard+.idcard{margin-top:6mm}
+.idcard .photo{position:absolute;inset:0;background-size:cover;background-position:center;opacity:${(c.bgOpacity/100).toFixed(2)};pointer-events:none}
+.idcard .bg{position:absolute;inset:0;background-image:${girihBg(c.accent)};background-size:9mm 9mm;opacity:.45;pointer-events:none}
 .idcard .glow{position:absolute;inset:0;background:
-  radial-gradient(70mm 40mm at 100% 0%, rgba(18,135,106,.14), transparent 60%),
-  radial-gradient(60mm 40mm at 0% 100%, rgba(15,92,71,.10), transparent 62%);pointer-events:none}
-.idcard .dome{position:absolute;right:16mm;bottom:-6mm;width:34mm;height:34mm;color:#0f5c47;opacity:.055;pointer-events:none}
+  radial-gradient(70mm 40mm at 100% 0%, ${c.accent}22, transparent 60%),
+  radial-gradient(60mm 40mm at 0% 100%, ${c.accent}18, transparent 62%);pointer-events:none}
+.idcard .dome{position:absolute;right:15mm;bottom:-7mm;width:36mm;height:36mm;color:${c.accent};opacity:.06;pointer-events:none}
+.idcard .dome svg{width:100%;height:100%}
 
-.idtop{position:relative;height:10.4mm;display:flex;align-items:center;gap:2.2mm;padding:0 3mm;
-  background:linear-gradient(100deg,#0f5c47 0%,#12775c 100%);color:#fff}
-.crest{width:7mm;height:7mm;flex:none;border-radius:2mm;background:#fff;color:#0f5c47;display:grid;place-items:center;overflow:hidden}
-.crest svg{width:5.4mm;height:5.4mm}
+.idtop{position:relative;height:11.6mm;display:flex;align-items:center;gap:2.3mm;padding:0 3mm;
+  background:linear-gradient(100deg,${c.accent} 0%,${c.accent}dd 100%);color:#fff}
+.crest{width:7.8mm;height:7.8mm;flex:none;border-radius:2mm;background:#fff;color:${c.accent};display:grid;place-items:center;overflow:hidden;box-shadow:0 0 0 .3mm rgba(255,255,255,.55)}
+.crest svg{width:6mm;height:6mm}
 .crest img{width:100%;height:100%;object-fit:cover}
-.org{min-width:0;line-height:1.15}
-.org b{display:block;font-size:6.1pt;letter-spacing:.35pt;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.org span{display:block;font-size:4.1pt;letter-spacing:.5pt;text-transform:uppercase;opacity:.82}
-.tag{margin-left:auto;font-size:3.9pt;letter-spacing:.7pt;text-transform:uppercase;border:0.25mm solid rgba(255,255,255,.5);
-  border-radius:1.2mm;padding:.7mm 1.4mm;white-space:nowrap}
+.org{min-width:0;line-height:1.18}
+.org b{display:block;font-size:${pt(6.9)};letter-spacing:.3pt;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.org span{display:block;font-size:${pt(4.7)};letter-spacing:.45pt;text-transform:uppercase;opacity:.86}
+.tag{margin-left:auto;font-size:${pt(4.4)};letter-spacing:.6pt;text-transform:uppercase;border:0.25mm solid rgba(255,255,255,.55);
+  border-radius:1.2mm;padding:.8mm 1.5mm;white-space:nowrap}
 
-.idbody{position:relative;display:flex;height:calc(53.98mm - 10.4mm - 4.6mm)}
-.idleft{flex:1;min-width:0;padding:2.2mm 2.4mm 1.4mm 3mm;display:flex;flex-direction:column}
-.fidlab{font-size:3.6pt;letter-spacing:.8pt;text-transform:uppercase;color:#5c7a70;font-weight:700}
-.fid{font-family:"Courier New",monospace;font-size:7.4pt;font-weight:700;letter-spacing:.2pt;color:#0f5c47;line-height:1.2;word-break:break-all}
-.rule{height:0.25mm;background:linear-gradient(90deg,#0f5c47,rgba(15,92,71,.12));margin:1.2mm 0 1.1mm}
-.rows{display:flex;flex-direction:column;gap:.85mm}
-.r{display:flex;gap:1.4mm;font-size:4.9pt;line-height:1.25;align-items:baseline}
-.r .k{color:#63837a;min-width:16mm;flex:none;font-size:4.1pt;letter-spacing:.15pt;text-transform:uppercase;font-weight:600}
+.idbody{position:relative;display:flex;height:calc(53.98mm - 11.6mm - 5.2mm)}
+.idleft{flex:1;min-width:0;padding:2.6mm 2.4mm 1.6mm 3.2mm;display:flex;flex-direction:column}
+.fidlab{font-size:${pt(4.3)};letter-spacing:.8pt;text-transform:uppercase;color:#5c7a70;font-weight:700}
+.fid{font-family:"Courier New",monospace;font-size:${pt(9.4)};font-weight:700;letter-spacing:.1pt;color:${c.accent};line-height:1.15;word-break:break-all}
+.rule{height:0.3mm;background:linear-gradient(90deg,${c.accent},${c.accent}22);margin:1.4mm 0 1.2mm}
+.rows{display:flex;flex-direction:column;gap:1.05mm}
+.r{display:flex;gap:1.6mm;font-size:${pt(6.1)};line-height:1.22;align-items:baseline}
+.r .k{color:#63837a;min-width:17mm;flex:none;font-size:${pt(4.7)};letter-spacing:.15pt;text-transform:uppercase;font-weight:700}
 .r .v{color:#0d2b22;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
-.idright{width:26.6mm;flex:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1.2mm;
-  padding:1.6mm 2mm;border-left:0.25mm dashed rgba(15,92,71,.28);background:rgba(255,255,255,.75)}
-.qrbox{width:20.5mm;height:20.5mm;background:#fff;padding:1.1mm;border-radius:1.2mm;box-shadow:0 0 0 .25mm rgba(15,92,71,.16)}
+.idright{width:27.4mm;flex:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1.3mm;
+  padding:1.8mm 2mm;border-left:0.25mm dashed ${c.accent}55;background:rgba(255,255,255,.8)}
+.qrbox{width:21mm;height:21mm;background:#fff;padding:1.1mm;border-radius:1.2mm;box-shadow:0 0 0 .25mm ${c.accent}33}
 .qrbox canvas,.qrbox img{width:100%!important;height:100%!important;display:block}
-.qrlab{font-size:3.5pt;letter-spacing:.55pt;text-transform:uppercase;color:#5c7a70;font-weight:700}
-.qrid{font-family:"Courier New",monospace;font-size:3.9pt;font-weight:700;color:#0f5c47;text-align:center;max-width:24mm;word-break:break-all;line-height:1.15}
+.qrlab{font-size:${pt(4.2)};letter-spacing:.5pt;text-transform:uppercase;color:#5c7a70;font-weight:700}
+.qrid{font-family:"Courier New",monospace;font-size:${pt(4.6)};font-weight:700;color:${c.accent};text-align:center;max-width:24mm;word-break:break-all;line-height:1.15}
 
-.idfoot{position:relative;height:4.6mm;display:flex;align-items:center;justify-content:space-between;gap:2mm;
-  padding:0 3mm;background:#f3f7f5;border-top:0.25mm solid rgba(15,92,71,.16);
-  font-size:3.5pt;color:#5c7a70;letter-spacing:.25pt}
-.idfoot b{color:#0f5c47}
+.idfoot{position:relative;height:5.2mm;display:flex;align-items:center;justify-content:space-between;gap:2mm;
+  padding:0 3mm;background:#f3f7f5;border-top:0.25mm solid ${c.accent}28;
+  font-size:${pt(4.3)};color:#5c7a70;letter-spacing:.2pt}
+.idfoot b{color:${c.accent}}
+
+/* back side */
+.idterms{position:relative;height:calc(53.98mm - 11.6mm - 5.2mm);padding:2.4mm 3.2mm;overflow:hidden}
+.idterms h4{font-size:${pt(5.4)};letter-spacing:.5pt;text-transform:uppercase;color:${c.accent};margin-bottom:1.2mm}
+.idterms p{font-size:${pt(5.2)};line-height:1.42;color:#173a2f;white-space:pre-wrap;word-break:break-word}
+.idsign{display:flex;gap:6mm;margin-top:1.6mm;font-size:${pt(4.3)};color:#5c7a70}
+.idsign span{border-top:0.25mm solid #9db3aa;padding-top:.7mm;min-width:22mm;text-align:center}
 
 @media print{
   body{background:#fff;padding:0}
   .bar{display:none}
   .idcard{box-shadow:none;margin:0}
+  .idcard+.idcard{margin-top:0;page-break-before:always;break-before:page}
   @page{size:auto;margin:8mm}
+}`;
 }
-</style>
-</head><body>
-<div class="bar">
-  <button onclick="window.print()">Print / Save as PDF</button>
-  <button class="ghost" onclick="window.close()">Close</button>
-</div>
-
+function idCardFront(fam, c, base){
+  const mem = fam.members || [];
+  const head = mem.find(m=>/(head|self)/i.test(m.relation||'')) || mem[0] || {};
+  const addr = [fam.houseNo?('House '+fam.houseNo):'', streetName(fam), fam.address && fam.address!==streetName(fam) ? fam.address : ''].filter(Boolean).join(', ');
+  const a = ageFromDob(head.dob);
+  const dobText = head.dob ? (fmtDate(head.dob) || head.dob) : '—';
+  const issued = new Date().toLocaleDateString('en-GB').split('/').join('-');
+  const footL = String(c.footLeft||'').trim() || ('Members '+mem.length+' · Issued '+issued);
+  const footR = String(c.footRight||'').trim() || (c.org+' · '+c.sub);
+  const qrText = location.origin + location.pathname + '#qedit=' + encodeURIComponent(fam.id);
+  return `
 <div class="idcard">
+  ${c.bg?`<div class="photo" style="background-image:url('${esc(c.bg)}')"></div>`:''}
   <div class="bg"></div><div class="glow"></div>
-  <div class="dome">${idCrestSVG().startsWith('<svg') ? idCrestSVG() : ''}</div>
-
+  <div class="dome">${idCrestSVG(c).startsWith('<svg') ? idCrestSVG(c) : ''}</div>
   <div class="idtop">
-    <div class="crest">${idCrestSVG()}</div>
-    <div class="org"><b>${esc(org)}</b><span>${esc(sub)} · Mohalla Survey</span></div>
-    <div class="tag">Family ID Card</div>
+    <div class="crest">${idCrestSVG(c)}</div>
+    <div class="org"><b>${esc(c.org)}</b><span>${esc(c.sub)} · Mohalla Survey</span></div>
+    <div class="tag">${esc(c.tag)}</div>
   </div>
-
   <div class="idbody">
     <div class="idleft">
       <div class="fidlab">Family ID</div>
@@ -4018,27 +4212,58 @@ body{background:#eef2f0;padding:16px;font-family:"Segoe UI",Roboto,Arial,Helveti
       <div class="qrid">${esc(fam.id)}</div>
     </div>
   </div>
-
-  <div class="idfoot">
-    <span>Members <b>${mem.length}</b> · Issued <b>${issued}</b></span>
-    <span>${esc(org)} · ${esc(sub)}</span>
+  <div class="idfoot"><span>${esc(footL)}</span><span>${esc(footR)}</span></div>
+</div>`;
+}
+function idCardBack(c){
+  const terms = String(c.terms||'').trim();
+  return `
+<div class="idcard">
+  ${c.bg?`<div class="photo" style="background-image:url('${esc(c.bg)}')"></div>`:''}
+  <div class="bg"></div><div class="glow"></div>
+  <div class="idtop">
+    <div class="crest">${idCrestSVG(c)}</div>
+    <div class="org"><b>${esc(c.org)}</b><span>${esc(c.sub)}</span></div>
+    <div class="tag">Terms &amp; Conditions</div>
   </div>
+  <div class="idterms">
+    <h4>Terms &amp; Conditions</h4>
+    <p>${esc(terms||'—')}</p>
+    <div class="idsign"><span>Mutavalli</span><span>Secretary</span><span>Member</span></div>
+  </div>
+  <div class="idfoot"><span>${esc(c.org)}</span><span>${esc(c.sub)}</span></div>
+</div>`;
+}
+function printIdCards(fam){
+  if(!fam) return;
+  const mem = fam.members || [];
+  if(!mem.length){ toast('No members to print','err'); return; }
+  const c = idcardCfg();
+  const base = location.href.replace(/[^/]*$/,'');
+  const qrText = location.origin + location.pathname + '#qedit=' + encodeURIComponent(fam.id);
+  const html = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ID Card - ${esc(fam.id)}</title>
+<style>${idCardCSS(c)}</style>
+</head><body>
+<div class="bar">
+  <button onclick="window.print()">Print / Save as PDF</button>
+  <button class="ghost" onclick="window.close()">Close</button>
 </div>
-
+${idCardFront(fam, c, base)}
+${idCardBack(c)}
 <script src="${base}vendor/qrcode.js"></script>
 <script>
 (function(){
   var el = document.getElementById('idq');
   try{
-    new QRCode(el,{text:${JSON.stringify(qrText)},width:220,height:220,correctLevel:QRCode.CorrectLevel.M,colorDark:'#0d2b22',colorLight:'#ffffff'});
+    new QRCode(el,{text:${JSON.stringify(qrText)},width:240,height:240,correctLevel:QRCode.CorrectLevel.M,colorDark:'#0d2b22',colorLight:'#ffffff'});
   }catch(e){
     el.innerHTML = '<div style="font-size:6px;color:#0f5c47;text-align:center;padding:4px">QR unavailable</div>';
   }
 })();
-setTimeout(function(){ try{ window.print(); }catch(e){} }, 600);
+setTimeout(function(){ try{ window.print(); }catch(e){} }, 650);
 </script>
 </body></html>`;
-  const w = window.open('','_blank','width=900,height=700');
+  const w = window.open('','_blank','width=900,height=760');
   if(!w){ toast('Popup block hua hai - popup allow karo','err'); return; }
   w.document.write(html);
   w.document.close();
@@ -4280,9 +4505,9 @@ window.addEventListener('popstate', (e)=>{
       state.param = e.state.param||null;
       // Re-render without pushing history
       const view = state.view;
-      const ADMIN_ONLY = ['add','users','settings','families','detail','masjid','adminpanel'];
+      const ADMIN_ONLY = ['add','users','settings','families','detail','masjid','adminpanel','idcard'];
       if (ADMIN_ONLY.includes(view) && !isAdmin()){ toast('Ye page sirf admin ke liye hai','err'); state.view='dashboard'; state.param=null; }
-      const titles = { dashboard:'Survey Dashboard', families:'Households', add:(state.param?'Edit Household':'Add Household'), detail:'Household Record', find:'Find family', adminpanel:'Administration', users:'Admins', settings:'Settings', masjid:'Masjid Profile', cat:'Survey Category', myprofile:'My Profile', 'admin-edit':'Edit Admin', memberlist:'Members', familylist:'Households list', streetlist:'Streets' };
+      const titles = { dashboard:'Survey Dashboard', families:'Households', add:(state.param?'Edit Household':'Add Household'), detail:'Household Record', find:'Find family', adminpanel:'Administration', users:'Admins', settings:'Settings', masjid:'Masjid Profile', cat:'Survey Category', myprofile:'My Profile', 'admin-edit':'Edit Admin', idcard:'ID Card Design', memberlist:'Members', familylist:'Households list', streetlist:'Streets' };
       $('#pageTitle').textContent = titles[state.view] || 'Survey Dashboard';
       let html='';
       if (state.view==='dashboard') html = viewDashboard();
@@ -4296,6 +4521,7 @@ window.addEventListener('popstate', (e)=>{
       else if (state.view==='masjid') html = viewMasjid();
       else if (state.view==='myprofile') html = isAdmin()?viewMyProfile():`<div class='empty'><h3>Admin only</h3></div>`;
       else if (state.view==='admin-edit') html = isOwner()?viewAdminEdit(state.param):`<div class='empty'><h3>Owner only</h3></div>`;
+      else if (state.view==='idcard') html = isOwner()?viewIdCardDesign():`<div class='empty'><h3>Super admin only</h3></div>`;
       else if (state.view==='cat') html = viewCat(state.param);
       else if (state.view==='memberlist') html = viewMembersList(state.memberListFilter||(()=>true), state.memberListTitle||'Members');
       else if (state.view==='familylist') html = viewFamilyList(state.familyListFilter||(()=>true), state.familyListTitle||'Households');

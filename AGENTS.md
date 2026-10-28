@@ -345,3 +345,19 @@ Open: wire Supabase keys; real OTP SMS later.
   auto ID/password, reset, plain-admin restrictions, real login by User ID, wrong password rejected).
 - Suites: auth 50, scan 167, counts 72, docs 21, features 12, schemes 17, i18n 38 = **377 green**.
   Cache `memc-app-v86`, commit `09f8f47`.
+
+## v87 — family ID card redesign (2026-10-28)
+- `printIdCards(fam)` pura naya: header band me **logo crest** (`DB.logo()` upload hua ho to wahi,
+  warna inline mosque SVG), org name + "Khidmat Committee · Mohalla Survey" + "Family ID Card" tag.
+- Background: girih star pattern (data-URI SVG, `girihBg()`) + emerald radial glows + big dome watermark
+  (`opacity .055`) — print par bhi safed/emerald me saaf.
+- Layout: **left** = Family ID (mono, bold) + Head of family / Relation / DOB+age / Phone / Address;
+  **right** (dashed divider) = QR box 20.5mm + "Scan to verify" + Family ID.
+- Footer = members count + issue date + committee name. Card size ID-1 (85.6 × 53.98 mm) unchanged.
+- Popup page me apna **Print / Save as PDF** button (`@media print` me chhup jaata hai) + auto print.
+- `vendor/qrcode.js` ab **absolute URL** se load hota hai (`location.href` se base) — about:blank popup
+  me relative path tootti thi.
+- Test: `idcard-smoke.js` 24 asserts (structure, QR right column, head details left, absolute script,
+  print CSS, uploaded-logo override). Total suites 401 green. Cache `memc-app-v87`, commit `6206152`.
+- Preview file `idcard-preview.html` (repo root, gitignored) — `printIdCards` ka output capture karke
+  localhost par dekhne ke liye.
