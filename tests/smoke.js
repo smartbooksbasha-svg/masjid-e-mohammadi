@@ -95,7 +95,7 @@ const wait = ms => new Promise(r => setTimeout(r, ms || 120));
   await wait(200);
   const fams = JSON.parse(A.win.localStorage.getItem('memc_families') || '[]');
   ok(fams.length === 1, 'household saved');
-  ok(/^\d{4}\d{3}FM\d{2}$/.test(fams[0].id || ''), 'family id auto generated: ' + (fams[0] && fams[0].id));
+  ok(/^MEMC-\d{2}[A-Z2-9]{4}$/.test(fams[0].id || ''), 'family id auto (random) generated: ' + (fams[0] && fams[0].id));
   ok(!!fams[0].createdAt, 'createdAt timestamp stored');
   ok(!!fams[0].createdBy, 'createdBy stored: ' + fams[0].createdBy);
   ok(!!fams[0].updatedAt, 'updatedAt timestamp stored');
@@ -122,6 +122,21 @@ const wait = ms => new Promise(r => setTimeout(r, ms || 120));
   A.win.eval("go('families')"); await wait(200);
   A.win.eval("renderFamilyList()"); await wait(120);
   ok(/Updated/.test(A.text()), 'households list has Updated column');
+
+  /* ---------------- 2b. ID / password format ---------------- */
+  A.win.eval("DB.setIdsSet({adminPrefix:'MEMC', adminSuffix:'KHD', passPrefix:'MC-', passSuffix:'-26', famPrefix:'MJ', famRandom:true})");
+  const uid = A.win.eval('genUserId()');
+  ok(/^MEMC-\d{4}-\d{4}-KHD$/.test(uid), 'admin id uses prefix + suffix: ' + uid);
+  const pw = A.win.eval('genTempPass()');
+  ok(/^MC-[A-Z2-9a-z]{6}-26$/.test(pw), 'password uses prefix + 6 random + suffix: ' + pw);
+  const pw2 = A.win.eval('genTempPass()');
+  ok(pw !== pw2, 'passwords differ each time');
+  const fid2 = A.win.eval('nextFamilyId(0)');
+  ok(/^MJ-\d{2}[A-Z2-9]{4}$/.test(fid2), 'family id uses configured prefix: ' + fid2);
+  A.win.eval("DB.setIdsSet({famPrefix:'MEMC', famRandom:false})");
+  const fid3 = A.win.eval('nextFamilyId(3)');
+  ok(/^\d{4}\d{3}FM03$/.test(fid3), 'simple family id style still available: ' + fid3);
+  A.win.eval("DB.setIdsSet(null)");
 
   /* ---------------- 3. ID card ---------------- */
   A.win.eval("printIdCards(DB.families()[0])"); await wait(120);
@@ -153,6 +168,22 @@ const wait = ms => new Promise(r => setTimeout(r, ms || 120));
   await wait(150);
   const saved = JSON.parse(A.win.localStorage.getItem('memc_idcard'));
   ok(saved.org === 'Masjid Test' && saved.size === '5x3' && Number(saved.scale) === 1.24, 'designer saves size + scale');
+
+  /* ---------------- 4b. ID format settings form ---------------- */
+  A.win.eval("go('adminpanel')"); await wait(200);
+  ok(!!A.$('#idsetForm'), 'ID format form present for owner');
+  ['adminPrefix','adminSuffix','passPrefix','passSuffix','famPrefix','famRandom'].forEach(k =>
+    ok(!!A.$('#idsetForm').elements[k], 'idset field: ' + k));
+  A.win.eval(`
+    const f = document.querySelector('#idsetForm');
+    f.elements.adminPrefix.value='MASJID'; f.elements.adminSuffix.value='TN';
+    f.elements.famPrefix.value='MEMC'; f.elements.famRandom.value='1';
+    saveIdsetForm(f);
+  `);
+  await wait(200);
+  const ids = JSON.parse(A.win.localStorage.getItem('memc_idset'));
+  ok(ids.adminPrefix === 'MASJID' && ids.adminSuffix === 'TN', 'idset saved');
+  ok(/^MASJID-\d{4}-\d{4}-TN$/.test(A.win.eval('genUserId()')), 'new admin id follows saved format');
 
   /* ---------------- 5. admin panel collapse ---------------- */
   A.win.eval("go('adminpanel')"); await wait(200);

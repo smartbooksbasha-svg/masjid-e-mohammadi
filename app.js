@@ -7,7 +7,7 @@
 /* ---------------- config / constants ---------------- */
 const CFG = window.APP_CONFIG || {};
 const PREFIX = CFG.FAMILY_ID_PREFIX || 'MEMC';
-const LS = { admins:'memc_admins', families:'memc_families', seq:'memc_seq', session:'memc_session', theme:'memc_theme', seeded:'memc_seeded', masjid:'memc_masjid', events:'memc_events', logo:'memc_logo', formDraft:'memc_form_draft', idcard:'memc_idcard' };
+const LS = { admins:'memc_admins', families:'memc_families', seq:'memc_seq', session:'memc_session', theme:'memc_theme', seeded:'memc_seeded', masjid:'memc_masjid', events:'memc_events', logo:'memc_logo', formDraft:'memc_form_draft', idcard:'memc_idcard', idset:'memc_idset' };
 
 const DOC_TYPES = [
   ['aadhaar','Aadhaar Card'], ['pan','PAN Card'], ['passport','Passport'],
@@ -256,7 +256,9 @@ const DB = {
   logo(){ try{ return localStorage.getItem(LS.logo)||''; }catch(e){ return ''; } },
   setLogo(v){ if(!v) localStorage.removeItem(LS.logo); else localStorage.setItem(LS.logo, String(v)); },
   idcard(){ try{ return JSON.parse(localStorage.getItem(LS.idcard)||'null') || null; }catch(e){ return null; } },
-  setIdcard(v){ if(!v) localStorage.removeItem(LS.idcard); else localStorage.setItem(LS.idcard, JSON.stringify(v)); }
+  setIdcard(v){ if(!v) localStorage.removeItem(LS.idcard); else localStorage.setItem(LS.idcard, JSON.stringify(v)); },
+  idset(){ try{ return JSON.parse(localStorage.getItem(LS.idset)||'null') || null; }catch(e){ return null; } },
+  setIdsSet(v){ if(!v) localStorage.removeItem(LS.idset); else localStorage.setItem(LS.idset, JSON.stringify(v)); }
 };
 
 function getSession(){ try{ return JSON.parse(localStorage.getItem(LS.session)||'null'); }catch(e){ return null; } }
@@ -469,15 +471,50 @@ function isOwner(){
   if (rec && rec.role === 'owner' && String(rec.email||'').toLowerCase() === FIXED_OWNER_EMAIL) return true;
   return false;
 }
+/* ---------------- ID / password format (super admin settings) ---------------- */
+const IDSET_DEFAULT = {
+  adminPrefix:'ADM', adminSuffix:'',      /* ID = <prefix>-<year>-<0001>[-<suffix>] */
+  passPrefix:'', passSuffix:'',           /* password = <prefix><6 random><suffix> */
+  famPrefix:'MEMC', famRandom:true        /* family id = MEMC-<yy><4 random> */
+};
+function idset(){
+  const c = Object.assign({}, IDSET_DEFAULT, DB.idset() || {});
+  const clean = (v, max, up) => {
+    let x = String(v==null?'':v).trim().slice(0, max);
+    if (up) x = x.toUpperCase();
+    return x.replace(/[^A-Za-z0-9\-_]/g, '');
+  };
+  c.adminPrefix = clean(c.adminPrefix, 10, true) || 'ADM';
+  c.adminSuffix = clean(c.adminSuffix, 10, true);
+  c.passPrefix   = clean(c.passPrefix, 10, false);
+  c.passSuffix   = clean(c.passSuffix, 10, false);
+  c.famPrefix    = clean(c.famPrefix, 10, true) || 'MEMC';
+  c.famRandom    = c.famRandom !== false;
+  return c;
+}
+const ID_RAND_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';   /* 0/O/1/I nahi — padhne me clear */
+function idRand(n){
+  let out = '';
+  for (let i=0;i<n;i++) out += ID_RAND_ALPHABET[Math.floor(Math.random()*ID_RAND_ALPHABET.length)];
+  return out;
+}
 function genUserId(){
+  const cfg = idset();
   let n = 1;
-  DB.admins().forEach(a=>{ const m = String(a.userId||'').match(/(\d+)$/); if (m) n = Math.max(n, Number(m[1]) + 1); });
-  return 'ADM-' + new Date().getFullYear() + '-' + pad(n, 4);
+  const re = new RegExp('-([0-9]{1,6})(?:-' + cfg.adminSuffix.replace(/[-_]/g,'\\$&') + ')?$');
+  DB.admins().forEach(a=>{
+    const m = String(a.userId||'').match(re);
+    if (m) n = Math.max(n, Number(m[1]) + 1);
+  });
+  const tail = cfg.adminSuffix ? '-' + cfg.adminSuffix : '';
+  return cfg.adminPrefix + '-' + new Date().getFullYear() + '-' + pad(n, 4) + tail;
 }
 function genTempPass(){
+  const cfg = idset();
   const U='ABCDEFGHJKLMNPQRSTUVWXYZ', L='abcdefghijkmnpqrstuvwxyz', D='23456789';
   const pick=(s,n)=>Array.from({length:n},()=>s[Math.floor(Math.random()*s.length)]).join('');
-  return pick(U,2) + pick(L,4) + pick(D,3);
+  /* beech ka 6 hamesha random — prefix/suffix fix ho to bhi password guess na ho */
+  return (cfg.passPrefix||'') + pick(U,2) + pick(L,2) + pick(D,2) + (cfg.passSuffix||'');
 }
 function findAdminByIdentifier(v){
   const s = String(v||'').trim(); if (!s) return null;
@@ -2593,6 +2630,22 @@ const I18N = {
     'Last updated':'Last updated',
     'Updated':'Updated',
     'Data updated:':'Data updated:',
+
+    /* --- v93: ID & password format --- */
+    'ID & password format':'ID & password format',
+    'Admin ID prefix':'Admin ID prefix',
+    'Admin ID suffix':'Admin ID suffix',
+    'ID ke aakhir me — khaali bhi chhod sakte ho':'At the end of the ID — you can leave it empty',
+    'Password prefix':'Password prefix',
+    'Password suffix':'Password suffix',
+    'Beech ke 6 characters hamesha random rehte hain':'The middle 6 characters are always random',
+    'Family ID prefix':'Family ID prefix',
+    'Family ID style':'Family ID style',
+    'Random (tough)':'Random (tough)',
+    'Simple':'Simple',
+    'Save ID format':'Save ID format',
+    'ID format save ho gaya':'ID format saved',
+    'ID shuru me:':'ID starts with:',
     'Card size':'Card size',
     '5 × 3 inch — landscape (default)':'5 × 3 inch — landscape (default)',
     '3 × 5 inch — portrait':'3 × 5 inch — portrait',
@@ -3004,6 +3057,20 @@ function signatureImage(src){
     img.src = src;
   });
 }
+function saveIdsetForm(form){
+  if (!isOwner()){ toast('Sirf super admin','err'); return; }
+  const E = form.elements;
+  DB.setIdsSet({
+    adminPrefix: String(E.adminPrefix.value||'').trim(),
+    adminSuffix: String(E.adminSuffix.value||'').trim(),
+    passPrefix:  String(E.passPrefix.value||'').trim(),
+    passSuffix:  String(E.passSuffix.value||'').trim(),
+    famPrefix:   String(E.famPrefix.value||'').trim(),
+    famRandom:   String(E.famRandom.value)!=='0'
+  });
+  toast('ID format save ho gaya','ok');
+  go('adminpanel');
+}
 function saveIdcardForm(form){
   if (!isOwner()){ toast('Sirf super admin','err'); return; }
   const E = form.elements;
@@ -3191,6 +3258,7 @@ function viewUsersReadonly(){
 function viewSettingsCard(ctx='adminpanel'){
   const u = currentUser();
   const cloudOn = CLOUD.enabled();
+  const IS = idset();
   return `
     <div class="card">
       <div class="sec-title" style="margin-top:0">Settings</div>
@@ -3215,6 +3283,20 @@ function viewSettingsCard(ctx='adminpanel'){
       </div>
       <input type="file" id="restoreFile" accept="application/json,.json" hidden />
       <p class="muted small" style="margin:10px 0 0">${esc(driveStatusText())}</p>
+      ${isOwner()?`<div class="sec-title" style="font-size:.9rem">ID &amp; password format</div>
+      <form id="idsetForm" class="grid g3">
+        <div class="field"><label>Admin ID prefix</label><input class="inp" name="adminPrefix" value="${esc(IS.adminPrefix)}" placeholder="ADM" maxlength="10" /><span class="hint">ID shuru me: ${esc(IS.adminPrefix)}-2026-0001</span></div>
+        <div class="field"><label>Admin ID suffix</label><input class="inp" name="adminSuffix" value="${esc(IS.adminSuffix)}" placeholder="khaali" maxlength="10" /><span class="hint">ID ke aakhir me — khaali bhi chhod sakte ho</span></div>
+        <div class="field"><label>Password prefix</label><input class="inp" name="passPrefix" value="${esc(IS.passPrefix)}" placeholder="khaali" maxlength="10" /><span class="hint">Beech ke 6 characters hamesha random rehte hain</span></div>
+        <div class="field"><label>Password suffix</label><input class="inp" name="passSuffix" value="${esc(IS.passSuffix)}" placeholder="khaali" maxlength="10" /></div>
+        <div class="field"><label>Family ID prefix</label><input class="inp" name="famPrefix" value="${esc(IS.famPrefix)}" placeholder="MEMC" maxlength="10" /></div>
+        <div class="field"><label>Family ID style</label>
+          <select class="inp" name="famRandom">
+            <option value="1" ${IS.famRandom?'selected':''}>Random (tough) — ${esc(IS.famPrefix)}-26K7Q2</option>
+            <option value="0" ${!IS.famRandom?'selected':''}>Simple — 2026001FM04</option>
+          </select></div>
+        <div class="field" style="justify-content:flex-end"><button class="btn" type="submit">Save ID format</button></div>
+      </form>`:''}
       <div class="sec-title" style="font-size:.9rem">Owner (Fixed)</div>
       <div class="kv">
         <div class="row"><span>Name</span><span><b>${esc(ownerName())}</b></span></div>
@@ -3749,6 +3831,7 @@ document.addEventListener('submit', async (e)=>{
   if (form.id==='famForm'){ e.preventDefault(); saveFamily(); }
   else if (form.id==='addAdminForm'){ e.preventDefault(); await addAdmin(form); }
   else if (form.id==='idcardForm'){ e.preventDefault(); saveIdcardForm(form); }
+  else if (form.id==='idsetForm'){ e.preventDefault(); saveIdsetForm(form); }
   else if (form.id==='profPassForm'){ e.preventDefault();
     const u = currentUser(); if (!u) return;
     const E = form.elements, box = form;
@@ -3907,11 +3990,21 @@ function saveFamily(){
 }
 function previewFamilyId(){ return PREFIX+'-'+new Date().getFullYear()+'-'+pad(DB.seq()+1,6); }
 function nextFamilyId(membersCount){
+  const cfg = idset();
+  const yy = String(new Date().getFullYear()).slice(-2);
+  /* random mode: MEMC-26K7Q2 — sequential se guess karna mushkil */
+  if (cfg.famRandom){
+    const taken = new Set(DB.families().map(f=>String(f.id||'').toUpperCase()));
+    for (let i=0;i<40;i++){
+      const id = cfg.famPrefix + '-' + yy + idRand(4);
+      if (!taken.has(id.toUpperCase())) return id;
+    }
+    return cfg.famPrefix + '-' + yy + idRand(6);
+  }
+  /* simple mode: 2026001FM04 */
   const n=DB.seq()+1; DB.setSeq(n);
   const year = new Date().getFullYear();
-  const formNo = pad(n, 3); // form number/order
-  const fm = pad(Number(membersCount)||0, 2);
-  return year + formNo + 'FM' + fm;
+  return year + pad(n, 3) + 'FM' + pad(Number(membersCount)||0, 2);
 }
 /* custom documents: khaali rows kabhi store/ dikhaye nahi jaate */
 function normCustom(custom){
