@@ -324,3 +324,24 @@ Open: wire Supabase keys; real OTP SMS later.
 - Naya test: `i18n-smoke.js` (38 asserts) — English mode me dashboard/masjid/form par Hinglish
   nahi bachna chahiye + `tStr()` + Tamil render. `i18n-scan.js` (admin/public scan) = 0 real leftovers.
 - Suites: i18n 38, schemes 17, counts 72, scan 167, docs 21, features 12 — green. Cache `memc-app-v85`, commit `357e2ce`.
+
+## v86 — 3 roles + admin login modal (2026-10-28)
+- Roles: **Public** (read only) · **Admin** (add/edit data) · **Super Admin** = fixed owner email
+  (`config.js OWNER_EMAIL`), locked — koi naya account kabhi super admin nahi banta.
+- Login ab **modal** hai (`#authScreen` = fixed overlay + `.auth-wrap` card, `.auth-x` close):
+  sirf User ID/Email + Password + "Forgot password?" + "Back to public site". Captcha, tabs,
+  magic-link aur self-register (request access) **hata diye**; `authTabs`/`renderRegister`/
+  `renderRequestAccess`/`renderRequestSent` functions delete ho gaye. Lockout (5 tries / 60s) intact.
+- Public topbar/sidebar me ek hi **Admin** button (`data-act="open-auth"`).
+- Super admin panel (`go('adminpanel')` → `viewAdminPanel` → `viewUsersTable`):
+  "Add a new admin" form (`#addAdminForm`: name/email/mobile/age/photo) → `createAdminRequest`
+  auto **User ID `ADM-YYYY-NNNN` + temp password** banata hai, status `active` (approval nahi chahiye),
+  aur `credsCard()` me credentials + Email/WhatsApp/Copy dikhte hain.
+  Har non-owner row par **Edit / Reset password / Remove** (owner-only guards).
+- `reset-admin-pass`: naya temp password + naya salt/hash, creds card dobara dikhta hai.
+- My Profile me **Change password** card (`#profPassForm`: current + new + confirm, `checkPass` verify).
+- `credsMailto()` ab us admin ko jaata hai (subject/body naye login ke liye), owner ko nahi.
+- Test: `auth-smoke.js` **50 asserts** (modal open/close, no register UI, super admin add form,
+  auto ID/password, reset, plain-admin restrictions, real login by User ID, wrong password rejected).
+- Suites: auth 50, scan 167, counts 72, docs 21, features 12, schemes 17, i18n 38 = **377 green**.
+  Cache `memc-app-v86`, commit `09f8f47`.

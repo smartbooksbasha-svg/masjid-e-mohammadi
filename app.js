@@ -3894,54 +3894,148 @@ function mjHead(){
   </div>`;
 }
 
+/* ---- family ID card: logo crest + QR right, details left (v87) ---- */
+function idCrestSVG(){
+  const logo = DB.logo();
+  if (logo) return `<img src="${esc(logo)}" alt="" />`;
+  return `<svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M24 7c4.2 3.6 6.4 7.6 6.4 11.4 0 2.3-.9 4.3-2.4 5.9h-8c-1.5-1.6-2.4-3.6-2.4-5.9C17.6 14.6 19.8 10.6 24 7z"/>
+    <path d="M24 5.2v1.8"/>
+    <path d="M14.5 20.5h19"/>
+    <path d="M15.6 24.3v13.4M32.4 24.3v13.4"/>
+    <path d="M11.6 37.7V27.4c0-2 1.3-3.4 3.2-3.4M36.4 37.7V27.4c0-2-1.3-3.4-3.2-3.4"/>
+    <path d="M8.8 37.7h30.4"/>
+    <path d="M20.5 37.7v-6.1c0-1.9 1.6-3.4 3.5-3.4s3.5 1.5 3.5 3.4v6.1"/>
+  </svg>`;
+}
+function girihBg(){
+  const star = `<svg xmlns='http://www.w3.org/2000/svg' width='34' height='34' viewBox='0 0 34 34'><g fill='none' stroke='%230f5c47' stroke-opacity='.16' stroke-width='1'><path d='M17 3l3.4 6.8L28 7l-2.8 7 7 2.9-6.8 3.4L28 28l-7.6-2.8L17 32l-3.4-6.8L6 28l2.8-7L1.8 18l6.8-3.4L6 7l7.6 2.8z'/></g></svg>`;
+  return `url("data:image/svg+xml;utf8,${star}")`;
+}
 function printIdCards(fam){
   if(!fam) return;
   const mem = fam.members || [];
   if(!mem.length){ toast('No members to print','err'); return; }
   const head = mem.find(m=>/(head|self)/i.test(m.relation||'')) || mem[0];
-  const addr = [fam.address, fam.houseNo?('House '+fam.houseNo):'', streetName(fam)].filter(Boolean).join(', ');
+  const addr = [fam.houseNo?('House '+fam.houseNo):'', streetName(fam), fam.address && fam.address!==streetName(fam) ? fam.address : ''].filter(Boolean).join(', ');
   const a = ageFromDob(head.dob);
+  const dobText = head.dob ? (fmtDate(head.dob) || head.dob) : '—';
+  const org = CFG.ORG_NAME || 'Masjid e Mohammadi';
+  const sub = CFG.ORG_SUB || 'Khidmat Committee';
   const qrText = location.origin + location.pathname + '#qedit=' + encodeURIComponent(fam.id);
-  const html = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ID Card - ${esc(fam.id)}</title>
+  const base = location.href.replace(/[^/]*$/,'');
+  const issued = new Date().toLocaleDateString('en-GB').split('/').join('-');
+
+  const html = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Family ID Card - ${esc(fam.id)}</title>
 <style>
-*{margin:0;padding:0;box-sizing:border-box;font-family:Arial,Helvetica,sans-serif}
-body{background:#fff;padding:10px}
-.idcard{width:85.6mm;height:53.98mm;border:1px solid #111;border-radius:6px;display:flex;overflow:hidden;page-break-inside:avoid;margin:6px auto}
-.idleft{flex:1;padding:6px 8px;display:flex;flex-direction:column;gap:2px}
-.idright{width:28mm;border-left:1px solid #ddd;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:4px}
-.idtitle{font-size:7pt;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px}
-.idrow{font-size:6.3pt;line-height:1.28}
-.idrow b{font-weight:600}
-.idqr canvas{width:24mm;height:24mm}
-.idfid{font-size:5.8pt;font-weight:700;text-align:center;word-break:break-all}
-.hdr{font-size:8pt;font-weight:700;margin:6px 0 12px;text-align:center}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#eef2f0;padding:16px;font-family:"Segoe UI",Roboto,Arial,Helvetica,sans-serif;color:#0d2b22}
+.bar{display:flex;gap:10px;justify-content:center;margin-bottom:14px}
+.bar button{padding:9px 16px;border-radius:9px;border:1px solid #0f5c47;background:#0f5c47;color:#fff;font-size:13px;font-weight:600;cursor:pointer}
+.bar button.ghost{background:#fff;color:#0f5c47}
+
+.idcard{position:relative;width:85.6mm;height:53.98mm;margin:0 auto;border-radius:3.2mm;overflow:hidden;
+  background:#fff;box-shadow:0 6px 22px rgba(6,32,24,.22);page-break-inside:avoid;break-inside:avoid;
+  border:0.3mm solid #0f5c47}
+.idcard .bg{position:absolute;inset:0;background-image:${girihBg()};background-size:9mm 9mm;opacity:.5;pointer-events:none}
+.idcard .glow{position:absolute;inset:0;background:
+  radial-gradient(70mm 40mm at 100% 0%, rgba(18,135,106,.14), transparent 60%),
+  radial-gradient(60mm 40mm at 0% 100%, rgba(15,92,71,.10), transparent 62%);pointer-events:none}
+.idcard .dome{position:absolute;right:16mm;bottom:-6mm;width:34mm;height:34mm;color:#0f5c47;opacity:.055;pointer-events:none}
+
+.idtop{position:relative;height:10.4mm;display:flex;align-items:center;gap:2.2mm;padding:0 3mm;
+  background:linear-gradient(100deg,#0f5c47 0%,#12775c 100%);color:#fff}
+.crest{width:7mm;height:7mm;flex:none;border-radius:2mm;background:#fff;color:#0f5c47;display:grid;place-items:center;overflow:hidden}
+.crest svg{width:5.4mm;height:5.4mm}
+.crest img{width:100%;height:100%;object-fit:cover}
+.org{min-width:0;line-height:1.15}
+.org b{display:block;font-size:6.1pt;letter-spacing:.35pt;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.org span{display:block;font-size:4.1pt;letter-spacing:.5pt;text-transform:uppercase;opacity:.82}
+.tag{margin-left:auto;font-size:3.9pt;letter-spacing:.7pt;text-transform:uppercase;border:0.25mm solid rgba(255,255,255,.5);
+  border-radius:1.2mm;padding:.7mm 1.4mm;white-space:nowrap}
+
+.idbody{position:relative;display:flex;height:calc(53.98mm - 10.4mm - 4.6mm)}
+.idleft{flex:1;min-width:0;padding:2.2mm 2.4mm 1.4mm 3mm;display:flex;flex-direction:column}
+.fidlab{font-size:3.6pt;letter-spacing:.8pt;text-transform:uppercase;color:#5c7a70;font-weight:700}
+.fid{font-family:"Courier New",monospace;font-size:7.4pt;font-weight:700;letter-spacing:.2pt;color:#0f5c47;line-height:1.2;word-break:break-all}
+.rule{height:0.25mm;background:linear-gradient(90deg,#0f5c47,rgba(15,92,71,.12));margin:1.2mm 0 1.1mm}
+.rows{display:flex;flex-direction:column;gap:.85mm}
+.r{display:flex;gap:1.4mm;font-size:4.9pt;line-height:1.25;align-items:baseline}
+.r .k{color:#63837a;min-width:16mm;flex:none;font-size:4.1pt;letter-spacing:.15pt;text-transform:uppercase;font-weight:600}
+.r .v{color:#0d2b22;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+.idright{width:26.6mm;flex:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1.2mm;
+  padding:1.6mm 2mm;border-left:0.25mm dashed rgba(15,92,71,.28);background:rgba(255,255,255,.75)}
+.qrbox{width:20.5mm;height:20.5mm;background:#fff;padding:1.1mm;border-radius:1.2mm;box-shadow:0 0 0 .25mm rgba(15,92,71,.16)}
+.qrbox canvas,.qrbox img{width:100%!important;height:100%!important;display:block}
+.qrlab{font-size:3.5pt;letter-spacing:.55pt;text-transform:uppercase;color:#5c7a70;font-weight:700}
+.qrid{font-family:"Courier New",monospace;font-size:3.9pt;font-weight:700;color:#0f5c47;text-align:center;max-width:24mm;word-break:break-all;line-height:1.15}
+
+.idfoot{position:relative;height:4.6mm;display:flex;align-items:center;justify-content:space-between;gap:2mm;
+  padding:0 3mm;background:#f3f7f5;border-top:0.25mm solid rgba(15,92,71,.16);
+  font-size:3.5pt;color:#5c7a70;letter-spacing:.25pt}
+.idfoot b{color:#0f5c47}
+
 @media print{
-  body{padding:0}
+  body{background:#fff;padding:0}
+  .bar{display:none}
+  .idcard{box-shadow:none;margin:0}
   @page{size:auto;margin:8mm}
 }
 </style>
-<script src="vendor/qrcode.js"></script>
 </head><body>
-<div class="hdr">${esc(CFG.ORG_NAME||'Masjid e Mohammadi')} · ID CARD</div>
+<div class="bar">
+  <button onclick="window.print()">Print / Save as PDF</button>
+  <button class="ghost" onclick="window.close()">Close</button>
+</div>
+
 <div class="idcard">
-  <div class="idleft">
-    <div class="idtitle">Mohalla Survey ID Card</div>
-    <div class="idrow"><b>Family ID:</b> ${esc(fam.id)}</div>
-    <div class="idrow"><b>Head of Family:</b> ${esc(head.name||'—')}</div>
-    <div class="idrow"><b>Name:</b> ${esc(head.name||'—')}</div>
-    <div class="idrow"><b>Relation:</b> ${esc(head.relation||'Self')}</div>
-    <div class="idrow"><b>Date of Birth:</b> ${esc(head.dob||'—')}${a!==null?' ('+a+' yrs)':''}</div>
-    <div class="idrow"><b>Phone No.:</b> ${esc(fam.phone||'—')}</div>
-    <div class="idrow"><b>Address:</b> ${esc(addr||'—')}</div>
+  <div class="bg"></div><div class="glow"></div>
+  <div class="dome">${idCrestSVG().startsWith('<svg') ? idCrestSVG() : ''}</div>
+
+  <div class="idtop">
+    <div class="crest">${idCrestSVG()}</div>
+    <div class="org"><b>${esc(org)}</b><span>${esc(sub)} · Mohalla Survey</span></div>
+    <div class="tag">Family ID Card</div>
   </div>
-  <div class="idright">
-    <div class="idqr" id="idq"></div>
-    <div class="idfid">${esc(fam.id)}</div>
+
+  <div class="idbody">
+    <div class="idleft">
+      <div class="fidlab">Family ID</div>
+      <div class="fid">${esc(fam.id)}</div>
+      <div class="rule"></div>
+      <div class="rows">
+        <div class="r"><span class="k">Head of family</span><span class="v">${esc(head.name||'—')}</span></div>
+        <div class="r"><span class="k">Relation</span><span class="v">${esc(head.relation||'Self')}</span></div>
+        <div class="r"><span class="k">Date of birth</span><span class="v">${esc(dobText)}${a!==null?' · '+a+' yrs':''}</span></div>
+        <div class="r"><span class="k">Phone</span><span class="v">${esc(fam.phone||'—')}</span></div>
+        <div class="r"><span class="k">Address</span><span class="v">${esc(addr||'—')}</span></div>
+      </div>
+    </div>
+    <div class="idright">
+      <div class="qrbox" id="idq"></div>
+      <div class="qrlab">Scan to verify</div>
+      <div class="qrid">${esc(fam.id)}</div>
+    </div>
+  </div>
+
+  <div class="idfoot">
+    <span>Members <b>${mem.length}</b> · Issued <b>${issued}</b></span>
+    <span>${esc(org)} · ${esc(sub)}</span>
   </div>
 </div>
+
+<script src="${base}vendor/qrcode.js"></script>
 <script>
-try{ new QRCode(document.getElementById('idq'),{text:${JSON.stringify(qrText)},width:96,height:96,correctLevel:QRCode.CorrectLevel.M}); }catch(e){}
-setTimeout(()=>window.print(), 400);
+(function(){
+  var el = document.getElementById('idq');
+  try{
+    new QRCode(el,{text:${JSON.stringify(qrText)},width:220,height:220,correctLevel:QRCode.CorrectLevel.M,colorDark:'#0d2b22',colorLight:'#ffffff'});
+  }catch(e){
+    el.innerHTML = '<div style="font-size:6px;color:#0f5c47;text-align:center;padding:4px">QR unavailable</div>';
+  }
+})();
+setTimeout(function(){ try{ window.print(); }catch(e){} }, 600);
 </script>
 </body></html>`;
   const w = window.open('','_blank','width=900,height=700');
