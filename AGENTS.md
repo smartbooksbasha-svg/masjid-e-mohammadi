@@ -439,3 +439,16 @@ Open: wire Supabase keys; real OTP SMS later.
   collapse, plain-admin limits, snapshot strip, public timestamp, i18n. ⚠️ Pehle harness `$TMPDIR` me tha
   aur delete ho gaya — tests sirf repo me rakho.
 - Cache `memc-app-v92`, commit `6f49ede`.
+
+## v93 — ID / password / Family ID formats (2026-10-28)
+- **Settings → "ID & password format"** (super admin only, `#idsetForm`), storage `memc_idset`
+  (`DB.idset()/setIdsSet()`), defaults `IDSET_DEFAULT`, resolver `idset()` (sanitizes: A-Z0-9-_ only,
+  max 10 chars, prefix fallback ADM / MEMC).
+- **Admin User ID** = `<adminPrefix>-<year>-<0001>[-<adminSuffix>]` — prefix fixed start, suffix optional end.
+- **Temp password** = `<passPrefix>` + 6 random (2 upper + 2 lower + 2 digits) + `<passSuffix>`;
+  prefix/suffix fix ho to bhi beech ka 6 hamesha random (guess-proof).
+- **Family ID** default = random `MEMC-<yy><4 chars>` (`ABCDEFGHJKLMNPQRSTUVWXYZ23456789`, no 0/O/1/I),
+  uniqueness loop against existing IDs. Settings me "Simple" style (`2026001FM04`) bhi chun sakte hain.
+- `tests/preview.js` — card preview generator (sample family + sample signatures → `idcard-preview.html`,
+  gitignored). Tests `npm test` 82 asserts green.
+- Cache `memc-app-v93`, commit `a266fa5`.
