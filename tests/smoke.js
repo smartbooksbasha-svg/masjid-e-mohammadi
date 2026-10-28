@@ -131,7 +131,7 @@ const wait = ms => new Promise(r => setTimeout(r, ms || 120));
   ok(/Updated/.test(A.text()), 'households list has Updated column');
 
   /* ---------------- 2b. ID / password format ---------------- */
-  A.win.eval("DB.setIdsSet({adminPrefix:'MEMC', adminSuffix:'KHD', passPrefix:'MC-', passSuffix:'-26', famPrefix:'MJ', famRandom:true})");
+  A.win.eval("DB.setIdsSet({idStyle:'seq', adminPrefix:'MEMC', adminSuffix:'KHD', passPrefix:'MC-', passSuffix:'-26', famPrefix:'MJ', famRandom:true})");
   const uid = A.win.eval('genUserId()');
   ok(/^MEMC-\d{4}-\d{4}-KHD$/.test(uid), 'admin id uses prefix + suffix: ' + uid);
   const pw = A.win.eval('genTempPass()');
@@ -195,6 +195,7 @@ const wait = ms => new Promise(r => setTimeout(r, ms || 120));
     ok(!!A.$('#idsetForm').elements[k], 'idset field: ' + k));
   A.win.eval(`
     const f = document.querySelector('#idsetForm');
+    f.elements.idStyle.value='seq';
     f.elements.adminPrefix.value='MASJID'; f.elements.adminSuffix.value='TN';
     f.elements.famPrefix.value='MEMC'; f.elements.famRandom.value='1';
     saveIdsetForm(f);
@@ -361,18 +362,22 @@ const wait = ms => new Promise(r => setTimeout(r, ms || 120));
   const V9 = await boot({ admin: OWNER.email, admins: [OWNER, ADMIN] });
   /* owner ki ID alag series (OWN-...), admin ki ADM-... */
   const ownRec = JSON.parse(V9.win.localStorage.getItem('memc_admins')).find(a => a.email === OWNER.email);
-  ok(/^OWN-/.test(String(ownRec.userId)), 'super admin ID alag series me hai: ' + ownRec.userId);
-  ok(/^ADM-/.test(String(JSON.parse(V9.win.localStorage.getItem('memc_admins')).find(a => a.email === ADMIN.email).userId)), 'admin ID ADM- series me rehti hai');
-  /* naya admin ID 101 se shuru hota hai */
-  const newId = V9.win.eval('genUserId()');
-  ok(/-0*101$/.test(String(newId)), 'naya admin ID 101 se shuru hota hai: ' + newId);
-  const newOwn = V9.win.eval('genOwnerId()');
-  ok(/^OWN-\d{4}-\d{3}$/.test(String(newOwn)), 'owner ID ka format OWN-YYYY-NNN hai: ' + newOwn);
+  ok(/^OW\d{6}#\d{5}$/.test(String(ownRec.userId)), 'super admin ID random format me hai: ' + ownRec.userId);
+  ok(/^AD\d{6}#\d{5}$/.test(String(JSON.parse(V9.win.localStorage.getItem('memc_admins')).find(a => a.email === ADMIN.email).userId)), 'admin ID AD-series random format me hai');
+  /* har naye admin ko alag random ID */
+  const newId = String(V9.win.eval('genUserId()'));
+  const newId2 = String(V9.win.eval('genUserId()'));
+  ok(/^AD\d{2}\d{4}#\d{5}$/.test(newId), 'naya admin ID AD<2><year>#<5 digits> format me: ' + newId);
+  ok(newId !== newId2, 'do admin IDs kabhi same nahi: ' + newId + ' vs ' + newId2);
+  ok(!/#/.test(String(V9.win.eval("genUserId()")).slice(0, 2)) && /#/.test(newId), 'ID me # separator hai');
+  const newOwn = String(V9.win.eval('genOwnerId()'));
+  ok(/^OW\d{6}#\d{5}$/.test(newOwn), 'owner ID alag OW series me hai: ' + newOwn);
+  ok(newOwn.slice(0,2) !== newId.slice(0,2), 'owner aur admin ka prefix alag hai');
   /* owner prefix badla to migrate naya ID deta hai */
   V9.win.eval("DB.setIdsSet(Object.assign({}, idset(), { ownerPrefix:'MUT' }))");
   V9.win.eval('migrateAdmins()');
   const own2 = JSON.parse(V9.win.localStorage.getItem('memc_admins')).find(a => a.email === OWNER.email);
-  ok(/^MUT-/.test(String(own2.userId)), 'owner prefix badalne par owner ID update hoti hai: ' + own2.userId);
+  ok(/^MUT\d{6}#\d{5}$/.test(String(own2.userId)), 'owner prefix badalne par owner ID update hoti hai: ' + own2.userId);
 
   /* temp password login ke baad bhi super admin ko dikhta hai */
   const T = await boot({ admin: OWNER.email, admins: [
@@ -406,6 +411,14 @@ const wait = ms => new Promise(r => setTimeout(r, ms || 120));
   ok(/aria-pressed="true"/.test(eyeBtn.outerHTML), 'eye button pressed state set karta hai');
   eyeBtn.dispatchEvent(new EY.win.MouseEvent('click', { bubbles: true }));
   ok(pwInp.type === 'password', 'dobara dabane par password chhup jata hai');
+
+  /* purani OWN-/ADM- settings khud naye random format par migrate hoti hain */
+  const MG = await boot({});
+  MG.win.eval("DB.setIdsSet({ adminPrefix:'ADM', adminSuffix:'', famPrefix:'MEMC' })");
+  MG.win.eval('migrateIdsSet(); migrateAdmins()');
+  const mgSet = JSON.parse(MG.win.localStorage.getItem('memc_idset'));
+  ok(mgSet.idStyle === 'random', 'purani settings naye random style par migrate hoti hain');
+  ok(mgSet.adminPrefix === 'AD' && mgSet.ownerPrefix === 'OW', 'purane ADM/OWN prefix AD/OW ban jate hain');
 
   /* ---------------- 9. backup round trip ---------------- */
   const backup = A.win.eval("JSON.stringify({ families:DB.families(), masjid:DB.masjid() })");

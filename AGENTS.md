@@ -520,3 +520,20 @@ Open: wire Supabase keys; real OTP SMS later.
   - Success (`loginOk()`) ya lock expiry par counter reset. `renderShell()` guard state padhta hai.
 - Tests **126 asserts green** (3-try lock, countdown text + tick, 6-try hide, button/link hidden, openAuth block,
   reset). Cache `memc-app-v98`, commit `41fd8d6`.
+
+## v99 — alag OWN/ADM ID series + temp password reveal + eye toggle (2026-10-28)
+- **Super admin ki ID alag series:** `IDSET_DEFAULT` me `ownerPrefix:'OWN'` + `ownerStart:1`, admin ke liye
+  `adminStart:101`. Super admin = `OWN-2026-001`, admin = `ADM-2026-0101` se shuru (pehle dono `...0001` the).
+  `genOwnerId()` naya function; `migrateAdmins()` owner record ki ID ko OWN- series me badal deta hai aur
+  Settings → ID format me `Super admin ID prefix` + `Admin ID start number` inputs hain.
+  `genUserId()` ka regex sirf `adminPrefix` series ginta hai (OWN-... ginti me nahi aati), start number se
+  chhota ID kabhi nahi deta. Settings ke "Owner (Fixed)" card me owner ki **User ID** bhi dikhti hai.
+- **Temp password super admin ko hamesha dikhta hai:** `setSession()` login par `tempPass` delete nahi karta
+  (sirf `firstLoginAt` mark hota hai). Admins table me naya **Password** column — masked `••••••` +
+  **Show/Hide** + copy (User ID + password + login link clipboard me). Admin apna password khud badle
+  (`My Profile → Change password`) to `tempPass` hat jata hai aur column "Badla ja chuka hai" dikhata hai.
+- **Password eye toggle:** `pwBox(inputHtml)` helper + `ICON.eye`/`ICON.eyeOff`; delegated handler
+  `data-act="pw-eye"` input ka `type` password↔text karta hai (`aria-pressed` bhi). Lagaya gaya: login,
+  set-new-password (2 field), My Profile change-password (3 field). CSS `.pw-wrap`/`.pw-eye` (+ `.tp` cells).
+- Tests **143 asserts green** (ID series, 101 start, owner prefix change → migrate, tempPass masked/reveal/copy,
+  login ke baad tempPass bacha, eye toggle dono taraf). Cache `memc-app-v99`, commit `72c8b80`.

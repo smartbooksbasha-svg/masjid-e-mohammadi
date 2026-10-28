@@ -680,8 +680,9 @@ function isOwner(){
 }
 /* ---------------- ID / password format (super admin settings) ---------------- */
 const IDSET_DEFAULT = {
-  ownerPrefix:'OWN', ownerStart:1,        /* super admin = OWN-<year>-<001> (alag series) */
-  adminPrefix:'ADM', adminSuffix:'', adminStart:101,  /* admin = ADM-<year>-<101> se shuru */
+  idStyle:'random',                       /* random = AD102026#21200 jaisa, seq = ADM-2026-0101 */
+  ownerPrefix:'OW', ownerStart:1,         /* super admin alag series: OW102026#48391 */
+  adminPrefix:'AD', adminSuffix:'', adminStart:101,  /* har naye admin ki alag random ID */
   passPrefix:'', passSuffix:'',           /* password = <prefix><6 random><suffix> */
   famPrefix:'MEMC', famRandom:true        /* family id = MEMC-<yy><4 random> */
 };
@@ -697,7 +698,8 @@ function idset(){
     if (up) x = x.toUpperCase();
     return x.replace(/[^A-Za-z0-9\-_]/g, '');
   };
-  c.ownerPrefix = clean(c.ownerPrefix, 10, true) || 'OWN';
+  c.idStyle     = c.idStyle === 'seq' ? 'seq' : 'random';
+  c.ownerPrefix = clean(c.ownerPrefix, 10, true) || 'OW';
   c.ownerStart  = Math.min(9999, Math.max(1, parseInt(c.ownerStart, 10) || 1));
   c.adminPrefix = clean(c.adminPrefix, 10, true) || 'ADM';
   c.adminSuffix = clean(c.adminSuffix, 10, true);
@@ -714,29 +716,58 @@ function idRand(n){
   for (let i=0;i<n;i++) out += ID_RAND_ALPHABET[Math.floor(Math.random()*ID_RAND_ALPHABET.length)];
   return out;
 }
+/* random-looking ID: <prefix><2 digits><year>#<5 digits>  e.g. AD102026#21200 */
+function rndDigits(n){
+  let out = '';
+  for (let i=0;i<n;i++) out += String(Math.floor(Math.random()*10));
+  return out;
+}
+function idTaken(id){
+  const v = String(id||'').toLowerCase();
+  return DB.admins().some(a => String(a.userId||'').toLowerCase() === v);
+}
+function makeRandomId(prefix){
+  const yr = new Date().getFullYear();
+  let id = '';
+  for (let i=0;i<40;i++){
+    id = prefix + rndDigits(2) + yr + '#' + rndDigits(5);
+    if (!idTaken(id)) return id;
+  }
+  return prefix + rndDigits(4) + yr + '#' + rndDigits(6);
+}
+/* ye ID current format se match karti hai? (migrate isi se decide karta hai) */
+function idMatches(id, prefix){
+  const cfg = idset();
+  const esc2 = v => String(v||'').replace(/[-_]/g,'\\$&');
+  const p = esc2(prefix);
+  if (cfg.idStyle === 'seq'){
+    return new RegExp('^' + p + '-[0-9]{4}-[0-9]{1,6}(?:-' + esc2(cfg.adminSuffix) + ')?$').test(String(id||''));
+  }
+  return new RegExp('^' + p + '[0-9]{2}[0-9]{4}#[0-9]{5,6}$').test(String(id||''));
+}
 function genOwnerId(){
   const cfg = idset();
-  let n = Math.max(1, Number(cfg.ownerStart) || 1) - 1;
-  const re = new RegExp('^' + cfg.ownerPrefix.replace(/[-_]/g,'\\$&') + '-[0-9]{4}-([0-9]{1,5})$');
-  DB.admins().forEach(a=>{
-    const m = String(a.userId||'').match(re);
-    if (m) n = Math.max(n, Number(m[1]));
-  });
-  return cfg.ownerPrefix + '-' + new Date().getFullYear() + '-' + pad(n + 1, 3);
+  if (cfg.idStyle === 'seq'){
+    let n = Math.max(1, Number(cfg.ownerStart) || 1) - 1;
+    const re = new RegExp('^' + String(cfg.ownerPrefix).replace(/[-_]/g,'\\$&') + '-[0-9]{4}-([0-9]{1,5})$');
+    DB.admins().forEach(a=>{ const m = String(a.userId||'').match(re); if (m) n = Math.max(n, Number(m[1])); });
+    return cfg.ownerPrefix + '-' + new Date().getFullYear() + '-' + pad(n + 1, 3);
+  }
+  return makeRandomId(cfg.ownerPrefix);
 }
 function genUserId(){
   const cfg = idset();
-  const esc2 = v => String(v||'').replace(/[-_]/g,'\\$&');
-  /* sirf ADMIN series ginti me aati hai — owner ki OWN-... ID chhod do */
-  const re = new RegExp('^' + esc2(cfg.adminPrefix) + '-[0-9]{4}-([0-9]{1,6})(?:-' + esc2(cfg.adminSuffix) + ')?$');
-  let mx = 0;
-  DB.admins().forEach(a=>{
-    const m = String(a.userId||'').match(re);
-    if (m) mx = Math.max(mx, Number(m[1]));
-  });
-  const n = Math.max(Math.max(1, Number(cfg.adminStart) || 101), mx + 1);
-  const tail = cfg.adminSuffix ? '-' + cfg.adminSuffix : '';
-  return cfg.adminPrefix + '-' + new Date().getFullYear() + '-' + pad(n, 4) + tail;
+  if (cfg.idStyle === 'seq'){
+    const esc2 = v => String(v||'').replace(/[-_]/g,'\\$&');
+    /* sirf ADMIN series ginti me aati hai — owner ki OWN/OW ID chhod do */
+    const re = new RegExp('^' + esc2(cfg.adminPrefix) + '-[0-9]{4}-([0-9]{1,6})(?:-' + esc2(cfg.adminSuffix) + ')?$');
+    let mx = 0;
+    DB.admins().forEach(a=>{ const m = String(a.userId||'').match(re); if (m) mx = Math.max(mx, Number(m[1])); });
+    const n = Math.max(Math.max(1, Number(cfg.adminStart) || 101), mx + 1);
+    const tail = cfg.adminSuffix ? '-' + cfg.adminSuffix : '';
+    return cfg.adminPrefix + '-' + new Date().getFullYear() + '-' + pad(n, 4) + tail;
+  }
+  return makeRandomId(cfg.adminPrefix);
 }
 function genTempPass(){
   const cfg = idset();
@@ -806,7 +837,7 @@ function renderLogin(){
     <h1>Admin login</h1>
     <p class="lead">Sirf admin / super admin ke liye. Baaki sab public dashboard dekh sakte hain.</p>
     <form id="loginForm">
-      <div class="field"><label>User ID / Email ID</label><input class="inp" name="email" type="text" required autocomplete="username" placeholder="ADM-2026-0001" /></div>
+      <div class="field"><label>User ID / Email ID</label><input class="inp" name="email" type="text" required autocomplete="username" placeholder="AD102026#21200" /></div>
       <div class="field"><label>Password</label>${pwBox('<input class="inp" name="pass" type="password" required autocomplete="current-password" />')}</div>
       <div id="loginAlert"></div>
       <button class="btn block" type="submit">Login</button>
@@ -3035,7 +3066,14 @@ const I18N = {
 
     /* --- v93: ID & password format --- */
     'ID & password format':'ID & password format',
+    'User ID style':'User ID style',
+    'Random (recommended)':'Random (recommended)',
+    'Number series':'Number series',
+    'Super admin ID prefix':'Super admin ID prefix',
     'Admin ID prefix':'Admin ID prefix',
+    'Admin ID start number (series style)':'Admin ID start number (series style)',
+    'Har naye admin ko alag random ID':'Every new admin gets a different random ID',
+    'Sirf number-series style me — default 101':'Only for the number-series style — default 101',
     'Admin ID suffix':'Admin ID suffix',
     'ID ke aakhir me — khaali bhi chhod sakte ho':'At the end of the ID — you can leave it empty',
     'Password prefix':'Password prefix',
@@ -3551,6 +3589,7 @@ function saveIdsetForm(form){
   if (!isOwner()){ toast('Sirf super admin','err'); return; }
   const E = form.elements;
   DB.setIdsSet({
+    idStyle: String(E.idStyle ? E.idStyle.value : 'random') === 'seq' ? 'seq' : 'random',
     ownerPrefix: String(E.ownerPrefix ? E.ownerPrefix.value : '').trim(),
     ownerStart:  1,
     adminStart:  Number(E.adminStart ? E.adminStart.value : 101) || 101,
@@ -3561,6 +3600,7 @@ function saveIdsetForm(form){
     famPrefix:   String(E.famPrefix.value||'').trim(),
     famRandom:   String(E.famRandom.value)!=='0'
   });
+  migrateAdmins();   /* naye format par IDs turant ban jayen */
   toast('ID format save ho gaya','ok');
   go('adminpanel');
 }
@@ -3780,9 +3820,14 @@ function viewSettingsCard(ctx='adminpanel'){
       <p class="muted small" style="margin:10px 0 0">${esc(driveStatusText())}</p>
       ${isOwner()?`<div class="sec-title" style="font-size:.9rem">ID &amp; password format</div>
       <form id="idsetForm" class="grid g3">
-        <div class="field"><label>Super admin ID prefix</label><input class="inp" name="ownerPrefix" value="${esc(IS.ownerPrefix)}" placeholder="OWN" maxlength="10" /><span class="hint">Alag series: ${esc(IS.ownerPrefix)}-2026-001</span></div>
-        <div class="field"><label>Admin ID prefix</label><input class="inp" name="adminPrefix" value="${esc(IS.adminPrefix)}" placeholder="ADM" maxlength="10" /><span class="hint">ID shuru me: ${esc(IS.adminPrefix)}-2026-101</span></div>
-        <div class="field"><label>Admin ID start number</label><input class="inp" name="adminStart" type="number" min="1" max="9999" value="${esc(IS.adminStart)}" /><span class="hint">Pehla admin isi number se shuru (default 101)</span></div>
+        <div class="field"><label>User ID style</label>
+          <select class="inp" name="idStyle">
+            <option value="random" ${IS.idStyle!=='seq'?'selected':''}>Random (recommended) — ${esc(IS.adminPrefix)}102026#21200</option>
+            <option value="seq" ${IS.idStyle==='seq'?'selected':''}>Number series — ${esc(IS.adminPrefix)}-2026-0101</option>
+          </select></div>
+        <div class="field"><label>Super admin ID prefix</label><input class="inp" name="ownerPrefix" value="${esc(IS.ownerPrefix)}" placeholder="OW" maxlength="10" /><span class="hint">Alag series: ${esc(IS.ownerPrefix)}102026#48391</span></div>
+        <div class="field"><label>Admin ID prefix</label><input class="inp" name="adminPrefix" value="${esc(IS.adminPrefix)}" placeholder="AD" maxlength="10" /><span class="hint">Har naye admin ko alag random ID</span></div>
+        <div class="field"><label>Admin ID start number (series style)</label><input class="inp" name="adminStart" type="number" min="1" max="9999" value="${esc(IS.adminStart)}" /><span class="hint">Sirf number-series style me — default 101</span></div>
         <div class="field"><label>Admin ID suffix</label><input class="inp" name="adminSuffix" value="${esc(IS.adminSuffix)}" placeholder="khaali" maxlength="10" /><span class="hint">ID ke aakhir me — khaali bhi chhod sakte ho</span></div>
         <div class="field"><label>Password prefix</label><input class="inp" name="passPrefix" value="${esc(IS.passPrefix)}" placeholder="khaali" maxlength="10" /><span class="hint">Beech ke 6 characters hamesha random rehte hain</span></div>
         <div class="field"><label>Password suffix</label><input class="inp" name="passSuffix" value="${esc(IS.passSuffix)}" placeholder="khaali" maxlength="10" /></div>
@@ -5325,18 +5370,29 @@ async function cloudAutoLogin(){
 }
 
 /* purane admin records me userId/status bhar do (ek baar) */
+/* v100: purani ID settings (OWN-/ADM- series) → naya random format */
+function migrateIdsSet(){
+  try {
+    const raw = DB.idset();
+    if (!raw || raw.idStyle) return;              /* pehle se naya format */
+    const next = Object.assign({}, raw, { idStyle:'random' });
+    if (!raw.ownerPrefix || raw.ownerPrefix === 'OWN') next.ownerPrefix = 'OW';
+    if (!raw.adminPrefix || raw.adminPrefix === 'ADM') next.adminPrefix = 'AD';
+    next.adminSuffix = '';                         /* random style me suffix nahi lagta */
+    DB.setIdsSet(next);
+  } catch(e){}
+}
+
 function migrateAdmins(){
   try {
-    const admins = DB.admins(); let n = 0, ch = false;
-    admins.forEach(a=>{ const m = String(a.userId||'').match(/(\d+)$/); if (m) n = Math.max(n, Number(m[1])); });
+    const admins = DB.admins(); let ch = false;
     const cfg = idset();
-    const ownRe = new RegExp('^' + cfg.ownerPrefix.replace(/[-_]/g,'\\$&') + '-');
     admins.forEach(a=>{
       const isOwn = String(a.email||'').toLowerCase() === String(ownerEmail()||'').toLowerCase();
-      if (isOwn && !ownRe.test(String(a.userId||''))){
-        a.userId = genOwnerId(); ch = true;      /* super admin ki ID alag series */
-      } else if (!a.userId){
-        n += 1; a.userId = cfg.adminPrefix + '-' + new Date().getFullYear() + '-' + pad(n, cfg.adminStart > 99 ? 4 : 3); ch = true;
+      if (isOwn){
+        if (!idMatches(a.userId, cfg.ownerPrefix)){ a.userId = genOwnerId(); ch = true; }   /* super admin alag series */
+      } else if (!idMatches(a.userId, cfg.adminPrefix)){
+        a.userId = genUserId(); ch = true;
       }
       if (!a.status){ a.status = 'active'; ch = true; }
     });
@@ -5350,6 +5406,7 @@ function init(){
   let _bootHash = '';
   try { _bootHash = String(typeof BOOT_HASH === 'string' ? BOOT_HASH : '').toLowerCase(); } catch(e){}
   installGuards();
+  migrateIdsSet();
   migrateAdmins();
   migrateOwner();
   purgeNonOwnerAdmins();
