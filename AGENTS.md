@@ -421,3 +421,21 @@ Open: wire Supabase keys; real OTP SMS later.
   aur `masjid-survey-repo-<date>.bundle` (git history, `git bundle create ... --all`).
   README: `Download/MASJID-SURVEY-BACKUP-README.txt`. Data (families) alag — app ke Settings → Backup (JSON).
 - Zip command: `zip -rq "$OUT" masjid-kidmat-records -x "masjid-kidmat-records/.git/*"` (Termux me `zip` pkg).
+
+## v92 — protection + timestamps + snapshot guard (2026-10-28)
+- **Guards** (`installGuards()` in `init()`): right-click band (inputs/textarea me allowed for paste),
+  F12 / Ctrl+Shift+I,J,C,K / Ctrl+U blocked, image drag band, throttled `softWarn()` toast.
+  ⚠️ Yeh deterrent hai — DevTools console band nahi hota. Asli security = Supabase RLS (verified: anon
+  `families`/`members`/`app_users` = 401, `masjid?select=bank` = 401, sirf `public_snapshot` + public
+  masjid columns 200).
+- **Timestamps**: `fmtDateTime()` helper. Family par `createdAt`/`createdBy`/`updatedAt`/`updatedBy`
+  (create par updatedAt = createdAt, edit par bump + user). Detail me "Registered" + "Last updated" rows,
+  households list me **Updated** column. Public page par "Data updated: <time>" (snapshot ka `at`, warna
+  row ka `updated_at`).
+- **Snapshot guard**: `PUBLIC_BANNED` + `stripPersonal()` — publish se pehle recursive strip
+  (name/fatherName/motherName/phone/address/bank/aadhaar/notes/houseName/createdBy/updatedBy).
+- **TESTS AB REPO ME**: `tests/smoke.js` (`npm test`, jsdom devDependency) — 68 asserts: boot, guards,
+  family add + auto ID, timestamps, list/detail, ID card 5×3 + QR + signatures, designer, admin panel
+  collapse, plain-admin limits, snapshot strip, public timestamp, i18n. ⚠️ Pehle harness `$TMPDIR` me tha
+  aur delete ho gaya — tests sirf repo me rakho.
+- Cache `memc-app-v92`, commit `6f49ede`.
