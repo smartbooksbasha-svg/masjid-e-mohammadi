@@ -278,3 +278,8 @@ Open: wire Supabase keys; real OTP SMS later.
   zero runtime errors, no undefined/NaN/[object Object], no duplicate ids, har `data-act` handled),
   dashboard counts **72/72**, documents **21/21**, features **12/12**.
 - sw cache `memc-app-v80`, commit `74fccdc`.
+
+## Copy rule (2026-10-28)
+- Dashboard labels Hinglish-first rakhna hai ("Scheme mili" / "Scheme nahi mili"), formal
+  English ("Scheme applied") nahi — Shan ne kaha: "scheme no scheme bhi change kar du".
+- Naya UI text Hinglish me likho aur `I18N.en` / `I18N.ta` me wahi string key ke saath add karo.

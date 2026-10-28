@@ -1546,6 +1546,13 @@ window.MFD = {
   doc:        k => mf(m=> (m.docs||{})[k]==='yes'),
   nodoc:      k => mf(m=> (m.docs||{})[k]!=='yes'),
   scheme:     k => mf(m=> !!(m.schemes && m.schemes[k]==='yes')),
+  schemeName: n => mf(m=>{
+    const want = String(n||'').trim().toLowerCase();
+    if (!want) return false;
+    const nm = String(m.schemeName||'').trim().toLowerCase();
+    if (nm && nm === want) return true;
+    return memberSchemes(m).some(x=> String(x).trim().toLowerCase() === want);
+  }),
   occupation: n => mf(m=> occName(m).toLowerCase() === String(n).toLowerCase()),
   house:      t => (m,f)=> !isDead(m) && houseTypeKey(f && f.houseType)===t,
   street:     n => (m,f)=> !isDead(m) && streetName(f||{})===n
@@ -1801,7 +1808,7 @@ function viewDashboard(){
         <div class="table-wrap small-table"><table>
           <thead><tr><th>Scheme</th><th>Members</th></tr></thead><tbody>
           ${SCHEMES.filter(([k])=>k!=='other').map(([k,l])=>`<tr class="clickable" data-act="mlist" data-f="scheme:${esc(k)}" data-title="${esc(l)}"><td>${esc(l)}</td><td><b>${s.scheme.counts[k]||0}</b></td></tr>`).join('')}
-          ${s.scheme.byName.map(([nm,n])=>`<tr><td>${esc(nm)}</td><td><b>${n}</b></td></tr>`).join('')}
+          ${s.scheme.byName.map(([nm,n])=>`<tr class="clickable" data-act="mlist" data-f="schemeName:${esc(nm)}" data-title="${esc(nm)}"><td>${esc(nm)}</td><td><b>${n}</b></td></tr>`).join('')}
           </tbody></table></div>
         ${!s.scheme.applied ? '<p class="muted small" style="margin-top:10px">Abhi koi scheme mark nahi hui — member form me scheme chips tap karo.</p>' : ''}
       </section>
