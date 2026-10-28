@@ -1125,7 +1125,7 @@ function go(view, param){
   } catch(e){}
   state.view = view; state.param = param||null;
   closeNav();
-  const titles = { dashboard:'Survey Dashboard', families:'Households', add:(state.param?'Edit Household':'Add Household'), detail:'Household Record', find:'Find family', adminpanel:'Administration', users:'Admins', settings:'Settings', masjid:'Masjid Profile', cat:'Survey Category', myprofile:'My Profile', 'admin-edit':'Edit Admin' };
+  const titles = { dashboard:'Survey Dashboard', families:'Households', add:(state.param?'Edit Household':'Add Household'), detail:'Household Record', find:'Find family', adminpanel:'Administration', users:'Admins', settings:'Settings', masjid:'Masjid Profile', cat:'Survey Category', myprofile:'My Profile', 'admin-edit':'Edit Admin', memberlist:'Members', familylist:'Households list', streetlist:'Streets' };
   $('#pageTitle').textContent = titles[view] || 'Survey Dashboard';
   let html='';
   if (view==='dashboard') html = viewDashboard();
@@ -1141,6 +1141,8 @@ function go(view, param){
   else if (view==='admin-edit') html = isOwner()?viewAdminEdit(state.param):`<div class='empty'><h3>Owner only</h3></div>`;
   else if (view==='cat') html = viewCat(state.param);
   else if (view==='memberlist') html = viewMembersList(state.memberListFilter||(()=>true), state.memberListTitle||'Members');
+  else if (view==='familylist') html = viewFamilyList(state.familyListFilter||(()=>true), state.familyListTitle||'Households');
+  else if (view==='streetlist') html = viewStreetList();
   $('#content').innerHTML = html;
   $$('#nav .nav-item').forEach(a=>a.classList.toggle('active', a.dataset.view===view || (view==='detail'&&a.dataset.view==='families')||(view==='add'&&a.dataset.view==='add')));
   afterRender(view);
@@ -1160,11 +1162,9 @@ window.openSidebar = function(){
 window.navTo = function(v){
   try {
     if (v==='add') state.draft = blankDraft();
-    alert('Navigating to: ' + v);
     go(v);
     closeNav();
-    alert('Done: ' + v);
-  } catch(e){ alert('ERROR: ' + e.message); console.error('navTo error:', e); }
+  } catch(e){ console.error('navTo error:', e); }
 };
 
 function closeNav(){ const s=$('#sidebar'), sc=$('#scrimNav'); if(s) s.classList.remove('open'); if(sc) sc.classList.remove('show'); }
@@ -1318,8 +1318,13 @@ function computeStats(){
 function icSmall(path){ return `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${path}</svg>`; }
 function metric(label, val, opts){
   const o = opts||{};
-  const click = o.filter ? ` onclick="state.memberListFilter=window.MF['${o.filter}'];state.memberListTitle='${esc(o.title||label)}';go('memberlist');return false;" style="cursor:pointer;text-decoration:underline" ` : '';
-  return `<div class="metric${o.hi?' hi':''}${o.sub?' sub':''}"${click}><span>${label}</span><b>${val}</b></div>`;
+  const cls = `metric${o.hi?' hi':''}${o.sub?' sub':''}${o.f?' click':''}`;
+  const plain = String(label).replace(/<[^>]*>/g,'');
+  if (!o.f) return `<div class="${cls}"><span>${label}</span><b>${val}</b></div>`;
+  const act = o.act || 'mlist';
+  const title = esc(o.title || plain);
+  return `<div class="${cls}" role="button" tabindex="0" title="${title} — list dekho"
+     data-act="${act}" data-f="${esc(o.f)}" data-title="${title}"><span>${label}</span><b>${val}</b></div>`;
 }
 
 function allMembers(){
@@ -1487,29 +1492,125 @@ function viewCat(param){
 
 
 
-// Member filter functions for clickable dashboard metrics
+/* ---- clickable dashboard metrics → member / household lists ----
+   Every dashboard number maps to one filter here, so the list length
+   always equals the number that was clicked (deceased excluded). */
+const isDead   = m => !!m.deceased;
+const gOf      = m => String(m.gender||'').toLowerCase();
+const msOf     = m => String(m.maritalStatus||'').toLowerCase();
+const relOf    = m => String(m.religious||'').toLowerCase();
+const isStudentM = m => { const e = eduKey(m), a = ageFromDob(m.dob); return !!e && e!=='none' && (a===null || a<26); };
+const docsHave = m => BASIC_DOCS.filter(([k])=> (m.docs||{})[k]==='yes').length;
+const mf = fn => (m) => !isDead(m) && fn(m);
+
 window.MF = {
-  allStudents: function(m){ return !m.deceased && m.educationLevel && m.educationLevel !== 'none' && (ageFromDob(m.dob) === null || ageFromDob(m.dob) < 26); },
-  primary: function(m){ return !m.deceased && m.educationLevel === 'primary'; },
-  higherSecondary: function(m){ return !m.deceased && m.educationLevel === 'higher_secondary'; },
-  college: function(m){ return !m.deceased && m.educationLevel === 'college'; },
-  madarsa: function(m){ return !m.deceased && m.educationLevel === 'madarsa'; },
-  aalimMen: function(m){ return !m.deceased && (m.religious === 'aalim' || m.religious === 'both') && m.gender === 'Male'; },
-  hafizMen: function(m){ return !m.deceased && (m.religious === 'hafiz' || m.religious === 'both') && m.gender === 'Male'; },
-  aalimWomen: function(m){ return !m.deceased && (m.religious === 'aalim' || m.religious === 'both') && m.gender === 'Female'; },
-  hafizWomen: function(m){ return !m.deceased && (m.religious === 'hafiz' || m.religious === 'both') && m.gender === 'Female'; },
-  employed: function(m){ return !m.deceased && m.employment === 'employed'; },
-  unemployed: function(m){ return !m.deceased && m.employment !== 'employed'; }
+  all:             mf(()=>true),
+  men:             mf(m=>gOf(m)==='male'),
+  women:           mf(m=>gOf(m)==='female'),
+  otherGender:     mf(m=>gOf(m)==='other'),
+  children:        mf(m=>{ const a=ageFromDob(m.dob); return a!==null && a<18; }),
+  disabled:        mf(m=>m.disability==='yes'),
+  menMarried:      mf(m=>gOf(m)==='male'   && msOf(m)==='married'),
+  menUnmarried:    mf(m=>gOf(m)==='male'   && msOf(m)!=='married'),
+  menDisabled:     mf(m=>gOf(m)==='male'   && m.disability==='yes'),
+  womenMarried:    mf(m=>gOf(m)==='female' && msOf(m)==='married'),
+  womenUnmarried:  mf(m=>gOf(m)==='female' && msOf(m)!=='married'),
+  womenDisabled:   mf(m=>gOf(m)==='female' && m.disability==='yes'),
+  widow:           mf(m=>gOf(m)==='female' && msOf(m)==='widow'),
+  students:        mf(m=>isStudentM(m)),
+  allStudents:     mf(m=>isStudentM(m)),
+  primary:         mf(m=>isStudentM(m) && eduKey(m)==='primary'),
+  higherSecondary: mf(m=>isStudentM(m) && eduKey(m)==='higher_secondary'),
+  college:         mf(m=>isStudentM(m) && eduKey(m)==='college'),
+  madarsa:         mf(m=>isStudentM(m) && eduKey(m)==='madarsa'),
+  employed:        mf(m=>m.employment==='employed'),
+  unemployed:      mf(m=>m.employment!=='employed'),
+  hasOccupation:   mf(m=>!!occName(m)),
+  aalimMen:        mf(m=>gOf(m)!=='female' && (relOf(m)==='aalim' || relOf(m)==='both')),
+  hafizMen:        mf(m=>gOf(m)!=='female' && (relOf(m)==='hafiz' || relOf(m)==='both')),
+  aalimWomen:      mf(m=>gOf(m)==='female' && (relOf(m)==='aalim' || relOf(m)==='both')),
+  hafizWomen:      mf(m=>gOf(m)==='female' && (relOf(m)==='hafiz' || relOf(m)==='both')),
+  naziraMen:       mf(m=>relOf(m)==='nazira' && gOf(m)!=='female'),
+  naziraWomen:     mf(m=>relOf(m)==='nazira' && gOf(m)==='female'),
+  aalimaWomen:     mf(m=>relOf(m)==='aalima' && gOf(m)==='female'),
+  muftiMen:        mf(m=>relOf(m)==='mufti'  && gOf(m)!=='female'),
+  deeniTotal:      mf(m=>['aalim','hafiz','both'].includes(relOf(m))),
+  docsAll:         mf(m=>docsHave(m)===BASIC_DOCS.length),
+  docsNone:        mf(m=>docsHave(m)===0),
+  schemeApplied:   mf(m=>memberSchemes(m).length>0),
+  schemeNone:      mf(m=>memberSchemes(m).length===0)
 };
+
+/* parameterised filters, key format "name:argument" */
+window.MFD = {
+  doc:        k => mf(m=> (m.docs||{})[k]==='yes'),
+  nodoc:      k => mf(m=> (m.docs||{})[k]!=='yes'),
+  scheme:     k => mf(m=> !!(m.schemes && m.schemes[k]==='yes')),
+  occupation: n => mf(m=> occName(m).toLowerCase() === String(n).toLowerCase()),
+  house:      t => (m,f)=> !isDead(m) && houseTypeKey(f && f.houseType)===t,
+  street:     n => (m,f)=> !isDead(m) && streetName(f||{})===n
+};
+
+function splitFilterKey(key){
+  const k = String(key||''); const i = k.indexOf(':');
+  return i<0 ? [k,''] : [k.slice(0,i), k.slice(i+1)];
+}
+function resolveMemberFilter(key){
+  const [head, arg] = splitFilterKey(key);
+  if (window.MFD[head]) return window.MFD[head](arg);
+  return window.MF[head] || (()=>true);
+}
+function resolveFamilyFilter(key){
+  const [head, arg] = splitFilterKey(key);
+  if (head==='house')  return f => houseTypeKey(f && f.houseType)===arg;
+  if (head==='street') return f => streetName(f||{})===arg;
+  return ()=>true;
+}
+function openList(kind, key, title){
+  if (kind==='flist'){
+    state.familyListFilter = resolveFamilyFilter(key);
+    state.familyListTitle  = title || 'Households';
+    go('familylist');
+  } else {
+    state.memberListFilter = resolveMemberFilter(key);
+    state.memberListTitle  = title || 'Members';
+    go('memberlist');
+  }
+}
+
+function viewFamilyList(filterFn, title){
+  const fams = DB.families().filter(filterFn);
+  const rows = fams.map(f=>{
+    const n = (f.members||[]).filter(m=>String(m.name||'').trim() && !m.deceased).length;
+    return `<tr>
+      <td><b>${esc(f.id)}</b></td>
+      <td>${esc(f.houseName||'—')}</td>
+      <td>${esc(streetName(f))}</td>
+      <td>${esc(f.houseNo||'—')}</td>
+      <td>${esc(labelOf(HOUSE_TYPES, houseTypeKey(f.houseType))||'Other')}</td>
+      <td>${n}</td>
+      <td><button class="btn ghost sm" data-act="detail" data-id="${esc(f.id)}">View</button></td></tr>`;
+  }).join('');
+  return `
+    <div class="page-head"><div><h1>${esc(title)}</h1><p>${fams.length} household(s) found</p></div>
+      <button class="btn ghost sm" data-act="goto" data-view="dashboard">← Back to Dashboard</button></div>
+    <div class="card">
+      ${fams.length ? `<div class="table-wrap"><table><thead><tr><th>Family ID</th><th>House</th><th>Street</th><th>House No</th><th>House type</th><th>Members</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`
+                   : '<div class="empty"><h3>No households found</h3></div>'}
+    </div>`;
+}
 
 function viewMembersList(filterFn, title){
   const arr = allMembers().filter(({m,f}) => filterFn(m,f));
   const rows = arr.map(({m,f})=>{
     const addr = [f.address, f.houseNo?('House '+f.houseNo):'', streetName(f)].filter(Boolean).join(', ');
+    const age = ageFromDob(m.dob);
     return `<tr>
       <td>${esc(m.name||'—')}</td>
+      <td>${esc(age===null?'—':age)}</td>
+      <td>${esc(m.gender||'—')}</td>
       <td>${esc(f.id)}</td>
-      <td>${esc(addr||'—')}</td>
+      <td>${esc(streetName(f))}</td>
       <td><button class="btn ghost sm" data-act="detail" data-id="${esc(f.id)}">View</button></td>
     </tr>`;
   }).join('');
@@ -1517,7 +1618,23 @@ function viewMembersList(filterFn, title){
     <div class="page-head"><div><h1>${esc(title)}</h1><p>${arr.length} member(s) found</p></div>
       <button class="btn ghost sm" data-act="goto" data-view="dashboard">← Back to Dashboard</button></div>
     <div class="card">
-      ${arr.length ? `<div class="table-wrap"><table><thead><tr><th>Name</th><th>Family ID</th><th>Address</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>` : '<div class="empty"><h3>No members found</h3></div>'}
+      ${arr.length ? `<div class="table-wrap"><table><thead><tr><th>Name</th><th>Age</th><th>Gender</th><th>Family ID</th><th>Street</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>` : '<div class="empty"><h3>No members found</h3></div>'}
+    </div>`;
+}
+
+function viewStreetList(){
+  const s = computeStats();
+  const rows = s.streets.map(st=>`<tr class="clickable" data-act="flist" data-f="street:${esc(st.name)}" data-title="${esc(st.name)} — households">
+      <td><b>${esc(st.name)}</b></td><td>${st.houses}</td><td>${st.moulding}</td><td>${st.cement}</td><td>${st.palm}</td><td>${st.other}</td></tr>`).join('');
+  return `
+    <div class="page-head"><div><h1>All streets</h1><p>${s.streets.length} street(s) · ${s.houses} household(s)</p></div>
+      <button class="btn ghost sm" data-act="goto" data-view="dashboard">← Back to Dashboard</button></div>
+    <div class="card">
+      ${s.streets.length ? `<div class="table-wrap street-table"><table><thead><tr><th>Street name</th><th>Houses</th><th>Moulding</th><th>Cement sheet</th><th>Palm leaf</th><th>Other</th></tr></thead><tbody>
+        ${rows}
+        <tr class="totals"><td>Total</td><td>${s.houses}</td><td>${s.houseTypes.moulding}</td><td>${s.houseTypes.cement}</td><td>${s.houseTypes.palm}</td><td>${s.houseTypes.other}</td></tr>
+      </tbody></table></div>` : '<div class="empty"><h3>No streets yet</h3></div>'}
+      <p class="muted small" style="margin-top:12px">Kisi street par tap karo → us street ke ghar dikhenge.</p>
     </div>`;
 }
 
@@ -1571,12 +1688,12 @@ function viewDashboard(){
       <section class="grp wide" data-g="1" data-act="grp-toggle">
         ${grpHead(1,'Location & Housing','Ghar aur raste ki details')}
         <div class="metrics cols2">
-          ${metric('Total streets', s.streets.length)}
-          ${metric('Total houses', s.houses)}
-          ${metric('Moulding (house type)', s.houseTypes.moulding)}
-          ${metric('Cement sheet (house type)', s.houseTypes.cement)}
-          ${metric('Palm leaf (house type)', s.houseTypes.palm)}
-          ${metric('Other / kachcha (house type)', s.houseTypes.other)}
+          ${metric('Total streets', s.streets.length, {f:'all', act:'slist', title:'All streets'})}
+          ${metric('Total houses', s.houses, {f:'all', act:'flist', title:'All households'})}
+          ${metric('Moulding (house type)', s.houseTypes.moulding, {f:'house:moulding', act:'flist', title:'Moulding houses'})}
+          ${metric('Cement sheet (house type)', s.houseTypes.cement, {f:'house:cement', act:'flist', title:'Cement sheet houses'})}
+          ${metric('Palm leaf (house type)', s.houseTypes.palm, {f:'house:palm', act:'flist', title:'Palm leaf houses'})}
+          ${metric('Other / kachcha (house type)', s.houseTypes.other, {f:'house:other', act:'flist', title:'Other / kachcha houses'})}
         </div>
         ${streetRows}
       </section>
@@ -1584,24 +1701,24 @@ function viewDashboard(){
       <section class="grp wide" data-g="2" data-act="grp-toggle">
         ${grpHead(2,'Family & Demographics','Ghar walon ki details')}
         <div class="metrics cols2">
-          ${metric('Total families', s.families)}
-          ${metric('Total population', s.pop)}
-          ${metric('Children (under 18)', s.children)}
-          ${metric('Physically challenged (total)', s.men.disabled + s.women.disabled)}
+          ${metric('Total families', s.families, {f:'all', act:'flist', title:'All households'})}
+          ${metric('Total population', s.pop, {f:'all', title:'All members'})}
+          ${metric('Children (under 18)', s.children, {f:'children', title:'Children (under 18)'})}
+          ${metric('Physically challenged (total)', s.men.disabled + s.women.disabled, {f:'disabled', title:'Physically challenged — all'})}
         </div>
         <div class="split">
           <div class="split-col">
-            <h3>Men <span class="pill">${s.men.total}</span></h3>
-            ${metric('Married', s.men.married)}
-            ${metric('Unmarried', s.men.unmarried)}
-            ${metric('Physically challenged', s.men.disabled)}
+            <h3>Men <span class="pill" role="button" tabindex="0" data-act="mlist" data-f="men" data-title="All men">${s.men.total}</span></h3>
+            ${metric('Married', s.men.married, {f:'menMarried', title:'Married men'})}
+            ${metric('Unmarried', s.men.unmarried, {f:'menUnmarried', title:'Unmarried men'})}
+            ${metric('Physically challenged', s.men.disabled, {f:'menDisabled', title:'Physically challenged men'})}
           </div>
           <div class="split-col">
-            <h3>Women <span class="pill">${s.women.total}</span></h3>
-            ${metric('Married', s.women.married)}
-            ${metric('Unmarried', s.women.unmarried)}
-            ${metric('Physically challenged', s.women.disabled)}
-            ${metric('Widow', s.women.widow)}
+            <h3>Women <span class="pill" role="button" tabindex="0" data-act="mlist" data-f="women" data-title="All women">${s.women.total}</span></h3>
+            ${metric('Married', s.women.married, {f:'womenMarried', title:'Married women'})}
+            ${metric('Unmarried', s.women.unmarried, {f:'womenUnmarried', title:'Unmarried women'})}
+            ${metric('Physically challenged', s.women.disabled, {f:'womenDisabled', title:'Physically challenged women'})}
+            ${metric('Widow', s.women.widow, {f:'widow', title:'Widows'})}
           </div>
         </div>
       </section>
@@ -1609,55 +1726,63 @@ function viewDashboard(){
       <section class="grp" data-g="3" data-act="grp-toggle">
         ${grpHead(3,'Education','Total child / students')}
         <div class="metrics">
-          ${metric('Total students', s.students.total, {hi:true, filter:'allStudents', title:'All Students'})}
-          ${metric('Primary students', s.students.primary, {filter:'primary', title:'Primary Students'})}
-          ${metric('Higher secondary students', s.students.higher_secondary, {filter:'higherSecondary', title:'Higher Secondary Students'})}
-          ${metric('College students', s.students.college, {filter:'college', title:'College Students'})}
-          ${metric('Madarsa students', s.students.madarsa, {filter:'madarsa', title:'Madarsa Students'})}
+          ${metric('Total students', s.students.total, {hi:true, f:'students', title:'All Students'})}
+          ${metric('Primary students', s.students.primary, {f:'primary', title:'Primary Students'})}
+          ${metric('Higher secondary students', s.students.higher_secondary, {f:'higherSecondary', title:'Higher Secondary Students'})}
+          ${metric('College students', s.students.college, {f:'college', title:'College Students'})}
+          ${metric('Madarsa students', s.students.madarsa, {f:'madarsa', title:'Madarsa Students'})}
         </div>
       </section>
 
       <section class="grp wide" data-g="4" data-act="grp-toggle">
         ${grpHead(4,'Occupations','Kaam ke hisaab se ginti — plumber, electrician, painter, helper…')}
         <div class="metrics cols2">
-          ${metric('Members with a job', s.employed, {hi:true})}
-          ${metric('Different occupations', s.occupationNames)}
+          ${metric('Members with a job', s.employed, {hi:true, f:'employed', title:'Members with a job'})}
+          ${metric('Different occupations', s.occupationNames, {f:'hasOccupation', title:'Members with an occupation'})}
         </div>
         ${s.occupations.length ? `<div class="table-wrap small-table" style="margin-top:14px"><table>
           <thead><tr><th>Occupation</th><th>Men</th><th>Women</th><th>Total</th></tr></thead><tbody>
-          ${s.occupations.map(o=>`<tr style="cursor:pointer" onclick="state.memberListFilter=function(m){return !m.deceased && (m.occupation||'').toLowerCase()==='${esc(o.name).toLowerCase()}';};state.memberListTitle='${esc(o.name)}';go('memberlist');return false;"><td><b>${esc(o.name)}</b></td><td>${o.men}</td><td>${o.women}</td><td><b>${o.total}</b></td></tr>`).join('')}
+          ${s.occupations.map(o=>`<tr class="clickable" data-act="mlist" data-f="occupation:${esc(o.name)}" data-title="${esc(o.name)} — members"><td><b>${esc(o.name)}</b></td><td>${o.men}</td><td>${o.women}</td><td><b>${o.total}</b></td></tr>`).join('')}
           </tbody></table></div>` : `<p class="muted small" style="margin-top:12px">Abhi kisi ka occupation nahi bhara — member form me "Kaam / occupation" likho (jaise Plumber).</p>`}
       </section>
 
       <section class="grp wide" data-g="5" data-act="grp-toggle">
         ${grpHead(5,'Religious Education','Deeni taleem — Aalim & Hafiz')}
         <div class="metrics cols2">
-          ${metric('Men Aalim', s.deeni.menAalim, {filter:'aalimMen', title:'Men Aalim'})}
-          ${metric('Men Hafiz', s.deeni.menHafiz, {filter:'hafizMen', title:'Men Hafiz'})}
-          ${metric('Women Aalim', s.deeni.womenAalim, {filter:'aalimWomen', title:'Women Aalim'})}
-          ${metric('Women Hafiz', s.deeni.womenHafiz, {filter:'hafizWomen', title:'Women Hafiz'})}
+          ${metric('Men Aalim', s.deeni.menAalim, {f:'aalimMen', title:'Men Aalim'})}
+          ${metric('Men Hafiz', s.deeni.menHafiz, {f:'hafizMen', title:'Men Hafiz'})}
+          ${metric('Women Aalim', s.deeni.womenAalim, {f:'aalimWomen', title:'Women Aalim'})}
+          ${metric('Women Hafiz', s.deeni.womenHafiz, {f:'hafizWomen', title:'Women Hafiz'})}
         </div>
         <div class="metrics" style="margin-top:10px">
-          ${metric('Total Aalim & Hafiz (men + women)', s.deeni.menAalim + s.deeni.menHafiz + s.deeni.womenAalim + s.deeni.womenHafiz, {hi:true})}
+          ${metric('Total Aalim & Hafiz (men + women)', s.deeni.menAalim + s.deeni.menHafiz + s.deeni.womenAalim + s.deeni.womenHafiz, {hi:true, f:'deeniTotal', title:'Total Aalim & Hafiz'})}
+        </div>
+        <div class="metrics cols2" style="margin-top:10px">
+          ${metric('Nazira (men)', s.deeni.menNazira||0, {f:'naziraMen', title:'Nazira (men)'})}
+          ${metric('Nazira (women)', s.deeni.womenNazira||0, {f:'naziraWomen', title:'Nazira (women)'})}
+          ${metric('Aalima (women)', s.deeni.womenAalima||0, {f:'aalimaWomen', title:'Aalima (women)'})}
+          ${metric('Mufti (men)', s.deeni.menMufti||0, {f:'muftiMen', title:'Mufti (men)'})}
         </div>
       </section>
 
       <section class="grp wide" data-g="6" data-act="grp-toggle">
         ${grpHead(6,'Documents & Govt. Schemes','Kitne logon ke paas documents hain · kitne ne scheme li')}
         <div class="metrics cols2">
-          ${metric('Members with all basic documents', s.membersWithAllDocs)}
-          ${metric('Members with no basic document', s.membersWithNoDocs)}
-          ${metric('Scheme applied', s.scheme.applied)}
-          ${metric('Scheme not applied', s.scheme.notApplied)}
+          ${metric('Members with all basic documents', s.membersWithAllDocs, {f:'docsAll', title:'Members with all basic documents'})}
+          ${metric('Members with no basic document', s.membersWithNoDocs, {f:'docsNone', title:'Members with no basic document'})}
+          ${metric('Scheme applied', s.scheme.applied, {f:'schemeApplied', title:'Scheme applied'})}
+          ${metric('Scheme not applied', s.scheme.notApplied, {f:'schemeNone', title:'Scheme not applied'})}
         </div>
         <div class="table-wrap small-table" style="margin-top:14px"><table>
           <thead><tr><th>Document</th><th>Have</th><th>Don't have</th></tr></thead><tbody>
-          ${BASIC_DOCS.map(([k,l])=>`<tr><td>${esc(l)}</td><td><b>${s.docs[k]}</b></td><td>${Math.max(0, s.pop - s.docs[k])}</td></tr>`).join('')}
+          ${BASIC_DOCS.map(([k,l])=>`<tr><td>${esc(l)}</td>
+            <td><b class="lnk" role="button" tabindex="0" data-act="mlist" data-f="doc:${esc(k)}" data-title="${esc(l)} — have">${s.docs[k]}</b></td>
+            <td><b class="lnk" role="button" tabindex="0" data-act="mlist" data-f="nodoc:${esc(k)}" data-title="${esc(l)} — don't have">${Math.max(0, s.pop - s.docs[k])}</b></td></tr>`).join('')}
           </tbody></table></div>
         <div class="sec-title" style="margin:16px 0 4px;font-size:.88rem">Scheme-wise count</div>
         <div class="table-wrap small-table"><table>
           <thead><tr><th>Scheme</th><th>Members</th></tr></thead><tbody>
-          ${SCHEMES.filter(([k])=>k!=='other').map(([k,l])=>`<tr><td>${esc(l)}</td><td><b>${s.scheme.counts[k]||0}</b></td></tr>`).join('')}
+          ${SCHEMES.filter(([k])=>k!=='other').map(([k,l])=>`<tr class="clickable" data-act="mlist" data-f="scheme:${esc(k)}" data-title="${esc(l)}"><td>${esc(l)}</td><td><b>${s.scheme.counts[k]||0}</b></td></tr>`).join('')}
           ${s.scheme.byName.map(([nm,n])=>`<tr><td>${esc(nm)}</td><td><b>${n}</b></td></tr>`).join('')}
           </tbody></table></div>
         ${!s.scheme.applied ? '<p class="muted small" style="margin-top:10px">Abhi koi scheme mark nahi hui — member form me scheme chips tap karo.</p>' : ''}
@@ -2725,6 +2850,15 @@ function viewSettings(){
 /* ============================================================
    ACTIONS (event delegation)
    ============================================================ */
+/* keyboard access for clickable numbers / rows (role=button) */
+document.addEventListener('keydown', (e)=>{
+  if (e.key!=='Enter' && e.key!==' ') return;
+  const el = e.target.closest('[data-act]'); if(!el) return;
+  const tag = el.tagName;
+  if (tag==='BUTTON' || tag==='A' || tag==='INPUT' || tag==='SELECT') return;
+  e.preventDefault(); el.click();
+});
+
 document.addEventListener('click', (e)=>{
   const el = e.target.closest('[data-act]'); if(!el) return;
   const act = el.dataset.act;
@@ -2736,6 +2870,8 @@ document.addEventListener('click', (e)=>{
 
   if (act==='toggle-theme') { toggleTheme(); const b=$('#themeBtn2'); if(b){ const t=document.documentElement.getAttribute('data-theme'); b.innerHTML = themeIcon(t) + (t==='night'?' Night':' Day'); } return; }
   if (act==='goto'){ if (el.dataset.view==='add'){ state.draft=blankDraft(); go(el.dataset.view); } else go(el.dataset.view, el.dataset.param || el.dataset.street || null); return; }
+  if (act==='mlist' || act==='flist'){ openList(act, el.dataset.f, el.dataset.title); return; }
+  if (act==='slist'){ state.streetBack = state.view; go('streetlist'); return; }
   if (act==='auth-check'){ cloudLinkCheck(); return; }
   if (act==='magic-login'){
     const f = $('#loginForm');
@@ -3803,7 +3939,7 @@ window.addEventListener('popstate', (e)=>{
       const view = state.view;
       const ADMIN_ONLY = ['add','users','settings','families','detail','masjid','adminpanel'];
       if (ADMIN_ONLY.includes(view) && !isAdmin()){ toast('Ye page sirf admin ke liye hai','err'); state.view='dashboard'; state.param=null; }
-      const titles = { dashboard:'Survey Dashboard', families:'Households', add:(state.param?'Edit Household':'Add Household'), detail:'Household Record', find:'Find family', adminpanel:'Administration', users:'Admins', settings:'Settings', masjid:'Masjid Profile', cat:'Survey Category', myprofile:'My Profile', 'admin-edit':'Edit Admin', memberlist:'Members' };
+      const titles = { dashboard:'Survey Dashboard', families:'Households', add:(state.param?'Edit Household':'Add Household'), detail:'Household Record', find:'Find family', adminpanel:'Administration', users:'Admins', settings:'Settings', masjid:'Masjid Profile', cat:'Survey Category', myprofile:'My Profile', 'admin-edit':'Edit Admin', memberlist:'Members', familylist:'Households list', streetlist:'Streets' };
       $('#pageTitle').textContent = titles[state.view] || 'Survey Dashboard';
       let html='';
       if (state.view==='dashboard') html = viewDashboard();
@@ -3819,6 +3955,8 @@ window.addEventListener('popstate', (e)=>{
       else if (state.view==='admin-edit') html = isOwner()?viewAdminEdit(state.param):`<div class='empty'><h3>Owner only</h3></div>`;
       else if (state.view==='cat') html = viewCat(state.param);
       else if (state.view==='memberlist') html = viewMembersList(state.memberListFilter||(()=>true), state.memberListTitle||'Members');
+      else if (state.view==='familylist') html = viewFamilyList(state.familyListFilter||(()=>true), state.familyListTitle||'Households');
+      else if (state.view==='streetlist') html = viewStreetList();
       $('#content').innerHTML = html;
       $$('#nav .nav-item').forEach(a=>a.classList.toggle('active', a.dataset.view===state.view || (state.view==='detail'&&a.dataset.view==='families')||(state.view==='add'&&a.dataset.view==='add')));
       afterRender(state.view);

@@ -218,6 +218,21 @@ select.inp{appearance:none;background-image:linear-gradient(45deg,transparent 50
 .metric span{font-size:.86rem;color:var(--muted)}
 .metric b{font-family:var(--font-display);font-size:1.02rem;color:var(--text)}
 .metric.hi b{color:var(--accent);font-size:1.22rem}
+/* clickable dashboard numbers → member / household list */
+.metric.click{cursor:pointer;border-radius:10px;padding-left:10px;padding-right:10px;margin-left:-10px;transition:background .16s ease}
+.metric.click span{text-decoration:underline;text-decoration-color:transparent;text-underline-offset:3px;transition:text-decoration-color .16s ease,color .16s ease}
+.metric.click:hover{background:var(--accent-soft)}
+.metric.click:hover span{color:var(--accent);text-decoration-color:var(--accent)}
+.metric.click:hover b{color:var(--accent)}
+.metric.click:focus-visible,.pill[data-act]:focus-visible,.lnk:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:8px}
+.pill[data-act]{cursor:pointer;background:var(--accent-soft);color:var(--accent)}
+.pill[data-act]:hover{filter:brightness(1.12)}
+.lnk{cursor:pointer;color:var(--accent);font-family:var(--font-display);border-bottom:1px dashed currentColor}
+.lnk:hover{filter:brightness(1.15)}
+tr.clickable{cursor:pointer}
+tr.clickable:hover td{background:var(--accent-soft)}
+@media(hover:none){.metric.click:hover{background:transparent}.metric.click:hover span{color:var(--muted);text-decoration-color:transparent}.metric.click:hover b{color:var(--text)}tr.clickable:hover td{background:transparent}}
+@media(prefers-reduced-motion:reduce){.metric.click,.metric.click span{transition:none}}
 .split{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:14px}
 @media(max-width:640px){.split{grid-template-columns:1fr;gap:12px}}
 .split-col h3{font-family:var(--font-display);font-size:.8rem;text-transform:uppercase;letter-spacing:.06em;
