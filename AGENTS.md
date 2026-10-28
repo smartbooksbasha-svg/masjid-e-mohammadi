@@ -568,3 +568,13 @@ Open: wire Supabase keys; real OTP SMS later.
 - Placeholder ab neutral: `User ID ya email`; niche hint — "Apni User ID login ke baad **My Profile** me dikhti hai".
 - **My Profile → User ID** field ke saath **Copy** button (`data-act="copy-uid"`) — clipboard me ID, toast me bhi.
 - Tests **151 asserts green**. Cache `memc-app-v102`, commit `5f34f88`.
+
+## v103 — login autofill band + login card me version (2026-10-28)
+- Shan: "nakli id abhi bhi show ho raha hai" (v102 ke baad bhi). Do wajah ho sakti thi: (a) phone me purana
+  cache, (b) browser autofill purani value field me bhar deta hai (`autocomplete="username"`).
+- Fix: login input par `autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"`.
+- **Login card ke neeche version stamp** (`.auth-ver`, `${APP_VER}`) — ab login box me hi dikhta hai kaunsa code
+  chal raha hai; "cache pakda hua hai ya nahi" ka seedha proof.
+- Tests **153 asserts green**. Cache `memc-app-v103`, commit `e3bd3ae`.
+- NOTE: GitHub Pages CDN me ~1 minute lagta hai — deploy ke turant baad `curl` purana version deta hai; 25-45s
+  baad recheck karo (v103 par pehle check par v102 mila tha).

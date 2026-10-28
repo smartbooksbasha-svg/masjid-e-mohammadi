@@ -433,6 +433,55 @@ const wait = ms => new Promise(r => setTimeout(r, ms || 120));
   ok(uidInp.getAttribute('autocomplete') === 'off', 'login field par browser autofill band hai');
   ok(!!PH.doc.querySelector('.auth-ver'), 'login card me version stamp dikhta hai');
 
+  /* ---------------- 8e. v104 — QR edit, i18n switch, favicon, mobile ---------------- */
+  const Q = await boot({ admin: OWNER.email, admins: [OWNER], families: [{
+    id: 'MEMC-26K7Q2', houseName: 'QR House', houseNo: '5', street: 'Masjid Road', houseType: 'cement',
+    members: [{ name: 'Ali', relation: 'Self', gender: 'male', dob: '1990-01-01', marital_status: 'married', disability: 'no' }]
+  }] });
+  Q.win.eval("go('find')"); await wait(120);
+  Q.win.eval("renderFindResult({family:{id:'MEMC-26K7Q2',houseName:'QR House',street:'Masjid Road',houseType:'cement'},members:[]})");
+  await wait(80);
+  ok(!!Q.doc.querySelector('[data-act="find-edit"]'), 'admin ko QR result par Edit button milta hai');
+  ok(!!Q.doc.querySelector('[data-act="find-open"]'), 'admin ko Full record button bhi milta hai');
+  Q.win.eval("state.draft=null; DB.families()[0].houseName='QR House'");
+  Q.doc.querySelector('[data-act="find-edit"]').dispatchEvent(new Q.win.MouseEvent('click', { bubbles: true }));
+  await wait(150);
+  ok(Q.win.eval("state.view") === 'add' && /QR House/.test(Q.win.eval("JSON.stringify(state.draft||{})")), 'Edit dabane par household form khulta hai');
+  Q.win.eval("go('find')"); await wait(100);
+  Q.win.eval("renderFindResult({family:{id:'MEMC-26K7Q2',houseName:'QR House',street:'Masjid Road',houseType:'cement'},members:[]})");
+  await wait(60);
+
+  /* public ko edit button nahi */
+  const QP = await boot({ families: [{ id: 'MEMC-26K7Q2', houseName: 'QR House', street: 'Masjid Road', houseType: 'cement', members: [] }] });
+  QP.win.eval("go('find')"); await wait(120);
+  QP.win.eval("renderFindResult({family:{id:'MEMC-26K7Q2',houseName:'QR House',street:'Masjid Road',houseType:'cement'},members:[]})");
+  await wait(60);
+  ok(!QP.doc.querySelector('[data-act="find-edit"]'), 'public ko Edit button nahi milta');
+  ok(/privacy/i.test(QP.doc.querySelector('#findResult').textContent), 'public ko read-only privacy note dikhta hai');
+
+  /* language switch dobara kaam kare (delegated listener) */
+  const LG = await boot({ admin: OWNER.email, admins: [OWNER] });
+  const dashText = () => LG.doc.querySelector('#content').textContent;
+  LG.win.eval("setLang('en')"); await wait(150);
+  const lt1 = dashText();
+  LG.win.eval("setLang('hi')"); await wait(150);
+  const lt2 = dashText();
+  LG.win.eval("setLang('en')"); await wait(150);
+  const lt3 = dashText();
+  ok(lt1 !== lt2, 'English → Hinglish me text badalta hai');
+  ok(/Dashboard|Households|Add Household/.test(lt3), 'dobara English par wapas aata hai (listener zinda hai)');
+  ok(lt3 === lt1 || lt3.length === lt1.length, 'wapas English par wahi text aata hai');
+  LG.win.eval("setLang('ta')"); await wait(150);
+  ok(!/\b(hai|karo|nahi|aap)\b/.test(LG.doc.querySelector('#content').textContent), 'Tamil mode me Hinglish mix nahi');
+
+  /* favicon uploaded logo se banti hai */
+  LG.win.eval("DB.setLogo('data:image/png;base64,iVBORw0KGgo=') ; applyFavicon()");
+  const iconHref = (LG.doc.querySelector('link[rel="icon"]') || {}).getAttribute ? LG.doc.querySelector('link[rel="icon"]').getAttribute('href') : '';
+  ok(/^data:image\/png/.test(String(iconHref)), 'uploaded logo favicon ban jata hai');
+  LG.win.eval("DB.setLogo(''); applyFavicon()");
+  const iconBack = LG.doc.querySelector('link[rel="icon"]').getAttribute('href');
+  ok(!/^data:image\/png/.test(String(iconBack)), 'logo hataane par default icon wapas');
+
   /* ---------------- 9. backup round trip ---------------- */
   const backup = A.win.eval("JSON.stringify({ families:DB.families(), masjid:DB.masjid() })");
   ok(JSON.parse(backup).families.length === 1, 'backup payload contains households');

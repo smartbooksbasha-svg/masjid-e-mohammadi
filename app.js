@@ -687,7 +687,7 @@ const IDSET_DEFAULT = {
   famPrefix:'MEMC', famRandom:true        /* family id = MEMC-<yy><4 random> */
 };
 /* app version — footer/settings me dikhta hai, update confirm karne ke liye */
-const APP_VER = 'v103';
+const APP_VER = 'v104';
 const APP_VER_AT = '2026-10-28';
 
 /* password input + show/hide eye button */
@@ -804,7 +804,7 @@ function isEmail(v){ return /^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(String(v||'').t
 function authCard(inner){
   return `<div class="auth-wrap"><div class="auth-card" role="dialog" aria-modal="true">
     <button class="auth-x" type="button" data-act="close-auth" aria-label="Close">×</button>
-    <div class="auth-brand"><span class="crest">M</span><div><div class="t">${esc(CFG.ORG_NAME||'Masjid e Mohammadi')}</div><div class="s">${esc(CFG.ORG_SUB||'Khidmath Committee')}</div></div></div>
+    <div class="auth-brand"><span class="crest">${DB.logo() ? `<img src="${esc(DB.logo())}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:12px;display:block"/>` : 'M'}</span><div><div class="t">${esc(CFG.ORG_NAME||'Masjid e Mohammadi')}</div><div class="s">${esc(CFG.ORG_SUB||'Khidmath Committee')}</div></div></div>
     ${inner}
     <div class="auth-ver">${APP_VER}</div>
   </div></div>`;
@@ -842,7 +842,7 @@ function renderLogin(){
     <h1>Admin login</h1>
     <p class="lead">Sirf admin / super admin ke liye. Baaki sab public dashboard dekh sakte hain.</p>
     <form id="loginForm">
-      <div class="field"><label>User ID / Email ID</label><input class="inp" name="email" type="text" required autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="User ID ya email" /><span class="hint">Apni User ID login ke baad <b>My Profile</b> me dikhti hai — email se bhi login ho sakta hai.</span></div>
+      <div class="field"><label>User ID / Email ID</label><input class="inp" name="email" type="text" required autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="User ID ya email" /><span class="hint">Apni User ID login ke baad My Profile me dikhti hai — email se bhi login ho sakta hai.</span></div>
       <div class="field"><label>Password</label>${pwBox('<input class="inp" name="pass" type="password" required autocomplete="current-password" />')}</div>
       <div id="loginAlert"></div>
       <button class="btn block" type="submit">Login</button>
@@ -1467,6 +1467,23 @@ function navItems(){
          .concat(isOwner() ? [['audit','Audit log',ICON.list]] : []);
 }
 
+/* website icon = jo logo owner ne upload kiya (browser tab + home screen) */
+function applyFavicon(){
+  let logo = '';
+  try { logo = DB.logo() || ''; } catch(e){}
+  const defIcon = document.querySelector('link[rel="icon"]');
+  if (defIcon && !defIcon.dataset.def) defIcon.dataset.def = defIcon.getAttribute('href') || '';
+  const links = Array.from(document.querySelectorAll('link[rel="icon"], link[rel="shortcut icon"], link[rel="apple-touch-icon"]'));
+  links.forEach(l=>{
+    if (!l.dataset.def) l.dataset.def = l.getAttribute('href') || '';
+    l.setAttribute('href', logo || l.dataset.def);
+  });
+  try {
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta && !logo) meta.setAttribute('content', '#0e7c66');
+  } catch(e){}
+}
+
 function renderShell(){
   const u = currentUser();
   $('#nav').innerHTML = navItems().map(([v,label,ic])=>`<button type="button" class="nav-item" data-view="${v}" onclick="navTo('${v}');return false;">${ic}<span>${label}</span></button>`).join('');
@@ -1491,6 +1508,7 @@ function renderShell(){
           d=await compressImageDataURL(d,640,0.78); 
           DB.setLogo(d); 
           toast('Website logo updated'); 
+          applyFavicon();
           renderShell(); 
           go(state.view,state.param); 
         }; 
@@ -3073,6 +3091,9 @@ const I18N = {
     /* --- v93: ID & password format --- */
     'ID & password format':'ID & password format',
     'User ID ya email':'User ID or email',
+    'Isi ID ya apne email se login hota hai.':'Log in with this ID or your email.',
+    'Apni User ID login ke baad My Profile me dikhti hai — email se bhi login ho sakta hai.':'Your User ID is shown in My Profile after login — you can also log in with your email.',
+    'Site khud update hoti hai. Purana version dikh raha ho to neeche wala button dabao — cache saaf ho kar naya version khul jayega.':'The site updates itself. If you see an old version, press the button below — it clears the cache and loads the new version.',
     'User ID style':'User ID style',
     'Random (recommended)':'Random (recommended)',
     'Number series':'Number series',
@@ -3156,7 +3177,61 @@ const I18N = {
     'e.g. 60 bachche, 3 ustad':'e.g. 60 students, 3 teachers',
     '10-digit mobile':'10-digit mobile'
   },
+  /* Hinglish — jo strings English me likhi gayi hain unka Hinglish version.
+     (Baaki app ki source strings pehle se Hinglish hain, unka kuch nahi chahiye.) */
+  hi: {
+    'Aalim and Hafiz':'Aalim aur Hafiz',
+    'By Family ID':'Family ID se',
+    'By QR scan':'QR scan se',
+    'Children and students studying':'Bachche aur padhne wale students',
+    'Close':'Band karo',
+    'Committee jab survey save karegi, ye 6 categories bhar jaayengi — naam, phone aur pata kabhi public nahi hote.':'Jab committee survey save karegi, ye 6 categories bhar jaayengi — naam, phone aur pata kabhi public nahi hote.',
+    'Counts by occupation':'Kaam ke hisaab se ginti',
+    'Day':'Din',
+    'Documents & Govt. Schemes':'Documents aur Sarkari Yojana',
+    'Documents and scheme records':'Documents aur yojana ke record',
+    'Education':'Taleem',
+    'Enter a Family ID to view details (read-only).':'Detail dekhne ke liye Family ID daalo (sirf dekhne ke liye).',
+    'Enter a phone number or scan a QR — it shows that household only, read-only (no editing).':'Phone number daalo ya QR scan karo — sirf usi ghar ka record khulega, dekhne ke liye (edit nahi).',
+    'Family & Demographics':'Ghar aur Aabadi',
+    'Family ID':'Family ID',
+    'Find':'Dhoondo',
+    'Find family':'Family dhoondo',
+    'For admin / super admin only. Everyone else can use the public dashboard.':'Sirf admin / super admin ke liye. Baaki sab public dashboard dekh sakte hain.',
+    'Forgot password':'Password bhool gaye',
+    'Get in touch':'Rabta karo',
+    'Hide password':'Password chhupao',
+    'Household count, age and status':'Ghar ki ginti, umar aur status',
+    'Houses, streets and house type':'Ghar, galiyan aur ghar ka type',
+    'Language':'Bhasha',
+    'Location & Housing':'Jagah aur Ghar',
+    'Log in as admin to add photos in Masjid Profile.':'Masjid Profile me photo add karne ke liye admin se login karo.',
+    'Mohalla survey — every house, every person, education, work and religious service in one place.':'Mohalla survey — har ghar, har insaan, taleem, kaam aur deeni khidmat ek jagah.',
+    'My Profile':'Meri Profile',
+    'Occupations':'Kaam / Occupation',
+    'Only totals are public. Each household’s private detail stays with the committee admin.':'Public me sirf total dikhte hain. Har ghar ki private detail committee admin ke paas rehti hai.',
+    'Open menu':'Menu kholo',
+    'Read-only public view':'Public view (sirf dekhne ke liye)',
+    'Registered email ID':'Registered email ID',
+    'Registered email ID daalo aur password reset link milega.':'Registered email ID daalo, password reset ka link aa jayega.',
+    'Religious Education':'Deeni Taleem',
+    'Scan a QR from camera or gallery to open that Family ID.':'Camera ya gallery se QR scan karo — usi Family ID ka record khulega.',
+    'Scan from camera':'Camera se scan',
+    'Send reset code':'Reset link bhejo',
+    'Show password':'Password dikhao',
+    'Survey data is for committee records only · public view is read-only':'Survey data sirf committee ke record ke liye · public view sirf dekhne ke liye',
+    'This page is for admins only':'Ye page sirf admin ke liye hai',
+    'Upload QR image':'QR image upload karo',
+    'User ID or email':'User ID ya email',
+    'admin will add':'admin add karega',
+    'houses':'ghar',
+    'people working':'kaam karne wale',
+    'received scheme':'yojana mili',
+    'survey of the mohalla — every house, every person, education, work and religious service in one place.':'mohalle ka survey — har ghar, har insaan, taleem, kaam aur deeni khidmat ek jagah.',
+    '© 2026 Masjid e Mohammadi · Khidmath Committee — All rights reserved.':'© 2026 Masjid e Mohammadi · Khidmath Committee — saare haq surakshit.'
+  },
   ta: {
+    "Abhi kisi ka occupation nahi bhara — member form me \"Kaam / occupation\" likho (jaise Plumber).": 'இப்போது யாருடைய தொழிலும் பதிவாகவில்லை — உறுப்பினர் படிவத்தில் "வேலை / தொழில்" எழுதுங்கள் (உதா. Plumber).',
     'Audit log':'தணிக்கை பதிவு',
     'Kab kisne kya kiya':'யார் எப்போது என்ன செய்தார்',
     'Sab':'அனைத்தும்',
@@ -3309,6 +3384,91 @@ const I18N = {
     'Email link se login (password ke bina)':'மின்னஞ்சல் இணைப்பால் உள்நுழை (கடவுச்சொல் இல்லாமல்)',
     'Forgot password?':'கடவுச்சொல் / ஐடி மறந்துவிட்டதா?',
     'Create admin':'நிர்வாகி உருவாக்கு',
+    'Dashboard':'டாஷ்போர்டு',
+    'Households':'வீடுகள்',
+    'Add Household':'வீடு சேர்',
+    'Find family':'குடும்பத்தை தேடு',
+    'My Profile':'என் சுயவிவரம்',
+    'Masjid Profile':'மஸ்ஜித் விவரம்',
+    'ID Card Design':'ஐடி அட்டை வடிவமைப்பு',
+    'Administration':'நிர்வாகம்',
+    'Admins':'நிர்வாகிகள்',
+    'Public view':'பொது பார்வை',
+    'Language':'மொழி',
+    'Log out':'வெளியேறு',
+    'Day':'பகல்',
+    'Night':'இரவு',
+    'Save':'சேமி',
+    'Cancel':'ரத்து',
+    'Delete':'நீக்கு',
+    'Edit':'திருத்து',
+    'Search':'தேடு',
+    'Print':'அச்சிடு',
+    'Close':'மூடு',
+    '+ Add admin':'+ நிர்வாகி சேர்',
+    '10-digit mobile':'10 இலக்க மொபைல்',
+    '3 × 5 inch — portrait':'3 × 5 அங்குலம் — நெட்டை',
+    '5 × 3 inch — landscape (default)':'5 × 3 அங்குலம் — கிடை (இயல்பு)',
+    'Admin ID prefix':'நிர்வாகி ஐடி முன்னொட்டு',
+    'Admin ID start number (series style)':'நிர்வாகி ஐடி தொடக்க எண் (வரிசை முறை)',
+    'Admin ID suffix':'நிர்வாகி ஐடி பின்னொட்டு',
+    'Back side — Terms & Conditions':'பின் பக்கம் — விதிமுறைகள்',
+    'Back to public site':'பொது தளத்திற்கு திரும்பு',
+    'Background photo strength':'பின்னணி படத்தின் அளவு',
+    'Camera':'கேமரா',
+    'Card background photo':'அட்டை பின்னணி படம்',
+    'Card colour':'அட்டை நிறம்',
+    'Card size':'அட்டை அளவு',
+    'Change password':'கடவுச்சொல் மாற்று',
+    'Choose from gallery':'கேலரியில் இருந்து தேர்வு',
+    'Confirm new password':'புதிய கடவுச்சொல் உறுதி',
+    'Current password':'தற்போதைய கடவுச்சொல்',
+    'Family ID prefix':'குடும்ப ஐடி முன்னொட்டு',
+    'Family ID style':'குடும்ப ஐடி முறை',
+    'Footer — left':'கீழ் வரி — இடது',
+    'Footer — right':'கீழ் வரி — வலது',
+    'Gallery':'கேலரி',
+    'ID & password format':'ஐடி மற்றும் கடவுச்சொல் வடிவம்',
+    'ID-1 (85.6 × 54 mm)':'ID-1 (85.6 × 54 மிமீ)',
+    'Last updated':'கடைசி புதுப்பிப்பு',
+    'Logo & background':'லோகோ மற்றும் பின்னணி',
+    'Madrasa / maktab':'மதரஸா / மக்தப்',
+    'Masjid email':'மஸ்ஜித் மின்னஞ்சல்',
+    'Masjid photos':'மஸ்ஜித் புகைப்படங்கள்',
+    'New password':'புதிய கடவுச்சொல்',
+    'None':'இல்லை',
+    'Normal':'சாதாரண',
+    'Note / special remark':'குறிப்பு',
+    'Open designer':'வடிவமைப்பை திற',
+    'Password prefix':'கடவுச்சொல் முன்னொட்டு',
+    'Password suffix':'கடவுச்சொல் பின்னொட்டு',
+    'Preview card':'அட்டையை பார்',
+    'Registered':'பதிவு',
+    'Reset to default':'இயல்புக்கு மீட்டமை',
+    'Save ID format':'ஐடி வடிவத்தை சேமி',
+    'Save card design':'அட்டை வடிவமைப்பை சேமி',
+    'Save masjid details':'மஸ்ஜித் விவரங்களை சேமி',
+    'Super admin ID prefix':'சூப்பர் அட்மின் ஐடி முன்னொட்டு',
+    'Text size':'எழுத்து அளவு',
+    'Update password':'கடவுச்சொல்லை புதுப்பி',
+    'Updated':'புதுப்பிக்கப்பட்டது',
+    'Upload background':'பின்னணி படம் பதிவேற்று',
+    'Upload logo':'லோகோ பதிவேற்று',
+    'User ID / Email ID':'பயனர் ஐடி / மின்னஞ்சல்',
+    'User ID style':'பயனர் ஐடி முறை',
+    'View admins':'நிர்வாகிகளை பார்',
+    'Waqf / registration no.':'வக்ஃப் / பதிவு எண்',
+    'e.g. Masjid e Mohammadi':'எ.கா. மஸ்ஜித் ஏ முகம்மதி',
+    'each photo stays on this phone':'ஒவ்வொரு படமும் இந்த போனில் இருக்கும்',
+    'entries':'பதிவுகள்',
+    'User ID or email':'பயனர் ஐடி அல்லது மின்னஞ்சல்',
+    'Hide password':'கடவுச்சொல்லை மறை',
+    'Show password':'கடவுச்சொல்லை காட்டு',
+    'Masjid ka email ID':'மஸ்ஜித் மின்னஞ்சல்',
+    'Masjid ki tasveerein':'மஸ்ஜித் புகைப்படங்கள்',
+    'har photo phone me hi save hoti hai':'ஒவ்வொரு படமும் இந்த போனில் சேமிக்கப்படும்',
+    'Gallery se chuno':'கேலரியில் இருந்து தேர்வு',
+    'Note / khaas baat':'குறிப்பு',
     'New captcha':'புதிய கேப்ட்சா'
   }
 };
@@ -3329,13 +3489,21 @@ const _ORIGTXT = new WeakMap();                    // text node -> Hinglish sour
 const _ORIGATTR = new WeakMap();                   // element  -> {attr: Hinglish source}
 const _TR_ATTRS = ['placeholder','title','aria-label'];
 
+function trLookup(key){
+  const d = I18N[LANG] || {};
+  if (Object.prototype.hasOwnProperty.call(d, key)) return d[key];
+  /* Hinglish: jo pehle se Hinglish hai use waise hi rakho (en dict use NA karo, warna
+     Hinglish mode me sab English ho jata hai) */
+  if (LANG === 'hi') return '';
+  /* Tamil: missing string par English dikhao — aadha Tamil aadha Hinglish mix nahi */
+  if (LANG !== 'en' && I18N.en && Object.prototype.hasOwnProperty.call(I18N.en, key)) return I18N.en[key];
+  return '';
+}
+
 function tStr(s){
-  if (LANG === 'hi' || s == null) return s;
-  const key = _norm(s);
-  const hit = _DICT[LANG][key];
-  if (hit) return hit;
-  if (_REV[LANG][key]) return s;                   // already translated
-  return s;
+  if (s == null) return s;
+  const hit = trLookup(_norm(s));
+  return hit || s;
 }
 
 function langLabel(code){ const l = LANGS.find(x=>x[0]===code); return l ? l[1] : 'Hinglish'; }
@@ -3355,20 +3523,11 @@ function translateTree(root){
   const nodes = []; let n;
   while ((n = walker.nextNode())) nodes.push(n);
 
-  if (LANG === 'hi'){
-    nodes.forEach(node=>{ if (_ORIGTXT.has(node)) node.nodeValue = _ORIGTXT.get(node); });
-    base.querySelectorAll('[placeholder],[title],[aria-label]').forEach(el=>{
-      const o = _ORIGATTR.get(el); if (!o) return;
-      _TR_ATTRS.forEach(a=>{ if (o[a] != null) el.setAttribute(a, o[a]); });
-    });
-    return;
-  }
-
   nodes.forEach(node=>{
     if (!_ORIGTXT.has(node)) _ORIGTXT.set(node, node.nodeValue);
     const src = _ORIGTXT.get(node);
     const key = _norm(src);
-    const tr = _DICT[LANG][key];
+    const tr = trLookup(key);
     const next = tr ? src.replace(key, tr) : src;
     if (next !== node.nodeValue) node.nodeValue = next;
   });
@@ -3379,8 +3538,9 @@ function translateTree(root){
     _TR_ATTRS.forEach(a=>{
       const v = el.getAttribute(a); if (!v) return;
       if (o[a] == null) o[a] = v;
-      const tr = _DICT[LANG][_norm(o[a])];
+      const tr = trLookup(_norm(o[a]));
       if (tr && el.getAttribute(a) !== tr) el.setAttribute(a, tr);
+      else if (!tr && o[a] && el.getAttribute(a) !== o[a] && !trLookup(_norm(el.getAttribute(a)))) el.setAttribute(a, o[a]);
     });
   });
 
@@ -3978,6 +4138,12 @@ document.addEventListener('keydown', (e)=>{
   e.preventDefault(); el.click();
 });
 
+document.addEventListener('change', (e)=>{
+  const sel = e.target && e.target.closest && e.target.closest('#langSel');
+  if (!sel) return;
+  setLang(sel.value);
+});
+
 document.addEventListener('click', (e)=>{
   const el = e.target.closest('[data-act]'); if(!el) return;
   const act = el.dataset.act;
@@ -4158,6 +4324,15 @@ document.addEventListener('click', (e)=>{
     if (!isOwner()){ toast('Sirf owner reject kar sakta hai','err'); return; }
     const admins = DB.admins().filter(x=>String(x.userId||'').toLowerCase()!==String(id).toLowerCase() && String(x.email).toLowerCase()!==String(id).toLowerCase());
     DB.setAdmins(admins); toast('Request reject ho gayi'); go('users'); return;
+  }
+  if (act==='find-edit' || act==='find-open'){
+    if (!isAdmin()){ toast('Ye sirf admin kar sakta hai','err'); return; }
+    const f = DB.families().find(x=>String(x.id)===String(id));
+    if (!f){ toast('Ye record is device par nahi hai — pehle cloud se sync karo','err'); return; }
+    if (act==='find-open'){ go('detail', f.id); return; }
+    state.draft = JSON.parse(JSON.stringify(f));
+    go('add');
+    return;
   }
   if (act==='copy-uid'){
     const u = currentUser();
@@ -5484,16 +5659,15 @@ function init(){
       return;
     }
   } catch(e){}
-  try {
-    const sel = $('#langSel');
-    if (sel){ sel.value = LANG; sel.addEventListener('change', ()=> setLang(sel.value)); }
-  } catch(e){}
+  /* language select ka listener document par delegated hai (neeche) — renderShell select dobara
+     banata hai, isliye element par lagane se dusri baar switch kaam nahi karta tha */
   // Don't auto-login on refresh - always show public dashboard first
   // Backup burger handler
   try {
     const b = $('#burger');
     if (b){ b.onclick = ()=>{ const s=$('#sidebar'); const sc=$('#scrimNav'); if(s) s.classList.add('open'); if(sc) sc.classList.add('show'); }; }
   } catch(e){}
+  try { applyFavicon(); } catch(e){}
   enterApp();   // public dashboard pehle — login optional
   /* direct admin link: #login (ya #admin) → seedha login box khulta hai */
   try {
@@ -5726,7 +5900,12 @@ function renderFindResult(res){
         <div class="row"><span>Street</span><span>${esc(fam.street||'—')}</span></div>
         <div class="row"><span>House type</span><span>${esc(labelOf(HOUSE_TYPES, houseTypeKey(fam.houseType)))}</span></div>
       </div>
-      <div class="alert info small" style="margin-top:12px">Phone number aur address nahi dikhaya gaya (privacy). Ye view sirf dikhata hai, edit nahi kar sakte.</div>
+      ${isAdmin()
+        ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+             <button class="btn sm" data-act="find-edit" data-id="${esc(fam.id||'')}">Edit household</button>
+             <button class="btn ghost sm" data-act="find-open" data-id="${esc(fam.id||'')}">Full record</button>
+           </div>`
+        : `<div class="alert info small" style="margin-top:12px">Phone number aur address nahi dikhaya gaya (privacy). Ye view sirf dikhata hai, edit nahi kar sakte.</div>`}
       <div class="sec-title" style="margin-top:16px">Members</div>
       <div class="table-wrap"><table><thead><tr><th>#</th><th>Name</th><th>Relation</th><th>Gender</th><th>Age</th><th>Education</th><th>Occupation</th><th>Deeni</th><th>Marital</th><th>Challenged</th></tr></thead><tbody>${rows||'<tr><td colspan="10" class="muted">No members</td></tr>'}</tbody></table></div>
     </div>
