@@ -238,3 +238,26 @@ Open: wire Supabase keys; real OTP SMS later.
 - sw cache `memc-app-v23`. Smoke **176/176** (security payload, XSS, CSP/SQL asserts, PBKDF2 + lockout).
 - ⚠️ Trap: `applyTheme()` load par turant chalta hai — `ICON` const uske baad define hota hai,
   isliye theme icons `ICON_SUN`/`ICON_MOON` (applyTheme se pehle) use karo, warna app boot par crash.
+
+## v79 — every dashboard number is clickable (2026-10-28)
+- Shan: "total students click karne par jo aata hai, waisa hi baaqi sab me karo".
+  Ab **saare** dashboard metrics list kholte hain — sirf education/deeni nahi.
+- Pattern (app.js): `metric(label, val, {f:'filterKey', act:'mlist|flist|slist', title})`
+  → div me `data-act` + `data-f` + `data-title`; click delegation branch
+  `act==='mlist'|'flist'` → `openList()` → `go('memberlist'|'familylist')`.
+- Registries: `window.MF` (member filters, `mf(fn)` wrapper deceased ko hata deta hai),
+  `window.MFD` (parameterised: `doc:k`, `nodoc:k`, `scheme:k`, `occupation:Name`,
+  `house:moulding`, `street:Name`), `window.FF` logic inline `resolveFamilyFilter()`.
+- Naye views: `viewMembersList` (Name/Age/Gender/Family ID/Street/View),
+  `viewFamilyList` (Family ID/House/Street/House No/Type/Members/View),
+  `viewStreetList` (street table, row → us street ke ghar). Routes + titles dono
+  jagah add karo (go() aur popstate handler) — ek chhoot gaya to back button tut jaata hai.
+- Har filter computeStats ki exact definition follow karta hai (eduKey + age<26,
+  marital `!== married` = unmarried, religious aalim/both, `memberSchemes().length`),
+  warna number aur list ka count mismatch hota hai. Deceased har filter se bahar.
+- Keyboard: `role=button` + `tabindex=0` + global keydown (Enter/Space) handler.
+- CSS: `.metric.click` hover, `tr.clickable:hover`, `.lnk`, `.pill[data-act]`,
+  `@media(hover:none)` reset.
+- `window.navTo` ke debug `alert()` hata diye (2 alert per sidebar click).
+- sw cache `memc-app-v79`. Headless jsdom proof: **72/72** — har metric click karke
+  list rows == dashboard number match kiya (`$TMPDIR/zyvo/zycount/count-smoke.js`).

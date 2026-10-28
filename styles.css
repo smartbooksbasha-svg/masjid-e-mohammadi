@@ -361,6 +361,15 @@ td .mono{font-family:var(--font-display);font-weight:600;color:var(--accent)}
 
 
 /* ---------- member document pills ---------- */
+/* documents picker (hidden until "+ Add document") */
+.docs-pick{margin-top:12px;padding:12px;border:1px dashed var(--accent);border-radius:var(--r-lg);background:var(--accent-soft)}
+.dp-head{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:.82rem;font-weight:600;color:var(--text);flex-wrap:wrap}
+.dp-chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.dp-chips button{padding:8px 12px;border-radius:999px;border:1px solid var(--line);background:var(--surface);
+  color:var(--text);font-size:.82rem;font-weight:600;cursor:pointer;min-height:38px;transition:background .15s ease,border-color .15s ease,color .15s ease}
+.dp-chips button:hover,.dp-chips button:focus-visible{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.empty-mini{padding:12px 14px;border:1px dashed var(--line);border-radius:var(--r-sm);color:var(--muted);font-size:.84rem}
+@media(hover:none){.dp-chips button:hover{background:var(--surface);color:var(--text);border-color:var(--line)}}
 .doc-pills{display:flex;flex-wrap:wrap;gap:8px;margin-top:2px}
 .doc-pills button{
   border:1px solid var(--line);background:var(--surface-2);color:var(--muted);

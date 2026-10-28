@@ -1578,6 +1578,22 @@ function openList(kind, key, title){
   }
 }
 
+window.filterRows = function(q, tableSel){
+  try {
+    const t = String(q||'').toLowerCase().trim();
+    const table = document.querySelector(tableSel);
+    if (!table) return;
+    let shown = 0;
+    Array.from(table.querySelectorAll('tbody tr')).forEach(tr=>{
+      const hit = !t || tr.textContent.toLowerCase().includes(t);
+      tr.style.display = hit ? '' : 'none';
+      if (hit) shown++;
+    });
+    const head = table.closest('.card').querySelector('.ph-count');
+    if (head) head.textContent = shown;
+  } catch(e){}
+};
+
 function viewFamilyList(filterFn, title){
   const fams = DB.families().filter(filterFn);
   const rows = fams.map(f=>{
@@ -1595,7 +1611,8 @@ function viewFamilyList(filterFn, title){
     <div class="page-head"><div><h1>${esc(title)}</h1><p>${fams.length} household(s) found</p></div>
       <button class="btn ghost sm" data-act="goto" data-view="dashboard">← Back to Dashboard</button></div>
     <div class="card">
-      ${fams.length ? `<div class="table-wrap"><table><thead><tr><th>Family ID</th><th>House</th><th>Street</th><th>House No</th><th>House type</th><th>Members</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`
+      ${fams.length ? `<div class="field" style="max-width:340px;margin-bottom:12px"><input class="inp" type="search" placeholder="Family ID / ghar / street se dhoondo…" oninput="filterRows(this.value,'#flistTable')" /></div>
+      <div class="table-wrap"><table id="flistTable"><thead><tr><th>Family ID</th><th>House</th><th>Street</th><th>House No</th><th>House type</th><th>Members</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`
                    : '<div class="empty"><h3>No households found</h3></div>'}
     </div>`;
 }
@@ -1618,7 +1635,8 @@ function viewMembersList(filterFn, title){
     <div class="page-head"><div><h1>${esc(title)}</h1><p>${arr.length} member(s) found</p></div>
       <button class="btn ghost sm" data-act="goto" data-view="dashboard">← Back to Dashboard</button></div>
     <div class="card">
-      ${arr.length ? `<div class="table-wrap"><table><thead><tr><th>Name</th><th>Age</th><th>Gender</th><th>Family ID</th><th>Street</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>` : '<div class="empty"><h3>No members found</h3></div>'}
+      ${arr.length ? `<div class="field" style="max-width:340px;margin-bottom:12px"><input class="inp" type="search" placeholder="Naam ya Family ID se dhoondo…" oninput="filterRows(this.value,'#mlistTable')" /></div>
+      <div class="table-wrap"><table id="mlistTable"><thead><tr><th>Name</th><th>Age</th><th>Gender</th><th>Family ID</th><th>Street</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>` : '<div class="empty"><h3>No members found</h3></div>'}
     </div>`;
 }
 
@@ -1919,6 +1937,7 @@ function streetOptions(current){
 }
 
 function viewFamilyForm(){
+  state.docsOpen = false;
   if (!state.draft) {
     // try draft
     if (isAdmin() && !state.param){
@@ -1962,7 +1981,7 @@ function viewFamilyForm(){
           ${editing
             ? `<input class="inp" value="${esc(d.id)}" readonly />`
             : `<input class="inp" data-field="customId" value="${esc(d.customId||'')}" placeholder="Auto: ${esc(previewFamilyId())}" />
-               <span class="hint">Enter custom ID or leave empty MEMC-2026-000101), warna system khud de dega. QR will be generated from this ID.</span>`}
+               <span class="hint">Custom ID likho ya khaali chhod do — system khud ID de dega. QR isi ID se banta hai.</span>`}
         </div>
         <div class="field" style="margin-top:12px"><label>Address / landmark</label><input class="inp" data-field="address" value="${esc(d.address)}" placeholder="Mohalla, gali, landmark" /></div>
         <div class="field" style="margin-top:12px"><label>Notes (optional)</label><textarea class="inp" data-field="notes" placeholder="Any remark about this household">${esc(d.notes)}</textarea></div>
@@ -1974,18 +1993,21 @@ function viewFamilyForm(){
 
       <div class="sec-title">Documents held</div>
       <div class="card">
-        <p class="muted small" style="margin-bottom:12px">Mark Yes / No for each document.</p>
-        <div class="doc-grid">
-          ${DOC_TYPES.map(([k,label])=>docRow(label, d.docs[k], k, null)).join('')}
-        </div>
-        <div class="sec-title" style="font-size:14px;margin-top:16px">Additional Documents</div>
+        <p class="muted small" style="margin-bottom:12px">Jo document ghar ke paas hai wahi list me dikhega. Naya add karne ke liye "+ Add document" dabao.</p>
+        <div id="docsList"></div>
+        <div id="docsPicker"></div>
+        <button type="button" class="btn ghost sm" data-act="add-doc" style="margin-top:12px">+ Add document</button>
+
+        <div class="sec-title" style="font-size:14px;margin-top:18px">Additional Documents</div>
+        <p class="muted small" style="margin-bottom:8px">Jo list me nahi hai (jaise Caste Certificate) — yahan apne naam se add karo.</p>
         <div id="customDocsList"></div>
-        <button type="button" class="btn ghost sm" data-act="add-custom-doc" style="margin-top:10px">+ Add document</button>
+        <button type="button" class="btn ghost sm" data-act="add-custom-doc" style="margin-top:10px">+ Add custom document</button>
       </div>
 
       <div id="formAlert" style="margin-top:14px"></div>
       <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap">
         <button class="btn" type="submit">${editing?'Save changes':'Save & generate Family ID'}</button>
+        ${editing?'':'<button class="btn ghost" type="button" data-act="save-next">Save &amp; add another</button>'}
         <button class="btn ghost" type="button" data-act="goto" data-view="families">Cancel</button>
       </div>
     </form>`;
@@ -1999,12 +2021,36 @@ function docRow(label, value, key, _x){
   return `<div class="doc-row"><span class="nm">${esc(label)}</span>${segHTML(value,key)}</div>`;
 }
 
+/* documents: sirf jo mark hain wahi dikhte hain, baaki picker me */
+function renderDocs(){
+  const list = $('#docsList'); if (!list || !state.draft) return;
+  const d = state.draft; d.docs = d.docs || {};
+  const on = DOC_TYPES.filter(([k])=> d.docs[k]==='yes');
+  list.innerHTML = on.length
+    ? `<div class="doc-grid">${on.map(([k,l])=>`
+        <div class="doc-row"><span class="nm">${esc(l)}</span>
+          <button type="button" class="btn ghost sm" data-act="unpick-doc" data-key="${esc(k)}" style="color:var(--danger)">Remove</button>
+        </div>`).join('')}</div>`
+    : `<div class="empty-mini">Abhi koi document add nahi hua.</div>`;
+
+  const pick = $('#docsPicker');
+  if (!pick) return;
+  if (!state.docsOpen){ pick.innerHTML = ''; return; }
+  const rest = DOC_TYPES.filter(([k])=> d.docs[k]!=='yes');
+  pick.innerHTML = rest.length
+    ? `<div class="docs-pick">
+         <div class="dp-head">Kaunsa document add karna hai? <button type="button" class="btn ghost sm" data-act="close-docs">Close</button></div>
+         <div class="dp-chips">${rest.map(([k,l])=>`<button type="button" data-act="pick-doc" data-key="${esc(k)}">+ ${esc(l)}</button>`).join('')}</div>
+       </div>`
+    : `<div class="docs-pick"><div class="dp-head">Saare documents already add ho chuke hain. <button type="button" class="btn ghost sm" data-act="close-docs">Close</button></div></div>`;
+}
+
 function renderCustomDocs(){
   const wrap = $('#customDocsList'); if(!wrap || !state.draft) return;
   if(!Array.isArray(state.draft.custom)) state.draft.custom = [];
-  if(state.draft.custom.length === 0) { 
-    wrap.innerHTML = '<div class="muted small" style="margin-top:6px">Koi additional document nahi add kiya gaya. Neeche button se add karo.</div>'; 
-    return; 
+  if(state.draft.custom.length === 0) {
+    wrap.innerHTML = '<div class="empty-mini">Koi additional document nahi.</div>';
+    return;
   }
   wrap.innerHTML = state.draft.custom.map((c,i)=>`
     <div class="member-card" style="margin-top:10px;padding:12px">
@@ -2972,7 +3018,7 @@ document.addEventListener('click', (e)=>{
   if (act==='drive-backup'){ backupToDrive(); return; }
   if (act==='view-family'){ go('detail', id); return; }
   if (act==='detail'){ go('detail', id); return; }
-  if (act==='edit-family'){ const f=DB.families().find(x=>x.id===id); if(f){ state.draft = JSON.parse(JSON.stringify(f)); state.draft.docs = Object.assign(Object.fromEntries(DOC_TYPES.map(d=>[d[0],'no'])), state.draft.docs||{}); state.draft.custom = padCustom(state.draft.custom); if(!state.draft.houseType) state.draft.houseType='moulding'; go('add', id); } return; }
+  if (act==='edit-family'){ const f=DB.families().find(x=>x.id===id); if(f){ state.draft = JSON.parse(JSON.stringify(f)); state.draft.docs = Object.assign(Object.fromEntries(DOC_TYPES.map(d=>[d[0],'no'])), state.draft.docs||{}); state.draft.custom = normCustom(state.draft.custom); if(!state.draft.houseType) state.draft.houseType='moulding'; go('add', id); } return; }
   if (act==='del-family'){ if(confirm('Delete this household record permanently?')){
     DB.setFamilies(DB.families().filter(f=>f.id!==id));
     if (SYNC.on() && isAdmin()) SYNC.delFamily(id);
@@ -3014,6 +3060,44 @@ document.addEventListener('click', (e)=>{
     }
     renderMembers(); return; 
   }
+  if (act==='save-next'){
+    const f = $('#famForm');
+    if (!f) return;
+    state.saveNext = true;
+    if (typeof f.requestSubmit === 'function') f.requestSubmit();
+    else saveFamily();
+    return;
+  }
+  if (act==='add-doc'){
+    if(!state.draft) return;
+    state.docsOpen = true;
+    renderDocs();
+    return;
+  }
+  if (act==='close-docs'){
+    state.docsOpen = false;
+    renderDocs();
+    return;
+  }
+  if (act==='pick-doc'){
+    if(!state.draft) return;
+    const k = el.dataset.key; if(!k) return;
+    state.draft.docs = state.draft.docs || {};
+    state.draft.docs[k] = 'yes';
+    state.docsOpen = false;
+    renderDocs();
+    try { saveFormDraft(); } catch(ex){}
+    return;
+  }
+  if (act==='unpick-doc'){
+    if(!state.draft) return;
+    const k = el.dataset.key; if(!k) return;
+    state.draft.docs = state.draft.docs || {};
+    state.draft.docs[k] = 'no';
+    renderDocs();
+    try { saveFormDraft(); } catch(ex){}
+    return;
+  }
   if (act==='add-custom-doc'){
     if(!state.draft) return;
     if(!Array.isArray(state.draft.custom)) state.draft.custom = [];
@@ -3030,19 +3114,6 @@ document.addEventListener('click', (e)=>{
       state.draft.custom.splice(ci,1);
       renderCustomDocs();
       try { saveFormDraft(); } catch(ex){}
-    }
-    return;
-  }
-  if (act==='toggle-custom-docs'){
-    const wrap = $('#customDocsWrap');
-    if(wrap){
-      if(wrap.style.display === 'none' || wrap.style.display === ''){
-        wrap.style.display = 'block';
-        el.textContent = '- Hide documents';
-      } else {
-        wrap.style.display = 'none';
-        el.textContent = '+ Add more documents';
-      }
     }
     return;
   }
@@ -3199,7 +3270,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
 /* ---------------- render side-effects ---------------- */
 function afterRender(view){
-  if (view==='add' && state.draft){ renderMembers(); try { renderCustomDocs(); } catch(e){} }
+  if (view==='add' && state.draft){ renderMembers(); try { renderDocs(); } catch(e){} try { renderCustomDocs(); } catch(e){} }
   if (view==='detail'){ const f=DB.families().find(x=>x.id===state.param); const box=$('#qrBox'); if(f&&box){
     try {
       const url = location.origin + location.pathname + '#qedit=' + encodeURIComponent(f.id);
@@ -3264,8 +3335,10 @@ function clearFormDraft(){
 
 function saveFamily(){
   const d = state.draft, u = currentUser();
+  const andNext = !!state.saveNext;
+  state.saveNext = false;
   const alertBox = $('#formAlert');
-  const fail = (msg)=>{ if(alertBox) alertBox.innerHTML='<div class="alert err">'+esc(msg)+'</div>'; window.scrollTo({top:0,behavior:'smooth'}); };
+  const fail = (msg)=>{ state.saveNext = false; if(alertBox) alertBox.innerHTML='<div class="alert err">'+esc(msg)+'</div>'; window.scrollTo({top:0,behavior:'smooth'}); };
   if (!String(d.street||'').trim()) return fail('Street name is required (section 1).');
   if (!String(d.houseName||'').trim()) return fail('Household / head name is required.');
   const members = d.members.filter(m=> (m.name||'').trim());
@@ -3275,6 +3348,7 @@ function saveFamily(){
   d.street = d.street.trim();
   d.houseType = d.houseType || 'moulding';
   d.members = members;
+  d.custom = normCustom(d.custom);
   const fams = DB.families();
   if (d.id){
     const i = fams.findIndex(f=>f.id===d.id);
@@ -3300,6 +3374,14 @@ function saveFamily(){
   if (SYNC.on() && isAdmin()){
     SYNC.saveFamily(d).then(ok=>{ if (!ok) toast('Cloud me save nahi hua — baad me retry karega','err'); });
   }
+  if (andNext){
+    const nd = blankDraft();
+    nd.street = d.street; nd.houseType = d.houseType;
+    state.draft = nd; state.docsOpen = false;
+    toast('Saved — next household ke liye form ready');
+    go('add');
+    return;
+  }
   toast(wasNew ? 'Household saved — ID generated' : 'Changes saved');
   go('detail', d.id);
 }
@@ -3311,10 +3393,13 @@ function nextFamilyId(membersCount){
   const fm = pad(Number(membersCount)||0, 2);
   return year + formNo + 'FM' + fm;
 }
-function padCustom(custom){
-  const arr = Array.isArray(custom) ? custom.slice(0,CUSTOM_DOCS) : [];
-  while (arr.length < CUSTOM_DOCS) arr.push({label:'', value:'no'});
-  return arr;
+/* custom documents: khaali rows kabhi store/ dikhaye nahi jaate */
+function normCustom(custom){
+  const arr = Array.isArray(custom) ? custom : [];
+  return arr
+    .filter(c => c && String(c.label||'').trim())
+    .slice(0, CUSTOM_DOCS)
+    .map(c => ({ label:String(c.label).trim().slice(0,60), value:c.value==='yes'?'yes':'no' }));
 }
 
 /* ============================================================
@@ -3822,7 +3907,7 @@ function loadSample(){
   sample.forEach((s,i)=>{
     const id = nextFamilyId(state.draft && state.draft.members ? state.draft.members.length : 0);
     const docs = {}; DOC_TYPES.forEach(([k],idx)=>{ docs[k] = (idx % 2 === 0 && i % 2 === 0) ? 'yes' : 'no'; });
-    fams.push(Object.assign({ id, createdAt:Date.now()- (sample.length-i)*86400000, createdBy:'sample', notes:'Sample record', docs, custom:padCustom([]) }, s));
+    fams.push(Object.assign({ id, createdAt:Date.now()- (sample.length-i)*86400000, createdBy:'sample', notes:'Sample record', docs, custom:[] }, s));
   });
   DB.setFamilies(fams);
 }
