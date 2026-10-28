@@ -18,3 +18,10 @@ Plan/notes: AGENTS.md (v103 tak), PROJECT_PLAN.md, PRD.md
 
 ## NOW:
 Step 1 — QR scan edit option
+
+## v104 — DONE (2026-10-28, commit 98176fe, cache memc-app-v104)
+- [x] QR find-result admin Edit + Full record buttons
+- [x] i18n audit tools + 0 leftovers (en/hi/ta)
+- [x] Uploaded logo → site favicon + auth crest (applyFavicon)
+- [x] Mobile 360/380px text + table layout pass
+- [x] Tests 164 green, deployed + verified live

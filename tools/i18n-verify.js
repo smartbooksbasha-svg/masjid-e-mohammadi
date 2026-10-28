@@ -50,6 +50,11 @@ async function run(lang) {
         const stillHinglish = win.eval('(function(k){return !!(I18N.en&&Object.prototype.hasOwnProperty.call(I18N.en,k));})(' + JSON.stringify(key) + ')');
         if (stillHinglish) bad.set(key, (bad.get(key) || new Set()).add(label));
       }
+      if (lang === 'ur') {
+        /* Urdu: koi string English par fall back na kare (ur dict poora hona chahiye) */
+        const fellBack = win.eval('(function(k){return !!(I18N.en&&Object.prototype.hasOwnProperty.call(I18N.en,k)&&!(I18N.ur&&Object.prototype.hasOwnProperty.call(I18N.ur,k)));})(' + JSON.stringify(key) + ')');
+        if (fellBack) bad.set(key, (bad.get(key) || new Set()).add(label));
+      }
       if (lang === 'hi') {
         const isEnValue = win.eval('(function(k){var o=I18N.en||{};for(var p in o){if(o[p]===k)return true;}return false;})(' + JSON.stringify(key) + ')');
         const isEnKey = win.eval('(function(k){return !!(I18N.en&&Object.prototype.hasOwnProperty.call(I18N.en,k));})(' + JSON.stringify(key) + ')');
@@ -64,7 +69,7 @@ async function run(lang) {
 
 (async () => {
   let total = 0;
-  for (const lang of ['en', 'hi', 'ta']) {
+  for (const lang of ['en', 'hi', 'ta', 'ur']) {
     const bad = await run(lang);
     total += bad.size;
     console.log('\n=== ' + lang + ': ' + bad.size + ' leftover ===');

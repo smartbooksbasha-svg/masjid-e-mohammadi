@@ -474,6 +474,17 @@ const wait = ms => new Promise(r => setTimeout(r, ms || 120));
   LG.win.eval("setLang('ta')"); await wait(150);
   ok(!/\b(hai|karo|nahi|aap)\b/.test(LG.doc.querySelector('#content').textContent), 'Tamil mode me Hinglish mix nahi');
 
+  /* Urdu (v105) — RTL + poora translation */
+  const UR = await boot({ admin: OWNER.email, admins: [OWNER] });
+  UR.win.eval("setLang('ur')"); await wait(200);
+  ok(UR.doc.documentElement.getAttribute('dir') === 'rtl', 'Urdu select karne par layout RTL ho jata hai');
+  ok(/[\u0600-\u06FF]/.test(UR.doc.querySelector('#content').textContent), 'Urdu mode me Urdu script text dikhta hai');
+  ok(!/\b(hai|karo|nahi|aap|hain)\b/.test(UR.doc.querySelector('#content').textContent), 'Urdu mode me Hinglish mix nahi');
+  ok(!!UR.doc.querySelector('#langSel option[value="ur"]'), 'language list me Urdu option hai');
+  ok(UR.win.eval("Object.keys(I18N.ur).length") === UR.win.eval("Object.keys(I18N.en).length"), 'Urdu dictionary English ke barabar hai (koi key chhooti nahi)');
+  UR.win.eval("setLang('en')"); await wait(200);
+  ok(UR.doc.documentElement.getAttribute('dir') === 'ltr', 'English par layout wapas LTR');
+
   /* favicon uploaded logo se banti hai */
   LG.win.eval("DB.setLogo('data:image/png;base64,iVBORw0KGgo=') ; applyFavicon()");
   const iconHref = (LG.doc.querySelector('link[rel="icon"]') || {}).getAttribute ? LG.doc.querySelector('link[rel="icon"]').getAttribute('href') : '';

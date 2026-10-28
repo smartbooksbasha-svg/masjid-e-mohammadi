@@ -578,3 +578,22 @@ Open: wire Supabase keys; real OTP SMS later.
 - Tests **153 asserts green**. Cache `memc-app-v103`, commit `e3bd3ae`.
 - NOTE: GitHub Pages CDN me ~1 minute lagta hai — deploy ke turant baad `curl` purana version deta hai; 25-45s
   baad recheck karo (v103 par pehle check par v102 mila tha).
+
+## v104 (2026-10-28) — site icon + mobile text pass
+- **Website icon = uploaded logo**: `applyFavicon()` (app.js, right above `renderShell`) rewrites every
+  `link[rel=icon]`, `shortcut icon`, `apple-touch-icon` href to `DB.logo()` data URL; original href kept in
+  `dataset.def` so removing the logo restores defaults. Called on boot (`init`) and right after logo upload
+  (sidebar crest click → owner only). Auth card crest (`#authCard .crest`) also renders the logo image, else "M".
+- `index.html` favicon links: `icons/favicon-32.png`, `icons/favicon-16.png`, `icons/favicon.ico`,
+  `icons/apple-touch-icon-180.png` — the inline SVG data-URL "M" was REMOVED (it was overriding PNGs).
+- **Mobile text/layout pass** (styles.css tail, `@media(max-width:640px)` + `380px`): `overflow-wrap:anywhere` on
+  `.mono`/`td`/`.kv`/audit text (long IDs like `AD102026#21200` no longer bleed out), tables shrink to
+  `min-width:100%` with wrapped cells instead of side-scroll, `.kv .row` wraps, buttons `white-space:normal`
+  + 42px min tap, inputs `font-size:16px` (stops iOS zoom), topbar title ellipsis, tighter card padding.
+- Tamil dict: missing key `Abhi kisi ka occupation nahi bhara — …` added (dashboard occupation-empty hint was
+  the last Hinglish leftover in `ta`). `tools/i18n-verify.js` → 0 leftovers in all 3 languages.
+- Tests: **164 asserts** (`npm test`). New: QR find-result Edit/Full-record buttons (admin) vs read-only
+  privacy note (public), language switch en→hi→en→ta (delegated `#langSel` listener stays alive), favicon
+  follows logo and reverts when logo cleared.
+- ⚠️ Test var collisions: `t1/t2/t3` were already declared — prefix new ones (`lt1…`).
+- Cache `memc-app-v104`, `APP_VER='v104'`, commit `98176fe`, live verified (app.js + sw.js both v104).
