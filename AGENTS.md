@@ -308,3 +308,19 @@ Open: wire Supabase keys; real OTP SMS later.
 - Rule: kisi bhi bucket ka label ek hi source se aaye — computeStats aur memberSchemes() kabhi
   alag string na banayein, warna count aur list mismatch hoti hai.
 - Suites: schemes 17, counts 72, scan 167, docs 21, features 12 — green. Cache `memc-app-v84`, commit `39e1aac`.
+
+## v85 — pura English i18n pass (2026-10-28)
+- Problem: English select karne par bhi kai jagah Hinglish reh jaata tha (dashboard units, masjid profile,
+  form hints, documents picker, toasts/dialogs).
+- Fix 1 (dict): `I18N.en` me ~140 naye keys — dashboard colours/units (`ghar`, `log kaam par`, `scheme li`),
+  category subs (`Ghar, raste aur makan ki qism`…), masjid profile labels/placeholders, form hints,
+  documents picker, aur saare runtime toasts/errors (`Sirf owner`, `Kam se kam 6 characters.`…).
+- Fix 2 (markup): jahan Hinglish kisi translated value ke saath ek hi text node me chipka tha, use alag
+  `<span>` me toda — `viewCat` sub + `·`, masjid photo count + hint, backup reminder suffix.
+  Rule: **ek text node = ek translatable string**; `${esc(x)} — hinglish` kabhi ek node me na likho.
+- Fix 3 (native dialogs): `confirm()` DOM nahi hota, isliye `tStr()` se wrap kiya (admin delete,
+  restore warning). Dynamic fragments (`din pehle backup liya`, `QR mila`, `Restore ho gaya`) bhi `tStr()`.
+- Metric `title` se `— list dekho` suffix hataya (26 attribute keys ban rahe the); title ab plain.
+- Naya test: `i18n-smoke.js` (38 asserts) — English mode me dashboard/masjid/form par Hinglish
+  nahi bachna chahiye + `tStr()` + Tamil render. `i18n-scan.js` (admin/public scan) = 0 real leftovers.
+- Suites: i18n 38, schemes 17, counts 72, scan 167, docs 21, features 12 — green. Cache `memc-app-v85`, commit `357e2ce`.

@@ -108,6 +108,16 @@ select.inp{appearance:none;background-image:linear-gradient(45deg,transparent 50
 .g3{grid-template-columns:repeat(3,1fr)}
 @media(max-width:720px){.g2,.g3{grid-template-columns:1fr}}
 
+/* ---------- admin login = modal (v86) ---------- */
+#authScreen:not(.hidden){position:fixed;inset:0;z-index:120;display:grid;place-items:center;
+  padding:var(--s4);background:rgba(4,12,8,.58);backdrop-filter:blur(9px);overflow:auto}
+.auth-wrap{min-height:0;padding:0;display:block;width:100%;max-width:470px}
+.auth-card{box-shadow:0 30px 70px rgba(0,0,0,.35)}
+.auth-x{position:absolute;top:12px;right:12px;width:34px;height:34px;border-radius:10px;border:1px solid var(--line);
+  background:var(--surface-2);color:var(--muted);font-size:1.15rem;line-height:1;display:grid;place-items:center;cursor:pointer;z-index:2}
+.auth-x:hover{color:var(--text);border-color:var(--accent)}
+.auth-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:14px;flex-wrap:wrap}
+
 /* ---------- auth screens ---------- */
 .auth-wrap{min-height:100dvh;display:grid;place-items:center;padding:var(--s4)}
 .auth-card{width:100%;max-width:460px;background:var(--surface);border:1px solid var(--line);
@@ -116,8 +126,9 @@ select.inp{appearance:none;background-image:linear-gradient(45deg,transparent 50
   radial-gradient(340px 200px at 100% 0%,var(--glow),transparent 60%);pointer-events:none}
 .auth-card>*{position:relative}
 .auth-brand{display:flex;align-items:center;gap:11px;margin-bottom:22px}
-.crest{width:40px;height:40px;border-radius:12px;flex:none;display:grid;place-items:center;overflow:hidden;} .sb-brand{cursor:pointer} .sb-brand:hover .crest{box-shadow:0 0 0 2px var(--accent-glow)}
+.crest{width:40px;height:40px;border-radius:12px;flex:none;display:grid;place-items:center;overflow:hidden;
   background:linear-gradient(145deg,var(--accent-2),var(--accent));color:var(--on-accent);font-family:var(--font-display);font-weight:700;font-size:19px}
+.sb-brand{cursor:pointer} .sb-brand:hover .crest{box-shadow:0 0 0 2px var(--accent-glow)}
 .auth-brand .t{font-family:var(--font-display);font-weight:600;font-size:.98rem;line-height:1.25}
 .auth-brand .s{font-size:.74rem;color:var(--muted)}
 .auth-card h1{font-size:1.5rem;margin-bottom:6px}

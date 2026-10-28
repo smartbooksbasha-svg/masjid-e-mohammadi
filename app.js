@@ -438,226 +438,114 @@ function findAdminByIdentifier(v){
   return DB.admins().find(a=>String(a.userId||'').toUpperCase() === s.toUpperCase()) || null;
 }
 function credsMailto(rec){
-  const owner = ownerEmail() || 'owner';
-  const sub = 'New admin request — ' + (rec.name||rec.email);
+  const sub = 'Masjid Survey admin login — ' + (rec.name||rec.email);
   const body = 'Masjid e Mohammadi · Mohalla Survey\n\n'
-    + 'New admin request pending. Access granted only after approval.\n\n'
-    + tStr('Naam: ') + (rec.name||'—') + '\nEmail: ' + rec.email + '\nMobile: ' + (rec.phone||'—') + '\n'
-    + 'User ID: ' + rec.userId + '\nTemporary password: ' + (rec.tempPass||'(approve ke baad)') + '\n\n'
-    + 'App → Admins → Pending requests → Approve.\n';
-  return 'mailto:' + encodeURIComponent(owner) + '?subject=' + encodeURIComponent(sub) + '&body=' + encodeURIComponent(body);
+    + tStr('Aapko admin access de diya gaya hai.') + '\n\n'
+    + tStr('Naam: ') + (rec.name||'—') + '\nEmail: ' + rec.email + '\n'
+    + 'User ID: ' + rec.userId + '\n'
+    + 'Password: ' + (rec.tempPass||'—') + '\n\n'
+    + 'Site: ' + (location.origin + location.pathname) + '\n'
+    + tStr('Topbar me "Admin" dabao → User ID + password se login karo.') + '\n'
+    + tStr('Login ke baad My Profile se apna password badal lo.') + '\n';
+  return 'mailto:?subject=' + encodeURIComponent(sub) + '&body=' + encodeURIComponent(body);
 }
 function mailMode(){ return CLOUD.enabled() ? 'cloud' : 'demo'; }
 function newCode(){ return String(100000 + Math.floor(Math.random()*900000)); }
 function isEmail(v){ return /^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(String(v||'').trim()); }
 
 function authCard(inner){
-  return `<div class="auth-wrap"><div class="auth-card">
+  return `<div class="auth-wrap"><div class="auth-card" role="dialog" aria-modal="true">
+    <button class="auth-x" type="button" data-act="close-auth" aria-label="Close">×</button>
     <div class="auth-brand"><span class="crest">M</span><div><div class="t">${esc(CFG.ORG_NAME||'Masjid e Mohammadi')}</div><div class="s">${esc(CFG.ORG_SUB||'Khidmath Committee')}</div></div></div>
     ${inner}
-    <button class="btn ghost block" type="button" data-act="close-auth" style="margin-top:10px">← Public dashboard</button>
   </div></div>`;
-}
-function authTabs(active){
-  return `<div class="role-tabs" id="authTabs">
-    <button data-tab="login" class="${active==='login'?'active':''}">Login</button>
-    <button data-tab="register" class="${active==='register'?'active':''}">${DB.admins().length ? 'Request access' : 'Register'}</button>
-    <button data-tab="forgot" class="${active==='forgot'?'active':''}">Forgot</button>
-  </div>`;
 }
 
 function openAuth(tab){
   renderAuth(tab || 'login');
 }
 function closeAuth(){
+  pending = null;
   const a = $('#authScreen'); if (a){ a.classList.add('hidden'); a.innerHTML=''; }
   const app = $('#appScreen'); if (app) app.classList.remove('hidden');
+  try { renderShell(); } catch(e){}
 }
 
 function renderAuth(tab){
-  const app = $('#appScreen'); if (app) app.classList.add('hidden');
-  const box = $('#authScreen'); box.classList.remove('hidden');
+  const box = $('#authScreen'); if (!box) return;
+  box.classList.remove('hidden');
   pending = pending && pending.expires > Date.now() ? pending : null;
   if (pending) return renderCodeStep();
 
-  if (tab === 'register') return renderRegister();
   if (tab === 'forgot')  return renderForgot();
   return renderLogin();
 }
 
-/* ---------------- login ---------------- */
+/* ---------------- login (modal) ---------------- */
 function renderLogin(){
   $('#authScreen').innerHTML = authCard(`
     <h1>Admin login</h1>
-    <p class="lead">Sirf committee admin ke liye. Baaki sab public dashboard dekh sakte hain.</p>
-    ${authTabs('login')}
+    <p class="lead">Sirf admin / super admin ke liye. Baaki sab public dashboard dekh sakte hain.</p>
     <form id="loginForm">
-      <div class="field"><label>User ID / Email</label><input class="inp" name="email" type="text" required autocomplete="username" placeholder="ADM-2026-0001 ya admin@example.com" />
-        <span class="hint">Owner ne jo User ID di hai (ya registered email) — dono chalega</span></div>
+      <div class="field"><label>User ID / Email ID</label><input class="inp" name="email" type="text" required autocomplete="username" placeholder="ADM-2026-0001" /></div>
       <div class="field"><label>Password</label><input class="inp" name="pass" type="password" required autocomplete="current-password" /></div>
-      <div class="field"><label>Captcha — answer the sum</label>
-        <div class="captcha-box"><div class="captcha-q" id="captchaQ"></div><button type="button" class="icon-btn" id="captchaReload" aria-label="New captcha">${ICON.refresh}</button></div>
-        <input class="inp" name="captcha" inputmode="numeric" required placeholder="Answer" style="margin-top:6px" />
-      </div>
       <div id="loginAlert"></div>
       <button class="btn block" type="submit">Login</button>
-      <button class="btn ghost block" type="button" data-act="magic-login" style="margin-top:8px">Email link se login (password ke bina)</button>
-      <div style="display:flex;gap:8px;justify-content:space-between;margin-top:12px;flex-wrap:wrap">
+      <div class="auth-foot">
         <button class="linklike" type="button" data-act="auth-tab" data-tab="forgot">Forgot password?</button>
-        <button class="linklike" type="button" data-act="auth-tab" data-tab="register">${DB.admins().length ? 'Request admin access' : 'Create first admin'}</button>
+        <button class="linklike" type="button" data-act="close-auth">Back to public site</button>
       </div>
     </form>`);
 
-  let capA=0, capB=0;
-  const newCaptcha = ()=>{ capA=2+Math.floor(Math.random()*8); capB=1+Math.floor(Math.random()*8); $('#captchaQ').textContent = capA+' + '+capB+' = ?'; };
-  newCaptcha();
-  $('#captchaReload').addEventListener('click', newCaptcha);
+  $('#loginForm').addEventListener('submit', loginSubmit);
+}
 
-  $('#loginForm').addEventListener('submit', async (e)=>{
-    e.preventDefault();
-    const E = e.target.elements, alertBox = $('#loginAlert');
-    if (loginLocked()){
-      const left = Math.ceil((LOGIN_TRIES.until - Date.now())/1000);
-      alertBox.innerHTML='<div class="alert err">Bahut zyada galat try — <b>'+left+' second</b> ruk jao.</div>'; return;
-    }
-    const ident = E.email.value.trim(), pass = E.pass.value;
-    if (parseInt(E.captcha.value,10) !== capA+capB){ alertBox.innerHTML='<div class="alert err">Captcha answer is wrong.</div>'; newCaptcha(); E.captcha.value=''; return; }
-    const found = findAdminByIdentifier(ident);
-    if (!found && !isEmail(ident)){ alertBox.innerHTML='<div class="alert err">User ID / email galat lag raha hai.</div>'; return; }
-    if (found && adminStatus(found) === 'pending'){
-      alertBox.innerHTML='<div class="alert err">This account is pending approval. Wait for owner approval.</div>'; return;
-    }
-    const email = found ? String(found.email).toLowerCase() : ident.toLowerCase();
+async function loginSubmit(e){
+  e.preventDefault();
+  const E = e.target.elements, alertBox = $('#loginAlert');
+  if (loginLocked()){
+    const left = Math.ceil((LOGIN_TRIES.until - Date.now())/1000);
+    alertBox.innerHTML='<div class="alert err">Bahut zyada galat try — <b>'+left+' second</b> ruk jao.</div>'; return;
+  }
+  const ident = E.email.value.trim(), pass = E.pass.value;
+  const found = findAdminByIdentifier(ident);
+  if (!found && !isEmail(ident)){ alertBox.innerHTML='<div class="alert err">User ID / email galat lag raha hai.</div>'; return; }
+  if (found && adminStatus(found) === 'pending'){
+    alertBox.innerHTML='<div class="alert err">This account is pending approval. Wait for approval.</div>'; return;
+  }
+  const email = found ? String(found.email).toLowerCase() : ident.toLowerCase();
+  const btn = e.target.querySelector('button[type="submit"]');
+  if (btn){ btn.disabled = true; btn.textContent = 'Logging in…'; }
 
-    if (mailMode() === 'cloud'){
-      const c = await CLOUD.get();
-      if (!c){ alertBox.innerHTML='<div class="alert err">Cloud connect nahi hua — internet check karo.</div>'; return; }
-      const { error } = await c.auth.signInWithPassword({ email, password: pass });
-      if (error){ loginFailed(); alertBox.innerHTML='<div class="alert err">'+esc(error.message)+'</div>'; return; }
-      loginOk();
-      await cloudClaimAdmin(email, '', '');
-      if (!adminByEmail(email)){
-        const admins = DB.admins();
-        admins.push({ email, name:email.split('@')[0], phone:'', createdAt:Date.now(), verified:true, cloud:true });
-        DB.setAdmins(admins);
-      }
-      setSession({ kind:'admin', email });
-      closeAuth(); enterApp(); toast('Welcome back'); return;
-    }
-
-    const admin = adminByEmail(email);
-    if (!admin){ alertBox.innerHTML='<div class="alert err">Is email se koi admin nahi hai.</div>'; newCaptcha(); return; }
-    if (!(await checkPass(pass, admin))){
-      loginFailed();
-      alertBox.innerHTML='<div class="alert err">Incorrect password.' + (loginLocked()?' <b>60 second ruk jao.</b>':'') + '</div>';
-      newCaptcha(); return;
-    }
+  if (mailMode() === 'cloud'){
+    const c = await CLOUD.get();
+    if (!c){ if (btn){ btn.disabled=false; btn.textContent='Login'; } alertBox.innerHTML='<div class="alert err">Cloud connect nahi hua — internet check karo.</div>'; return; }
+    const { error } = await c.auth.signInWithPassword({ email, password: pass });
+    if (error){ loginFailed(); if (btn){ btn.disabled=false; btn.textContent='Login'; } alertBox.innerHTML='<div class="alert err">'+esc(error.message)+'</div>'; return; }
     loginOk();
-    pending = { kind:'login', email, code:newCode(), expires:Date.now()+10*60*1000 };
-    renderCodeStep();
-  });
-}
-
-/* ---------------- public "request access" (self-register band) ---------------- */
-function renderRequestAccess(){
-  const owner = ownerEmail();
-  $('#authScreen').innerHTML = authCard(`
-    <h1>Request admin access</h1>
-    <p class="lead">Public registration disabled. Request access for owner approval.</p>
-    ${authTabs('register')}
-    <form id="reqForm">
-      <div class="field"><label>Full name</label><input class="inp" name="name" required placeholder="e.g. Abdul Rahman" /></div>
-      <div class="grid g2">
-        <div class="field"><label>Email ID</label><input class="inp" name="email" type="email" required placeholder="name@example.com" /></div>
-        <div class="field"><label>Mobile</label><input class="inp" name="phone" inputmode="numeric" /></div>
-      </div>
-      <div id="reqAlert"></div>
-      <div class="alert info small">Login ID and password will be generated. Owner will share them after approval.</div>
-      <button class="btn block" type="submit">Send request</button>
-    </form>`);
-
-  $('#reqForm').addEventListener('submit', async (e)=>{
-    e.preventDefault();
-    const E = e.target.elements, alertBox = $('#reqAlert');
-    const out = await createAdminRequest(E.name.value, E.email.value, E.phone.value, 'public-request');
-    if (out.error){ alertBox.innerHTML='<div class="alert err">'+esc(out.error)+'</div>'; return; }
-    renderRequestSent(out.rec);
-  });
-}
-
-function renderRequestSent(rec){
-  const mail = credsMailto(rec);
-  $('#authScreen').innerHTML = authCard(`
-    <h1>Request sent</h1>
-    <p class="lead"><b>${esc(rec.name)}</b> (${esc(rec.email)}) ki request owner ke paas hai${ownerEmail()?` — <b>${esc(ownerEmail())}</b>`:''}.</p>
-    <div class="alert info">After approval, owner will share your User ID and temporary password. Tabhi login hoga — password khud set karne ki zaroorat nahi.</div>
-    <div class="kv" style="margin-top:10px">
-      <div class="row"><span>User ID</span><span class="mono">${esc(rec.userId)}</span></div>
-      <div class="row"><span>Status</span><span class="badge gray">Approval pending</span></div>
-    </div>
-    <p class="muted small" style="margin-top:10px">Owner ko request email/WhatsApp par bhejni hai? Ye button dabao.</p>
-    <div style="display:flex;gap:10px;flex-wrap:wrap">
-      <a class="btn" href="${esc(mail)}">${ICON.mail} Email owner</a>
-      <a class="btn ghost" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent('Masjid Survey admin request\n'+tStr('Naam: ')+rec.name+'\nEmail: '+rec.email+'\nUser ID: '+rec.userId)}">WhatsApp</a>
-      <button class="btn ghost" data-act="auth-cancel">Back to login</button>
-    </div>`);
-}
-
-/* ---------------- register ---------------- */
-function renderRegister(){
-  const first = DB.admins().length === 0;
-  if (!first) return renderRequestAccess();
-  $('#authScreen').innerHTML = authCard(`
-    <h1>Create the first admin</h1>
-    <p class="lead">Create first admin account. Email verification required.</p>
-    ${authTabs('register')}
-    <form id="regForm">
-      <div class="field"><label>Full name</label><input class="inp" name="name" required placeholder="e.g. Abdul Rahman" /></div>
-      <div class="grid g2">
-        <div class="field"><label>Email ID</label><input class="inp" name="email" type="email" required placeholder="name@example.com" /></div>
-        <div class="field"><label>Mobile</label><input class="inp" name="phone" inputmode="numeric" placeholder="10-digit" /></div>
-      </div>
-      <div class="grid g2">
-        <div class="field"><label>Password</label><input class="inp" name="pass" type="password" required minlength="6" placeholder="min 6 characters" /></div>
-        <div class="field"><label>Confirm password</label><input class="inp" name="pass2" type="password" required minlength="6" /></div>
-      </div>
-      <div id="regAlert"></div>
-      <button class="btn block" type="submit">Send code to email</button>
-    </form>`);
-
-  $('#regForm').addEventListener('submit', async (e)=>{
-    e.preventDefault();
-    const E = e.target.elements, alertBox = $('#regAlert');
-    const name = E.name.value.trim(), email = E.email.value.trim().toLowerCase(), phone = E.phone.value.trim();
-    const pass = E.pass.value, pass2 = E.pass2.value;
-    if (!isEmail(email)){ alertBox.innerHTML='<div class="alert err">Enter a valid email address.</div>'; return; }
-    if (adminByEmail(email)){ alertBox.innerHTML='<div class="alert err">This email is already registered. Please login.</div>'; return; }
-    if (pass !== pass2){ alertBox.innerHTML='<div class="alert err">Passwords do not match.</div>'; return; }
-    if (pass.length < 6){ alertBox.innerHTML='<div class="alert err">Password must be at least 6 characters.</div>'; return; }
-
-    if (mailMode() === 'cloud'){
-      const c = await CLOUD.get();
-      if (!c){ alertBox.innerHTML='<div class="alert err">Cloud connect nahi hua.</div>'; return; }
-      const { error } = await c.auth.signUp({ email, password: pass, options:{ data:{ name, phone }, emailRedirectTo: location.origin + location.pathname } });
-      if (error){
-        const m = String(error.message||'');
-        if (/already registered|already exists/i.test(m))
-          alertBox.innerHTML='<div class="alert err">Ye email pehle se registered hai. <b>Forgot password?</b> par jao → email par link aayega → click karke password set karo, phir login.</div>';
-        else alertBox.innerHTML='<div class="alert err">'+esc(m)+'</div>';
-        return;
-      }
-      pending = { kind:'register', email, name, phone };
-      renderLinkSent(); return;
+    await cloudClaimAdmin(email, '', '');
+    if (!adminByEmail(email)){
+      const admins = DB.admins();
+      admins.push({ email, name:email.split('@')[0], phone:'', createdAt:Date.now(), verified:true, cloud:true });
+      DB.setAdmins(admins);
     }
+    setSession({ kind:'admin', email });
+    closeAuth(); enterApp(); toast('Welcome back'); return;
+  }
 
-    const code = newCode();
-    pending = { kind:'register', email, name, phone, pass, code, expires:Date.now()+10*60*1000 };
-    renderCodeStep();
-  });
+  const admin = adminByEmail(email);
+  if (!admin){ if (btn){ btn.disabled=false; btn.textContent='Login'; } alertBox.innerHTML='<div class="alert err">Is email se koi admin nahi hai.</div>'; return; }
+  if (!(await checkPass(pass, admin))){
+    loginFailed();
+    if (btn){ btn.disabled=false; btn.textContent='Login'; }
+    alertBox.innerHTML='<div class="alert err">Incorrect password.' + (loginLocked()?' <b>60 second ruk jao.</b>':'') + '</div>';
+    return;
+  }
+  loginOk();
+  setSession({ kind:'admin', email });
+  closeAuth(); enterApp(); toast('Welcome back');
 }
 
-
-/* app_users me approved row hai ya nahi (owner ne add kiya ho) */
 async function cloudIsListed(email){
   try {
     const c = await CLOUD.get(); if (!c) return false;
@@ -794,7 +682,6 @@ function renderForgot(){
   $('#authScreen').innerHTML = authCard(`
     <h1>Forgot password</h1>
     <p class="lead">Registered email ID daalo aur password reset link milega.</p>
-    ${authTabs('forgot')}
     <div class="sec-title" style="margin-top:0;font-size:.9rem">Reset password</div>
     <form id="forgotForm">
       <div class="field"><label>Registered email ID</label><input class="inp" name="email" type="email" required placeholder="admin@example.com" /></div>
@@ -1092,21 +979,21 @@ function renderShell(){
   const chip = $('#userChip');
   if (u){
     const initials = (u.name||u.email).split(/[ @.]/).filter(Boolean).map(w=>w[0]).slice(0,2).join('').toUpperCase();
-    const own = isOwner() ? ' · Owner' : '';
+    const roleName = isOwner() ? 'Super Admin' : 'Admin';
     const admins = DB.admins();
     const me = admins.find(a=> (a.email===u.email) || (a.userId===u.userId)) || u;
     const ph = me.photo ? `<img src="${esc(me.photo)}" alt="Profile photo"/>` : initials;
-    chip.innerHTML = `<button type="button" class="chip-btn" data-act="myprofile" title="My Profile - Edit photo/name/phone"><span class="av" style="overflow:hidden;border-radius:10px">${ph}</span><span><span class="nm">${esc(me.name||u.name||u.email)}</span><br><span class="rl">Admin${own}</span></span></button> <button class="chip-logout" type="button" data-act="admin-logout" title="Log out">${ICON.exit}</button>`;
+    chip.innerHTML = `<button type="button" class="chip-btn" data-act="myprofile" title="My Profile - Edit photo/name/phone"><span class="av" style="overflow:hidden;border-radius:10px">${ph}</span><span><span class="nm">${esc(me.name||u.name||u.email)}</span><br><span class="rl">${roleName}</span></span></button> <button class="chip-logout" type="button" data-act="admin-logout" title="Log out">${ICON.exit}</button>`;
     chip.removeAttribute('data-act');
   } else {
-    chip.innerHTML = `<span class="public-chip">Public view</span><span class="btn ghost sm" data-act="open-auth" style="margin-left:8px">Admin login</span>`;
+    chip.innerHTML = `<span class="public-chip">Public view</span><span class="btn ghost sm" data-act="open-auth" style="margin-left:8px">Admin</span>`;
     chip.removeAttribute('data-act');
     chip.title = 'Read-only public view';
   }
   const foot = document.querySelector('.sb-foot');
   if (foot) foot.innerHTML = u
     ? `Admin mode · you can add and edit`
-    : 'Public view · read only<br><button class="linklike" type="button" data-act="open-auth" style="margin-top:8px">Admin login / create admin</button>';
+    : 'Public view · read only<br><button class="linklike" type="button" data-act="open-auth" style="margin-top:8px">Admin login</button>';
   $$('#nav .nav-item').forEach(a=>a.classList.toggle('active', a.dataset.view===state.view || (state.view==='add' && a.dataset.view==='add')));
   closeNav();
 }
@@ -2204,11 +2091,11 @@ function viewUsers(){
   const active = activeAdmins();
   const creds = state.newCreds;
   return `
-    <div class="page-head"><div><h1>Admins</h1><p>Naya admin pehle <b>request</b> banta hai — owner approve karega tabhi login chalega.</p></div></div>
+    <div class="page-head"><div><h1>Admins</h1><p>Super admin naya admin add karta hai — User ID aur password app khud banati hai.</p></div></div>
 
     ${creds ? `<div class="card" style="border-color:var(--accent)">
-      <div class="card-h"><div><h3>Naye admin ka login — owner ko bhejo</h3>
-        <div class="hint">App ne khud banaya hai. Ye details sirf naye admin ko do, kisi aur ko nahi.</div></div></div>
+      <div class="card-h"><div><h3>Naye admin ka login — usko bhejo</h3>
+        <div class="hint">App ne khud banaya hai. Ye details sirf us admin ko do, kisi aur ko nahi.</div></div></div>
       <div class="kv" style="margin-top:10px">
         <div class="row"><span>Naam</span><span>${esc(creds.name)}</span></div>
         <div class="row"><span>User ID (login)</span><span class="mono"><b>${esc(creds.userId)}</b></span></div>
@@ -2216,12 +2103,12 @@ function viewUsers(){
         <div class="row"><span>Email</span><span class="mono">${esc(creds.email)}</span></div>
       </div>
       <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px">
-        <a class="btn sm" href="${esc(creds.mail)}">${ICON.mail} Email owner ko bhejo</a>
+        <a class="btn sm" href="${esc(creds.mail)}">${ICON.mail} Email the admin</a>
         <a class="btn ghost sm" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent('Masjid Survey admin login\nUser ID: '+creds.userId+'\nPassword: '+creds.tempPass)}">WhatsApp</a>
         <button class="btn ghost sm" data-act="copy-creds">Copy</button>
         <button class="btn ghost sm" data-act="close-creds">Close</button>
       </div>
-      <p class="muted small" style="margin-top:8px">Approve karne ke baad hi ye login kaam karega — pehle "Pending requests" me Approve dabao.</p>
+      <p class="muted small" style="margin-top:8px">Ye login turant kaam karta hai. Admin pehli baar login karke My Profile se photo/naam badal sakta hai.</p>
     </div>` : ''}
 
     <div class="card">
@@ -2243,7 +2130,7 @@ function viewUsers(){
     </div>
 
     ${isOwner() ? `<div class="card">
-      <div class="sec-title" style="margin-top:0">Naya admin request banao</div>
+      <div class="sec-title" style="margin-top:0">Add a new admin</div>
       <form id="addAdminForm" class="grid g3">
         <div class="field"><label>Name</label><input class="inp" name="name" required /></div>
         <div class="field"><label>Email ID</label><input class="inp" name="email" type="email" required /><span class="hint">Isi email par login confirm hoga</span></div>
@@ -2252,7 +2139,7 @@ function viewUsers(){
         <div class="field"><label>Photo</label><input type="file" class="inp" name="photo" accept="image/*" /></div>
         <div class="field" style="justify-content:flex-end"><button class="btn" type="submit">Create admin</button></div>
       </form>
-      <p class="muted small" style="margin-top:6px">Login ID aur password app khud banayegi — tumhe kuch sochna nahi.</p>
+      <p class="muted small" style="margin-top:6px">User ID aur password app khud banayegi — bante hi screen par dikhenge, admin ko bhej do.</p>
     </div>` : `<div class="card"><p class="muted small" style="margin:0">Naya admin sirf owner add kar sakta hai. Owner: <b>${esc(owner||'—')}</b></p></div>`}
 
     <div class="sec-title">Active admins (${active.length})</div>
@@ -2540,7 +2427,36 @@ const I18N = {
     'date nahi hai':'no date',
     'kabhi nahi':'never',
     'Ye admin account hata dein?':'Remove this admin account?',
-    'Is device ka current data backup se replace ho jayega.':'Current data on this device will be replaced by the backup.'
+    'Is device ka current data backup se replace ho jayega.':'Current data on this device will be replaced by the backup.',
+
+    /* --- v86: roles + admin login modal + super admin panel --- */
+    'Sirf admin / super admin ke liye. Baaki sab public dashboard dekh sakte hain.':'For admin / super admin only. Everyone else can use the public dashboard.',
+    'Back to public site':'Back to public site',
+    'User ID / Email ID':'User ID / Email ID',
+    'Super admin panel — admins, settings aur account.':'Super admin panel — admins, settings and account.',
+    'Super admin naye admins banata hai, password reset karta hai aur website control karta hai.':'Super admin adds admins, resets passwords and controls the website.',
+    'Add a new admin':'Add a new admin',
+    'Create admin':'Create admin',
+    'Login isi email ya User ID se hoga':'Login works with this email or the User ID',
+    'User ID aur password app khud banayegi — bante hi screen par dikhenge, admin ko bhej do.':'The app generates the User ID and password — they show on screen right away, send them to the admin.',
+    'Naye admin ka login — usko bhejo':'New admin login — send it to them',
+    'App ne khud banaya hai. Ye details sirf us admin ko do, kisi aur ko nahi.':'The app generated this. Give these details only to that admin.',
+    'Ye login turant kaam karta hai. Admin pehli baar login karke My Profile se photo/naam badal sakta hai.':'This login works immediately. The admin can change photo/name from My Profile after the first login.',
+    'Reset password':'Reset password',
+    'Naya password ban gaya':'New password generated',
+    'Active admins (Super Admin + Admin)':'Active admins (Super Admin + Admin)',
+    'Pending requests (legacy)':'Pending requests (legacy)',
+    'Change password':'Change password',
+    'Current password':'Current password',
+    'New password':'New password',
+    'Confirm new password':'Confirm new password',
+    'Update password':'Update password',
+    'Kam se kam 6 characters. Password bhool jao to super admin reset kar sakta hai.':'At least 6 characters. If you forget it, the super admin can reset it.',
+    'Current password galat hai':'Current password is wrong',
+    'Password updated':'Password updated',
+    'Aapko admin access de diya gaya hai.':'You have been given admin access.',
+    'Topbar me "Admin" dabao → User ID + password se login karo.':'Tap "Admin" in the topbar → log in with your User ID and password.',
+    'Login ke baad My Profile se apna password badal lo.':'After logging in, change your password from My Profile.'
   },
   ta: {
     'Dashboard':'டாஷ்போர்டு',
@@ -2804,6 +2720,17 @@ function viewMyProfile(){
         <div class='field'><label>User ID</label><input class='inp' value='${esc(me.userId||u.userId||'—')}' readonly/></div>
       </div>
       <div style='margin-top:18px'><button class='btn' data-act='prof-save'>Save changes</button></div>
+    </div>
+
+    <div class='card' style='max-width:720px'>
+      <div class='sec-title' style='margin-top:0'>Change password</div>
+      <form id='profPassForm' class='grid g3'>
+        <div class='field'><label>Current password</label><input class='inp' name='cur' type='password' required autocomplete='current-password' /></div>
+        <div class='field'><label>New password</label><input class='inp' name='np' type='password' required minlength='6' autocomplete='new-password' /></div>
+        <div class='field'><label>Confirm new password</label><input class='inp' name='np2' type='password' required minlength='6' autocomplete='new-password' /></div>
+        <div class='field' style='justify-content:flex-end'><button class='btn' type='submit'>Update password</button></div>
+      </form>
+      <p class='muted small' style='margin-top:6px'>Kam se kam 6 characters. Password bhool jao to super admin reset kar sakta hai.</p>
     </div>`;
 }
 
@@ -2884,10 +2811,11 @@ async function compressImage(file, maxSide = 1100, quality = 0.72){
 function viewAdminPanel(){
   const u = currentUser();
   return `
-    <div class="page-head"><div><h1>Administration</h1><p>Admins, settings aur account.</p></div></div>
+    <div class="page-head"><div><h1>Administration</h1><p>Super admin panel — admins, settings aur account.</p></div></div>
+    ${credsCard()}
     <div class="card">
       <div class="sec-title" style="margin-top:0">Admins & approval</div>
-      <p class="muted small">Naye admins sirf owner approve kar sakta hai. <b>Owner: ${esc(ownerName())} (${esc(ownerEmail())})</b> — locked<br><span class="small">Click sidebar logo to change website logo • Click your avatar to edit your profile • Owner can edit/remove other admins with photo/email/phone</span></p>
+      <p class="muted small"><span>Super admin naye admins banata hai, password reset karta hai aur website control karta hai.</span> <b>Super Admin: ${esc(ownerName())} (${esc(ownerEmail())})</b> — locked<br><span class="small">Click sidebar logo to change website logo • Click your avatar to edit your profile • Super admin can add/edit/remove admins with photo, email, phone and age</span></p>
       <div style="margin-top:12px">${isOwner()?viewUsersTable():viewUsersReadonly()}</div>
     </div>
     ${viewSettingsCard('adminpanel')}
@@ -2902,6 +2830,26 @@ function viewAdminPanel(){
     </div>
   `;
 }
+function credsCard(){
+  const c = state.newCreds; if (!c) return '';
+  return `<div class="card" style="border-color:var(--accent)">
+    <div class="card-h"><div><h3>Naye admin ka login — usko bhejo</h3>
+      <div class="hint">App ne khud banaya hai. Ye details sirf us admin ko do, kisi aur ko nahi.</div></div></div>
+    <div class="kv" style="margin-top:10px">
+      <div class="row"><span>Naam</span><span>${esc(c.name||'—')}</span></div>
+      <div class="row"><span>User ID (login)</span><span class="mono"><b>${esc(c.userId)}</b></span></div>
+      <div class="row"><span>Temporary password</span><span class="mono"><b>${esc(c.tempPass)}</b></span></div>
+      <div class="row"><span>Email</span><span class="mono">${esc(c.email)}</span></div>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px">
+      <a class="btn sm" href="${esc(c.mail||'#')}">${ICON.mail} Email the admin</a>
+      <a class="btn ghost sm" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent('Masjid Survey admin login\nUser ID: '+c.userId+'\nPassword: '+c.tempPass)}">WhatsApp</a>
+      <button class="btn ghost sm" data-act="copy-creds">Copy</button>
+      <button class="btn ghost sm" data-act="close-creds">Close</button>
+    </div>
+    <p class="muted small" style="margin-top:8px">Ye login turant kaam karta hai. Admin pehli baar login karke My Profile se photo/naam badal sakta hai.</p>
+  </div>`;
+}
 function viewUsersTable(){
   // reuse existing viewUsers logic minimal
   const admins = DB.admins().slice().sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
@@ -2909,14 +2857,27 @@ function viewUsersTable(){
   const pend = (admins.filter(a=>a.status==='pending'));
   const act = (admins.filter(a=>a.status!=='pending'));
   return `
-    <div class="sec-title" style="margin-top:0">Pending requests</div>
+    <div class="sec-title" style="margin-top:0">Pending requests (legacy)</div>
     ${pend.length?`<div class="table-wrap"><table><thead><tr><th>Name</th><th>Email</th><th>Mobile</th><th>User ID</th><th>Action</th></tr></thead><tbody>
     ${pend.map(a=>`<tr><td>${esc(a.name||'—')}</td><td>${esc(a.email)}</td><td>${esc(a.phone||'—')}</td><td class="mono">${esc(a.userId||'—')}</td>
     <td style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn sm" data-act="approve-admin" data-id="${esc(a.email)}">Approve</button><button class="btn sm ghost" data-act="reject-admin" data-id="${esc(a.email)}">Reject</button></td></tr>`).join('')}
     </tbody></table></div>`:`<p class="muted small">Koi pending request nahi.</p>`}
-    <div class="sec-title">Active admins</div>
+    ${isOwner()?`<div class="card" style="margin-top:14px">
+      <div class="sec-title" style="margin-top:0">Add a new admin</div>
+      <form id="addAdminForm" class="grid g3">
+        <div class="field"><label>Name</label><input class="inp" name="name" required /></div>
+        <div class="field"><label>Email ID</label><input class="inp" name="email" type="email" required /><span class="hint">Login isi email ya User ID se hoga</span></div>
+        <div class="field"><label>Mobile</label><input class="inp" name="phone" inputmode="numeric" /></div>
+        <div class="field"><label>Age</label><input class="inp" name="age" type="number" min="18" max="100" /></div>
+        <div class="field"><label>Photo</label><input type="file" class="inp" name="photo" accept="image/*" /></div>
+        <div class="field" style="justify-content:flex-end"><button class="btn" type="submit">Create admin</button></div>
+      </form>
+      <p class="muted small" style="margin-top:6px">User ID aur password app khud banayegi — bante hi screen par dikhenge, admin ko bhej do.</p>
+    </div>`:''}
+
+    <div class="sec-title">Active admins (Super Admin + Admin)</div>
     <div class="table-wrap"><table><thead><tr><th>User ID</th><th>Admin (Photo / Name / Email)</th><th>Phone</th><th>Age</th><th>Role</th><th>Action</th></tr></thead><tbody>
-    ${act.map(a=>{ const isO = String(a.email).toLowerCase()===owner || a.role==='owner'; const ini=(a.name||a.email).split(/[ @.]/).filter(Boolean).map(w=>w[0]).slice(0,2).join('').toUpperCase(); return `<tr><td class="mono">${esc(a.userId||'—')}</td><td><div style="display:flex;gap:10px;align-items:center"><span class="av" style="width:36px;height:36px;font-size:.8rem;overflow:hidden;border-radius:12px;border:1px solid var(--line)">${a.photo?`<img src='${esc(a.photo)}' style='width:100%;height:100%;object-fit:cover'/>`:esc(ini)}</span><div><div style="font-weight:600">${esc(a.name||'—')}</div><div class="muted small">${esc(a.email)}</div></div></div></td><td>${esc(a.phone||'—')}</td><td>${esc(a.age||'—')}</td><td>${isO?'<span class="badge">Owner</span>':'<span class="badge gray">Admin</span>'}</td><td style="display:flex;gap:6px;flex-wrap:wrap">${isO?'<span class="muted small">Locked</span>':`<button class="btn sm" data-act="admin-edit" data-id="${esc(a.email)}">Edit</button><button class="btn sm ghost" data-act="del-admin" data-id="${esc(a.email)}">Remove</button>`}</td></tr>`; }).join('')}
+    ${act.map(a=>{ const isO = String(a.email).toLowerCase()===owner || a.role==='owner'; const ini=(a.name||a.email).split(/[ @.]/).filter(Boolean).map(w=>w[0]).slice(0,2).join('').toUpperCase(); return `<tr><td class="mono">${esc(a.userId||'—')}</td><td><div style="display:flex;gap:10px;align-items:center"><span class="av" style="width:36px;height:36px;font-size:.8rem;overflow:hidden;border-radius:12px;border:1px solid var(--line)">${a.photo?`<img src='${esc(a.photo)}' style='width:100%;height:100%;object-fit:cover'/>`:esc(ini)}</span><div><div style="font-weight:600">${esc(a.name||'—')}</div><div class="muted small">${esc(a.email)}</div></div></div></td><td>${esc(a.phone||'—')}</td><td>${esc(a.age||'—')}</td><td>${isO?'<span class="badge">Super Admin</span>':'<span class="badge gray">Admin</span>'}</td><td style="display:flex;gap:6px;flex-wrap:wrap">${isO?'<span class="muted small">Locked</span>':`<button class="btn sm" data-act="admin-edit" data-id="${esc(a.email)}">Edit</button><button class="btn sm ghost" data-act="reset-admin-pass" data-id="${esc(a.email)}">Reset password</button><button class="btn sm ghost" data-act="del-admin" data-id="${esc(a.email)}">Remove</button>`}</td></tr>`; }).join('')}
     </tbody></table></div>
   `;
 }
@@ -2924,7 +2885,7 @@ function viewUsersReadonly(){
   const admins = DB.admins().filter(a=>a.status!=='pending');
   const owner = ownerEmail();
   return `<div class="table-wrap"><table><thead><tr><th>User ID</th><th>Name</th><th>Email</th><th>Role</th></tr></thead><tbody>
-  ${admins.map(a=>{ const isO = String(a.email).toLowerCase()===owner || a.role==='owner'; return `<tr><td class="mono">${esc(a.userId||'—')}</td><td>${esc(a.name||'—')}</td><td>${esc(a.email)}</td><td>${isO?'<span class="badge">Owner</span>':'<span class="badge gray">Admin</span>'}</td></tr>`; }).join('')}
+  ${admins.map(a=>{ const isO = String(a.email).toLowerCase()===owner || a.role==='owner'; return `<tr><td class="mono">${esc(a.userId||'—')}</td><td>${esc(a.name||'—')}</td><td>${esc(a.email)}</td><td>${isO?'<span class="badge">Super Admin</span>':'<span class="badge gray">Admin</span>'}</td></tr>`; }).join('')}
   </tbody></table></div>`;
 }
 function viewSettingsCard(ctx='adminpanel'){
@@ -3116,6 +3077,25 @@ document.addEventListener('click', (e)=>{
   if (act==='admin-logout'){ try { if(!isAdmin()){ clearSession(); renderShell(); go('dashboard'); return; } } catch(e){} clearSession(); state.draft=null; renderShell(); go('dashboard'); return; }
   if (act==='myprofile'){ if(!isAdmin()){toast('Admin only','err');return;} go('myprofile'); return; }
   if (act==='admin-edit'){ if(!isOwner()){toast('Sirf owner edit kar sakta hai','err');return;} go('admin-edit', el.dataset.id); return; }
+  if (act==='reset-admin-pass'){
+    if (!isOwner()){ toast('Sirf owner badal sakta hai','err'); return; }
+    (async ()=>{
+      const email = String(el.dataset.id||'').toLowerCase();
+      const admins = DB.admins();
+      const i = admins.findIndex(a=>String(a.email||'').toLowerCase()===email);
+      if (i < 0){ toast('Admin nahi mila.','err'); return; }
+      const tempPass = genTempPass();
+      const salt = uid();
+      admins[i].salt = salt;
+      admins[i].passHash = await hashPass(tempPass, salt);
+      admins[i].tempPass = tempPass;
+      DB.setAdmins(admins);
+      state.newCreds = { userId:admins[i].userId, tempPass, name:admins[i].name, email:admins[i].email, mail:credsMailto(admins[i]) };
+      toast('Naya password ban gaya','ok');
+      go('users');
+    })();
+    return;
+  }
   if (act==='admin-photo'){ if(!isOwner()){toast('Sirf owner','err');return;} const email=el.dataset.id; const inp=document.createElement('input'); inp.type='file'; inp.accept='image/*'; inp.onchange=async e=>{ const f=e.target.files[0]; if(!f)return; let d=await readFileAsDataURL(f); d=await compressImageDataURL(d,256,0.7); const admins=DB.admins(); const i=admins.findIndex(a=>a.email===email); if(i>=0){ admins[i].photo=d; DB.setAdmins(admins); toast('Photo updated'); go('adminpanel'); }}; inp.click(); return; }
   if (act==='admin-photo-rm'){ if(!isOwner()){toast('Sirf owner','err');return;} const email=el.dataset.id; const admins=DB.admins(); const i=admins.findIndex(a=>a.email===email); if(i>=0){ delete admins[i].photo; DB.setAdmins(admins); toast('Photo removed'); go('adminpanel'); } return; }
   if (act==='admin-save'){ if(!isOwner()){toast('Sirf owner','err');return;} const email=el.dataset.id; const admins=DB.admins(); const i=admins.findIndex(a=>a.email===email); if(i>=0){ admins[i].name=$('#aName').value.trim(); admins[i].phone=$('#aPhone').value.trim(); admins[i].email=$('#aEmail').value.trim().toLowerCase(); if($('#aAge')) admins[i].age=$('#aAge').value.trim(); DB.setAdmins(admins); toast('Saved'); go('adminpanel'); } return; }
@@ -3416,6 +3396,24 @@ document.addEventListener('submit', async (e)=>{
   const form = e.target;
   if (form.id==='famForm'){ e.preventDefault(); saveFamily(); }
   else if (form.id==='addAdminForm'){ e.preventDefault(); await addAdmin(form); }
+  else if (form.id==='profPassForm'){ e.preventDefault();
+    const u = currentUser(); if (!u) return;
+    const E = form.elements, box = form;
+    const admins = DB.admins();
+    const i = admins.findIndex(a=>String(a.email||'').toLowerCase()===String(u.email||'').toLowerCase());
+    if (i < 0){ toast('Admin nahi mila.','err'); return; }
+    if (E.np.value !== E.np2.value){ toast('Passwords do not match.','err'); return; }
+    if (String(E.np.value).length < 6){ toast('Kam se kam 6 characters.','err'); return; }
+    if (!(await checkPass(E.cur.value, admins[i]))){ toast('Current password galat hai','err'); return; }
+    const salt = uid();
+    admins[i].salt = salt;
+    admins[i].passHash = await hashPass(E.np.value, salt);
+    delete admins[i].tempPass;
+    DB.setAdmins(admins);
+    if (mailMode() === 'cloud'){ try { const c = await CLOUD.get(); if (c) await c.auth.updateUser({ password: E.np.value }); } catch(err){} }
+    toast('Password updated','ok');
+    go('myprofile');
+  }
   else if (form.id==='ownerForm'){ e.preventDefault();
     if (!isOwner()) { toast('Sirf owner badal sakta hai','err'); return; }
     const v = String(form.elements.owner.value||'').trim().toLowerCase();
