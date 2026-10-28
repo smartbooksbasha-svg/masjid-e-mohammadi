@@ -2529,9 +2529,10 @@ const I18N = {
     '+ Add admin':'+ Add admin',
     'Pending requests':'Pending requests',
     'Card size':'Card size',
-    '3 × 5 inch (default)':'3 × 5 inch (default)',
+    '5 × 3 inch — landscape (default)':'5 × 3 inch — landscape (default)',
+    '3 × 5 inch — portrait':'3 × 5 inch — portrait',
     'ID-1 (85.6 × 54 mm)':'ID-1 (85.6 × 54 mm)',
-    '3×5 = bada card, QR bada aur text saaf':'3×5 = bigger card, bigger QR and clearer text'
+    '5×3 = chaudi card, QR bada aur text saaf':'5×3 = wide card, bigger QR and clearer text'
   },
   ta: {
     'Dashboard':'டாஷ்போர்டு',
@@ -2951,7 +2952,7 @@ function saveIdcardForm(form){
   cur.accent = String(E.accent.value||'#0f5c47');
   cur.bgOpacity = Number(E.bgOpacity.value)||0;
   cur.scale = Number(E.scale.value)||1.12;
-  cur.size = (E.size && E.size.value==='id1') ? 'id1' : '3x5';
+  cur.size = (E.size && ['5x3','3x5','id1'].includes(E.size.value)) ? E.size.value : '5x3';
   DB.setIdcard(cur);
   toast('Card design save ho gaya','ok');
   go('idcard');
@@ -3012,10 +3013,11 @@ function viewIdCardDesign(){
           <span class="hint">Header, Family ID aur lines ka rang</span></div>
         <div class="field"><label>Card size</label>
           <select class="inp" name="size">
-            <option value="3x5" ${c.size==='3x5'?'selected':''}>3 × 5 inch (default)</option>
+            <option value="5x3" ${c.size==='5x3'?'selected':''}>5 × 3 inch — landscape (default)</option>
+            <option value="3x5" ${c.size==='3x5'?'selected':''}>3 × 5 inch — portrait</option>
             <option value="id1" ${c.size==='id1'?'selected':''}>ID-1 (85.6 × 54 mm)</option>
           </select>
-          <span class="hint">3×5 = bada card, QR bada aur text saaf</span></div>
+          <span class="hint">5×3 = chaudi card, QR bada aur text saaf</span></div>
         <div class="field"><label>Text size</label>
           <select class="inp" name="scale">
             <option value="1" ${c.scale===1?'selected':''}>Normal</option>
@@ -4182,7 +4184,7 @@ function mjHead(){
 
 /* ---- family ID card (v88): editable design + terms on the back ---- */
 const IDCARD_DEFAULT = {
-  org:'', sub:'', tag:'Family ID Card', size:'3x5',
+  org:'', sub:'', tag:'Family ID Card', size:'5x3',
   logo:'', bg:'', bgOpacity:14, accent:'#0f5c47',
   scale:1.12,
   footLeft:'', footRight:'',
@@ -4197,7 +4199,7 @@ function idcardCfg(){
   c.scale = Math.min(1.4, Math.max(1, sc));
   c.bgOpacity = Math.min(60, Math.max(0, Number(c.bgOpacity)||0));
   if (!/^#[0-9a-f]{3,8}$/i.test(c.accent||'')) c.accent = '#0f5c47';
-  c.size = (c.size==='id1') ? 'id1' : '3x5';
+  c.size = (c.size==='3x5' || c.size==='id1') ? c.size : '5x3';
   return c;
 }
 function idCrestSVG(cfg){
@@ -4220,12 +4222,14 @@ function girihBg(color){
 }
 function idCardCSS(c){
   const k = c.scale;
-  const portrait = String(c.size||'3x5') !== 'id1';
-  /* 3x5 card (76.2 x 127 mm) me jagah zyada hai -> text bhi bada */
-  const s = portrait ? 1.5 : 1;
+  const mode = (c.size==='3x5') ? '3x5' : (c.size==='id1' ? 'id1' : '5x3');   /* 5x3 = default, landscape */
+  const portrait = mode==='3x5';
+  /* bada card -> text bhi bada */
+  const s = mode==='3x5' ? 1.5 : (mode==='id1' ? 1 : 1.32);
   const pt = n => (n*k*s).toFixed(2)+'pt';
-  const W = portrait ? '76.2mm' : '85.6mm';
-  const H = portrait ? '127mm'  : '53.98mm';
+  const W = mode==='3x5' ? '76.2mm' : (mode==='id1' ? '85.6mm' : '127mm');
+  const H = mode==='3x5' ? '127mm'  : (mode==='id1' ? '53.98mm' : '76.2mm');
+  const QR = mode==='3x5' ? 33 : (mode==='id1' ? 21 : 32);
   return `
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:#eef2f0;padding:16px;font-family:"Segoe UI",Roboto,Arial,Helvetica,sans-serif;color:#0d2b22}
@@ -4243,11 +4247,11 @@ body{background:#eef2f0;padding:16px;font-family:"Segoe UI",Roboto,Arial,Helveti
 .idcard .glow{position:absolute;inset:0;background:
   radial-gradient(70mm 40mm at 100% 0%, ${c.accent}22, transparent 60%),
   radial-gradient(60mm 40mm at 0% 100%, ${c.accent}18, transparent 62%);pointer-events:none}
-.idcard .dome{position:absolute;right:${portrait?'9mm':'15mm'};bottom:-7mm;width:${portrait?'48mm':'36mm'};height:${portrait?'48mm':'36mm'};color:${c.accent};opacity:.06;pointer-events:none}
+.idcard .dome{position:absolute;right:${portrait?'9mm':'18mm'};bottom:-7mm;width:${portrait?'48mm':'44mm'};height:${portrait?'48mm':'44mm'};color:${c.accent};opacity:.06;pointer-events:none}
 .idcard .dome svg{width:100%;height:100%}
 
 .idtop{position:relative;flex:none;display:flex;align-items:center;gap:2.3mm;
-  height:${portrait?'auto':'11.6mm'};padding:${portrait?'2.6mm 3mm':'0 3mm'};
+  height:${portrait?'auto':(mode==='id1'?'11.6mm':'15.4mm')};padding:${portrait?'2.6mm 3mm':(mode==='id1'?'0 3mm':'0 3.6mm')};
   background:linear-gradient(100deg,${c.accent} 0%,${c.accent}dd 100%);color:#fff}
 .crest{width:${portrait?'10mm':'7.8mm'};height:${portrait?'10mm':'7.8mm'};flex:none;border-radius:2mm;background:#fff;color:${c.accent};display:grid;place-items:center;overflow:hidden;box-shadow:0 0 0 .3mm rgba(255,255,255,.55)}
 .crest svg{width:${portrait?'7.6mm':'6mm'};height:${portrait?'7.6mm':'6mm'}}
@@ -4260,27 +4264,27 @@ body{background:#eef2f0;padding:16px;font-family:"Segoe UI",Roboto,Arial,Helveti
 
 .idbody{position:relative;flex:1;min-height:0;display:flex;flex-direction:${portrait?'column':'row'}}
 .idleft{flex:1;min-width:0;display:flex;flex-direction:column;
-  padding:${portrait?'3.4mm 3.2mm 2mm':'2.6mm 2.4mm 1.6mm 3.2mm'}}
+  padding:${portrait?'3.4mm 3.2mm 2mm':(mode==='id1'?'2.6mm 2.4mm 1.6mm 3.2mm':'4mm 3.4mm 2.6mm 4mm')}}
 .fidlab{font-size:${pt(4.3)};letter-spacing:.8pt;text-transform:uppercase;color:#5c7a70;font-weight:700}
 .fid{font-family:"Courier New",monospace;font-size:${pt(9.4)};font-weight:700;letter-spacing:.1pt;color:${c.accent};line-height:1.15;word-break:break-all}
 .rule{height:0.3mm;background:linear-gradient(90deg,${c.accent},${c.accent}22);margin:${portrait?'2mm 0 1.8mm':'1.4mm 0 1.2mm'}}
 .rows{display:flex;flex-direction:column;gap:${portrait?'1.6mm':'1.05mm'}}
 .r{display:flex;gap:1.8mm;font-size:${pt(6.1)};line-height:1.24;align-items:baseline}
-.r .k{color:#63837a;min-width:${portrait?'23mm':'17mm'};flex:none;font-size:${pt(4.7)};letter-spacing:.15pt;text-transform:uppercase;font-weight:700}
+.r .k{color:#63837a;min-width:${portrait?'23mm':(mode==='id1'?'17mm':'24mm')};flex:none;font-size:${pt(4.7)};letter-spacing:.15pt;text-transform:uppercase;font-weight:700}
 .r .v{color:#0d2b22;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
 .idright{flex:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:${portrait?'1.8mm':'1.3mm'};
-  width:${portrait?'auto':'27.4mm'};padding:${portrait?'2mm 3mm 3mm':'1.8mm 2mm'};
+  width:${portrait?'auto':(QR+7)+'mm'};padding:${portrait?'2mm 3mm 3mm':(mode==='id1'?'1.8mm 2mm':'2.4mm 3mm')};
   border-left:${portrait?'0':'0.25mm dashed '+c.accent+'55'};
   border-top:${portrait?'0.25mm dashed '+c.accent+'55':'0'};
   background:rgba(255,255,255,.8)}
-.qrbox{width:${portrait?'33mm':'21mm'};height:${portrait?'33mm':'21mm'};background:#fff;padding:1.1mm;border-radius:1.2mm;box-shadow:0 0 0 .25mm ${c.accent}33}
+.qrbox{width:${QR}mm;height:${QR}mm;background:#fff;padding:1.1mm;border-radius:1.2mm;box-shadow:0 0 0 .25mm ${c.accent}33}
 .qrbox canvas,.qrbox img{width:100%!important;height:100%!important;display:block;object-fit:contain}
 .qrlab{font-size:${pt(4.2)};letter-spacing:.5pt;text-transform:uppercase;color:#5c7a70;font-weight:700}
-.qrid{font-family:"Courier New",monospace;font-size:${pt(4.6)};font-weight:700;color:${c.accent};text-align:center;max-width:${portrait?'60mm':'24mm'};word-break:break-all;line-height:1.15}
+.qrid{font-family:"Courier New",monospace;font-size:${pt(4.6)};font-weight:700;color:${c.accent};text-align:center;max-width:${portrait?'60mm':(QR+3)+'mm'};word-break:break-all;line-height:1.15}
 
 .idfoot{position:relative;flex:none;display:flex;align-items:center;justify-content:space-between;gap:2mm;
-  height:${portrait?'8.4mm':'5.2mm'};padding:0 3mm;background:#f3f7f5;border-top:0.25mm solid ${c.accent}28;
+  height:${portrait?'8.4mm':(mode==='id1'?'5.2mm':'7.4mm')};padding:0 3.6mm;background:#f3f7f5;border-top:0.25mm solid ${c.accent}28;
   font-size:${pt(4.3)};color:#5c7a70;letter-spacing:.2pt}
 .idfoot b{color:${c.accent}}
 
