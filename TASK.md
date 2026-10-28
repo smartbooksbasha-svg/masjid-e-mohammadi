@@ -30,3 +30,10 @@ Step 1 — QR scan edit option
 - [x] Urdu dictionary (420 keys) + langSel option
 - [x] RTL layout (dir attr, sidebar mirror, LTR for IDs/inputs, eye button, mobile drawer)
 - [x] i18n verify 4 languages 0 leftover, tests 170 green, deployed + verified
+
+## v106 — DONE (2026-10-28, commit 2228e09, cache memc-app-v106)
+- [x] Mobile alignment regression revert (.kv text-align, table squeeze)
+- [x] Urdu 615 keys + dynamic strings split into nodes + ID card labels tStr
+- [x] ur-audit tool (208 -> 18, bache sirf data/brand words)
+- [x] Tests 170, deployed + verified live
+- [ ] Tamil full translation (186 leftovers) — pending

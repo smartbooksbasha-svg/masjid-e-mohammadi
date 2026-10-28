@@ -687,7 +687,7 @@ const IDSET_DEFAULT = {
   famPrefix:'MEMC', famRandom:true        /* family id = MEMC-<yy><4 random> */
 };
 /* app version — footer/settings me dikhta hai, update confirm karne ke liye */
-const APP_VER = 'v106';
+const APP_VER = 'v107';
 const APP_VER_AT = '2026-10-28';
 
 /* password input + show/hide eye button */
@@ -1586,6 +1586,13 @@ function go(view, param){
   else if (view==='familylist') html = viewFamilyList(state.familyListFilter||(()=>true), state.familyListTitle||'Households');
   else if (view==='streetlist') html = viewStreetList();
   $('#content').innerHTML = html;
+  /* detail ke kv rows ek line me rehte hain — poora text title me (long-press par dikhta hai) */
+  try {
+    $$('#content .kv .row span:last-child').forEach(sp=>{
+      const t = (sp.textContent||'').trim();
+      if (t && !sp.getAttribute('title')) sp.setAttribute('title', t);
+    });
+  } catch(e){}
   $$('#nav .nav-item').forEach(a=>a.classList.toggle('active', a.dataset.view===view || (view==='detail'&&a.dataset.view==='families')||(view==='add'&&a.dataset.view==='add')));
   afterRender(view);
 }
@@ -1829,7 +1836,7 @@ function groupDetail(no){
 function DOC_KEYS_HAS(m){ return BASIC_DOCS.some(([k])=>m.docs && m.docs[k]==='yes'); }
 
 function grpHead(no, title, sub){
-  return `<header class="grp-head" data-act="grp-toggle" data-g="${no}" title="Click to open full details"><span class="grp-caret">▾</span><span class="grp-no">${no}</span><div><h2>${esc(title)}</h2><p>${esc(sub)}</p></div><span class="grp-caret">▾</span></header>`;
+  return `<header class="grp-head" data-act="grp-toggle" data-g="${no}" title="Click to open full details"><span class="grp-no">${no}</span><div><h2>${esc(title)}</h2><p>${esc(sub)}</p></div></header>`;
 }
 
 function masjidHero(){
@@ -2589,7 +2596,7 @@ function viewFamilyDetail(id){
   const men = members.filter(m=>m.gender==='Male').length;
   const women = members.filter(m=>m.gender==='Female').length;
   return `
-    <div class="page-head"><div><h1>${esc(f.houseName||'Household')}</h1><p>${esc(streetName(f))}${f.houseNo?' · <span>House</span> '+esc(f.houseNo):''} · ${members.length} <span>member(s)</span>${canEdit?'':' · <span>public view (phone hidden)</span>'}</p></div>
+    <div class="page-head"><div><h1>${esc(f.houseName||'Household')}</h1><p class="one-line">${esc(streetName(f))}${f.houseNo?' · <span>House</span> '+esc(f.houseNo):''} · ${members.length} <span>member(s)</span>${canEdit?'':' · <span>public view (phone hidden)</span>'}</p></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         ${canEdit?`<button class="btn ghost sm" data-act="print-family" data-id="${esc(f.id)}">${ICON.print} PDF</button>`:''}
         ${canEdit?`<button class="btn ghost sm" data-act="print-idcards" data-id="${esc(f.id)}">${ICON.id||ICON.print} ID Cards</button>`:''}

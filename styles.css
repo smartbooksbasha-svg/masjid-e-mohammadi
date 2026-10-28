@@ -310,9 +310,11 @@ td .mono{font-family:var(--font-display);font-weight:600;color:var(--accent)}
 /* detail */
 .kv{display:grid;grid-template-columns:repeat(2,1fr);gap:10px 22px}
 @media(max-width:620px){.kv{grid-template-columns:1fr}}
-.kv .row{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px dashed var(--line)}
-.kv .row span:first-child{color:var(--muted);font-size:.85rem}
-.kv .row span:last-child{font-weight:600;font-size:.88rem;text-align:right}
+.kv .row{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px dashed var(--line);align-items:baseline}
+.kv .row span:first-child{color:var(--muted);font-size:.85rem;flex:none;white-space:nowrap}
+/* ek hi line — lamba text ellipsis, poora text title attribute me */
+.kv .row span:last-child{font-weight:600;font-size:.88rem;text-align:right;
+  flex:1 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
 .empty{text-align:center;padding:54px 20px;color:var(--muted)}
 .empty .big{font-size:2.4rem;margin-bottom:8px}
@@ -467,11 +469,10 @@ td .mono{font-family:var(--font-display);font-weight:600;color:var(--accent)}
 
 
 /* ---------- dashboard category expand ---------- */
-.grp-head{cursor:pointer;position:relative;padding-right:34px}
-.grp-caret{position:absolute;right:14px;top:50%;transform:translateY(-50%);color:var(--muted);
+.grp-head{cursor:pointer;position:relative}
+
   font-size:.9rem;transition:transform .25s ease}
-.grp.open .grp-caret{transform:translateY(-50%) rotate(180deg);color:var(--accent)}
-.grp.open{box-shadow:0 18px 40px -28px rgba(0,0,0,.5)}
+.grp.open .grp.open{box-shadow:0 18px 40px -28px rgba(0,0,0,.5)}
 .grp-more{margin-top:14px;display:none}
 .grp.open .grp-more{display:block;animation:gmIn .28s ease both}
 @keyframes gmIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
@@ -764,3 +765,6 @@ html[dir="rtl"] .pw-wrap .inp{ padding-right:12px; padding-left:44px; }
   html[dir="rtl"] .sidebar{ transform:translateX(100%); }
   html[dir="rtl"] .sidebar.open{ transform:translateX(0); }
 }
+
+/* ek line wala text (detail ka sub-title) — lamba ho to ellipsis */
+.one-line{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}

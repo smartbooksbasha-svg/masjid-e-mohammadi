@@ -612,3 +612,22 @@ Open: wire Supabase keys; real OTP SMS later.
   me missing rehne se wo Hinglish me dikh rahi thi. `tools/i18n-verify.js` ka ur check sirf en-keys
   dekhta hai, isliye smoke test me `/[\u0600-\u06FF]/` + Hinglish regex dono rakhe.
 - Tests: **170 asserts**. Cache `memc-app-v105`, commit `7554593`, live verified (app.js, sw.js, index.html).
+
+## v106 (2026-10-28) — mobile alignment fix + Urdu poora
+- **Regression fix**: v104 ka mobile block `@media(max-width:640px)` me `.kv .row span:last-child{text-align:left}`
+  aur `table{min-width:100%}` tha → mobile par har key-value row ka alignment ulta + tables 10 columns ko
+  360px me squeeze kar rahe the. Dono HATA diye. Ab mobile block sirf safe cheezein karta hai:
+  `overflow-wrap:anywhere` (`.mono/td/th/.aud-*`), `.btn{min-height:42px;white-space:normal}`,
+  inputs `font-size:16px`, topbar title ellipsis. Table wapas `.table-wrap` me horizontal scroll karti hai.
+  **Rule: mobile media query me `text-align` / `min-width` override mat karo.**
+- **Urdu coverage 420 → 615 keys**: 195 strings jo `en` dict me hi nahi thi (nav labels, form labels,
+  dashboard labels, scheme names, buttons) add huin; ~11 interpolated strings ko code me chhote
+  `<span>` nodes me toda (`All rights reserved.`, `households on record.`, `member(s)`, `men/women`,
+  `Super Admin:`, `Separate series:`), taaki wo translate ho sakein. `tools/ur-audit.js` (naya) =
+  ur mode me har view render karke Latin-letter text dhoondta hai → **208 → 18**, aur bache 18 sirf
+  user data (naam, street, Family ID, email) ya brand words (PDF/JSON/xlsx/config.js) hain.
+- **ID card labels** ab `tStr()` se aate hain (Family ID, Head of family, Relation, Date of birth, Phone,
+  Address, Scan to verify, Terms & Conditions, Mutavalli/Secretary/Member, `yrs`, `Members · Issued`).
+- Tests 170 green. Cache `memc-app-v106`, commit `2228e09`, live verified.
+- ⚠️ Tamil ab 186 leftover dikhata hai (`tools/i18n-verify.js`) — ye naya tootna nahi, pehle bhi English
+  tha; pehle check sirf en-keys par chalta tha isliye chhupa hua tha. Tamil poora karne ka kaam pending.

@@ -474,6 +474,21 @@ const wait = ms => new Promise(r => setTimeout(r, ms || 120));
   LG.win.eval("setLang('ta')"); await wait(150);
   ok(!/\b(hai|karo|nahi|aap)\b/.test(LG.doc.querySelector('#content').textContent), 'Tamil mode me Hinglish mix nahi');
 
+  /* v107 — dashboard caret hataya, detail rows ek line */
+  const DT = await boot({ admin: OWNER.email, admins: [OWNER], families: [{
+    id: 'MEMC-26K7Q3', houseName: 'Detail House', houseNo: '9', street: 'Masjid Road', houseType: 'cement',
+    address: 'Masjid Road, Mohalla, Chennai 600001', phone: '9876543210',
+    members: [{ name: 'Ali', relation: 'Self', gender: 'Male', dob: '1990-01-01', maritalStatus: 'Married' }]
+  }] });
+  await wait(150);
+  ok(DT.doc.querySelectorAll('.grp-caret').length === 0, 'dashboard group cards par up/down caret nahi hai');
+  DT.win.eval("go('detail','MEMC-26K7Q3')"); await wait(200);
+  const kvVals = DT.doc.querySelectorAll('#content .kv .row span:last-child');
+  ok(kvVals.length > 3, 'detail me kv rows render hote hain');
+  ok([...kvVals].every(sp => (sp.textContent || '').trim() === '' || sp.getAttribute('title') === sp.textContent.trim()), 'har kv value ka poora text title me hai (ellipsis ke baad bhi padha ja sake)');
+  const kvRow = DT.doc.querySelector('#content .kv .row');
+  ok(!!kvRow && kvRow.children.length === 2, 'kv row me label + value ek hi row me hain');
+
   /* Urdu (v105) — RTL + poora translation */
   const UR = await boot({ admin: OWNER.email, admins: [OWNER] });
   UR.win.eval("setLang('ur')"); await wait(200);
