@@ -325,6 +325,48 @@ function toast(msg, type){
   wrap.appendChild(t); setTimeout(()=>{ t.style.opacity='0'; t.style.transition='opacity .3s'; setTimeout(()=>t.remove(),320); }, 2600);
 }
 
+/* ---------- v92: timestamps + content guards ---------- */
+function fmtDateTime(ts){
+  if (!ts) return '—';
+  const d = new Date(typeof ts==='number' ? ts : Date.parse(ts));
+  if (isNaN(d.getTime())) return '—';
+  const p = n => String(n).padStart(2,'0');
+  return p(d.getDate()) + '-' + p(d.getMonth()+1) + '-' + d.getFullYear() + ' · ' + p(d.getHours()) + ':' + p(d.getMinutes());
+}
+let _warnAt = 0;
+function softWarn(msg){
+  const now = Date.now();
+  if (now - _warnAt < 2500) return;
+  _warnAt = now;
+  toast(msg || 'Right-click band hai', 'err');
+}
+/* deterrent only — asli security server (Supabase RLS) me hai */
+function installGuards(){
+  try{
+    document.addEventListener('contextmenu', (e)=>{
+      const t = e.target;
+      const typing = t && (t.tagName==='INPUT' || t.tagName==='TEXTAREA' || t.isContentEditable);
+      if (typing) return;                       /* input me paste chalta rahe */
+      e.preventDefault();
+      softWarn('Right-click band hai');
+      return false;
+    }, { passive:false });
+
+    document.addEventListener('keydown', (e)=>{
+      const k = String(e.key||'').toLowerCase();
+      const mod = e.ctrlKey || e.metaKey;
+      const devtools = e.key==='F12'
+        || (mod && e.shiftKey && ['i','j','c','k'].includes(k))
+        || (mod && k==='u');
+      if (devtools){ e.preventDefault(); softWarn('Ye shortcut band hai'); }
+    }, true);
+
+    document.addEventListener('dragstart', (e)=>{
+      if (e.target && e.target.tagName==='IMG') e.preventDefault();
+    });
+  }catch(e){}
+}
+
 /* ---------------- caption helper icons (inline SVG) ---------------- */
 const ICON = {
   image:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>',
@@ -782,8 +824,17 @@ function anonymizeFamily(f, i){
     })
   };
 }
+/* publish se pehle hard guard — koi bhi personal field galti se na jaye */
+const PUBLIC_BANNED = ['name','fatherName','motherName','phone','address','bank','aadhaar','notes','houseName','createdBy','updatedBy','memberDocs'];
+function stripPersonal(obj){
+  if (Array.isArray(obj)) return obj.map(stripPersonal);
+  if (!obj || typeof obj !== 'object') return obj;
+  const out = {};
+  Object.keys(obj).forEach(k=>{ if (!PUBLIC_BANNED.includes(k)) out[k] = stripPersonal(obj[k]); });
+  return out;
+}
 function publicPayload(){
-  const fams = DB.families().map(anonymizeFamily);
+  const fams = DB.families().map(anonymizeFamily).map(stripPersonal);
   const mj = DB.masjid() || {};
   return {
     v:4,
@@ -810,13 +861,14 @@ const SYNC = {
   async pullPublic(){
     const c = await CLOUD.get(); if (!c) return false;
     try {
-      const { data, error } = await c.from('public_snapshot').select('data').limit(1);
+      const { data, error } = await c.from('public_snapshot').select('data, updated_at').limit(1);
       if (error) throw error;
       const snap = data && data[0] && data[0].data;
       /* snapshot abhi publish nahi hua (ya SQL v4 nahi chala) — purana public read try karo
          taaki site khali na dikhe. SQL v4 chalne ke baad ye raasta khud band ho jaata hai. */
       if (!snap || !Array.isArray(snap.families) || !snap.families.length) return await this.pullPublicLegacy();
       PUBDATA = {
+        at: snap.at || (data && data[0] && data[0].updated_at) || null,
         families:snap.families.map((f,i)=>Object.assign({}, f, {
           members:(f.members||[]).map((m,j)=>Object.assign({ id:'m'+i+'_'+j }, m))
         })),
@@ -1346,6 +1398,7 @@ function publicDashboard(){
     ${pending}
     <div class="sec-title">Survey — 6 categories</div>
     <p class="muted small" style="margin:-6px 0 12px">Only totals are public. Individual household details are visible only to committee admins.</p>
+    ${PUBDATA && PUBDATA.at ? `<p class="muted small" style="margin:-6px 0 12px"><span>Data updated:</span> <span>${esc(fmtDateTime(PUBDATA.at))}</span></p>` : ''}
     <div class="cat-grid">${CATS.map(([n,t,sub])=>catTile(n,t,sub,s)).join('')}</div>
     ${aboutContactBlock(masjidData())}`;
 }
@@ -1593,7 +1646,8 @@ function viewDashboard(){
       <button class="btn sm" type="button" data-act="backup-json">${ICON.dl} Backup now</button>
     </div>` : '';
   return `${backupBanner}
-    <div class="page-head"><div><h1>Survey Dashboard</h1><p>Complete survey of households, streets and members — live totals.</p></div>
+    <div class="page-head"><div><h1>Survey Dashboard</h1><p>Complete survey of households, streets and members — live totals.</p>
+      ${!isAdmin() && PUBDATA && PUBDATA.at ? `<p class="muted small"><span>Data updated:</span> <span>${esc(fmtDateTime(PUBDATA.at))}</span></p>` : ''}</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         ${isAdmin()
           ? `<button class="btn ghost sm" data-act="export-excel">${ICON.dl} Excel</button>
@@ -1795,7 +1849,7 @@ function renderFamilyList(){
         g=($('#famGenderF')||{}).value||'', ms=($('#famMaritalF')||{}).value||'';
   const rows = DB.families().filter(f=>familyMatches(f,q,st,g,ms)).sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
   if (!rows.length){ wrap.innerHTML = `<div class="card"><div class="empty"><h3>No matching households</h3><p>Try a different search or filter.</p></div></div>`; return; }
-  wrap.innerHTML = `<div class="table-wrap"><table><thead><tr><th>Family ID</th><th>Household</th><th>Street</th><th>Type</th><th>Members</th><th>Phone</th><th></th></tr></thead><tbody>
+  wrap.innerHTML = `<div class="table-wrap"><table><thead><tr><th>Family ID</th><th>Household</th><th>Street</th><th>Type</th><th>Members</th><th>Phone</th><th>Updated</th><th></th></tr></thead><tbody>
     ${rows.map(f=>`<tr>
       <td><span class="mono">${esc(f.id)}</span></td>
       <td>${esc(f.houseName||'—')}${f.houseNo?` <span class="muted small">· ${esc(f.houseNo)}</span>`:''}</td>
@@ -1803,6 +1857,7 @@ function renderFamilyList(){
       <td><span class="badge gray">${esc(labelOf(HOUSE_TYPES, houseTypeKey(f.houseType))||'Other')}</span></td>
       <td>${(f.members||[]).length}</td>
       <td>${esc(f.phone||'—')}</td>
+      <td class="muted small" style="white-space:nowrap">${esc(fmtDateTime(f.updatedAt||f.createdAt))}</td>
       <td style="white-space:nowrap">
         <button class="btn ghost sm" data-act="view-family" data-id="${esc(f.id)}">View</button>
         ${isAdmin()?`<button class="btn ghost sm" data-act="edit-family" data-id="${esc(f.id)}">Edit</button>
@@ -2062,6 +2117,8 @@ function viewFamilyDetail(id){
           <div class="row"><span>Phone</span><span>${canEdit?esc(f.phone||'—'):esc(maskPhone(f.phone))}</span></div>
           <div class="row"><span>Address</span><span>${esc(f.address||'—')}</span></div>
           <div class="row"><span>Members</span><span>${members.length} · ${men} men · ${women} women</span></div>
+          <div class="row"><span>Registered</span><span>${esc(fmtDateTime(f.createdAt))}${f.createdBy?' · '+esc(f.createdBy):''}</span></div>
+          <div class="row"><span>Last updated</span><span>${esc(fmtDateTime(f.updatedAt||f.createdAt))}${f.updatedBy?' · '+esc(f.updatedBy):''}</span></div>
         </div>
       </div>
     </div>
@@ -2528,6 +2585,14 @@ const I18N = {
     'Hide admins':'Hide admins',
     '+ Add admin':'+ Add admin',
     'Pending requests':'Pending requests',
+
+    /* --- v92: guards + timestamps --- */
+    'Right-click band hai':'Right-click is disabled',
+    'Ye shortcut band hai':'This shortcut is disabled',
+    'Registered':'Registered',
+    'Last updated':'Last updated',
+    'Updated':'Updated',
+    'Data updated:':'Data updated:',
     'Card size':'Card size',
     '5 × 3 inch — landscape (default)':'5 × 3 inch — landscape (default)',
     '3 × 5 inch — portrait':'3 × 5 inch — portrait',
@@ -3805,6 +3870,7 @@ function saveFamily(){
   if (d.id){
     const i = fams.findIndex(f=>f.id===d.id);
     d.updatedAt = Date.now();
+    d.updatedBy = (currentUser() && (currentUser().name || currentUser().email)) || d.updatedBy || '';
     if (i>=0) fams[i]=d; else fams.push(d);
   } else {
     const custom = String(d.customId||'').trim().toUpperCase();
@@ -3816,6 +3882,8 @@ function saveFamily(){
       d.id = nextFamilyId(d.members ? d.members.length : 0);
     }
     d.createdAt = Date.now();
+    d.updatedAt = d.createdAt;
+    d.createdBy = d.createdBy || ((currentUser() && (currentUser().name || currentUser().email)) || '');
     d.createdBy = u.id;
     fams.push(d);
   }
@@ -4600,6 +4668,7 @@ function migrateAdmins(){
 }
 
 function init(){
+  installGuards();
   migrateAdmins();
   migrateOwner();
   purgeNonOwnerAdmins();
