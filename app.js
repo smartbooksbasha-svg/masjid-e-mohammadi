@@ -687,7 +687,7 @@ const IDSET_DEFAULT = {
   famPrefix:'MEMC', famRandom:true        /* family id = MEMC-<yy><4 random> */
 };
 /* app version — footer/settings me dikhta hai, update confirm karne ke liye */
-const APP_VER = 'v105';
+const APP_VER = 'v106';
 const APP_VER_AT = '2026-10-28';
 
 /* password input + show/hide eye button */
@@ -2082,7 +2082,7 @@ function viewMembersList(filterFn, title){
     </tr>`;
   }).join('');
   return `
-    <div class="page-head"><div><h1>${esc(title)}</h1><p>${arr.length} member(s) found</p></div>
+    <div class="page-head"><div><h1>${esc(title)}</h1><p>${arr.length} <span>member(s) found</span></p></div>
       <button class="btn ghost sm" data-act="goto" data-view="dashboard">← Back to Dashboard</button></div>
     <div class="card">
       ${arr.length ? `<div class="field" style="max-width:340px;margin-bottom:12px"><input class="inp" type="search" placeholder="Naam ya Family ID se dhoondo…" oninput="filterRows(this.value,'#mlistTable')" /></div>
@@ -2295,7 +2295,7 @@ function aboutContactBlock(mj){
       </section>
     </div>
     <footer class="site-foot">
-      <span>© ${yr} ${esc(name)} · ${esc(sub)} — All rights reserved.</span>
+      <span>© ${yr} ${esc(name)} · ${esc(sub)} — <span>All rights reserved.</span></span>
       <span class="small">Survey data sirf committee ke records ke liye · public view read-only</span>
     </footer>`;
 }
@@ -2310,7 +2310,7 @@ function viewFamilies(){
   const streets = Array.from(new Set(fams.map(streetName))).sort();
   const pre = state.param ? esc(state.param) : '';
   return `
-    <div class="page-head"><div><h1>Households</h1><p>${fams.length} households on record.</p></div>
+    <div class="page-head"><div><h1>Households</h1><p>${fams.length} <span>households on record.</span></p></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">${isAdmin()?`<button class="btn ghost sm" data-act="export-excel">${ICON.dl} Excel</button><button class="btn ghost sm" data-act="print-all">${ICON.print} PDF</button><button class="btn sm" data-act="goto" data-view="add">+ Add Household</button>`:''}</div></div>
     <div class="toolbar">
       <input class="inp grow" id="famSearch" placeholder="Search household, Family ID, phone, street…" />
@@ -2431,7 +2431,7 @@ function viewFamilyForm(){
           <div class="field"><label>Phone number</label><input class="inp" data-field="phone" inputmode="numeric" value="${esc(d.phone)}" placeholder="10-digit mobile" /></div>
         </div>
         <div class="field" style="margin-top:12px">
-          <label>Family ID ${editing?'':'<span class="hint" style="font-weight:400">— optional, leave empty for auto-generate</span>'}</label>
+          <label>Family ID ${editing?'':'<span class="hint" style="font-weight:400">— <span>optional, leave empty for auto-generate</span></span>'}</label>
           ${editing
             ? `<input class="inp" value="${esc(d.id)}" readonly />`
             : `<input class="inp" data-field="customId" value="${esc(d.customId||'')}" placeholder="Auto: ${esc(previewFamilyId())}" />
@@ -2589,7 +2589,7 @@ function viewFamilyDetail(id){
   const men = members.filter(m=>m.gender==='Male').length;
   const women = members.filter(m=>m.gender==='Female').length;
   return `
-    <div class="page-head"><div><h1>${esc(f.houseName||'Household')}</h1><p>${esc(streetName(f))}${f.houseNo?' · House '+esc(f.houseNo):''} · ${members.length} member(s)${canEdit?'':' · public view (phone hidden)'}</p></div>
+    <div class="page-head"><div><h1>${esc(f.houseName||'Household')}</h1><p>${esc(streetName(f))}${f.houseNo?' · <span>House</span> '+esc(f.houseNo):''} · ${members.length} <span>member(s)</span>${canEdit?'':' · <span>public view (phone hidden)</span>'}</p></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         ${canEdit?`<button class="btn ghost sm" data-act="print-family" data-id="${esc(f.id)}">${ICON.print} PDF</button>`:''}
         ${canEdit?`<button class="btn ghost sm" data-act="print-idcards" data-id="${esc(f.id)}">${ICON.id||ICON.print} ID Cards</button>`:''}
@@ -2610,7 +2610,7 @@ function viewFamilyDetail(id){
           <div class="row"><span>House type</span><span>${esc(labelOf(HOUSE_TYPES, houseTypeKey(f.houseType)))}</span></div>
           <div class="row"><span>Phone</span><span>${canEdit?esc(f.phone||'—'):esc(maskPhone(f.phone))}</span></div>
           <div class="row"><span>Address</span><span>${esc(f.address||'—')}</span></div>
-          <div class="row"><span>Members</span><span>${members.length} · ${men} men · ${women} women</span></div>
+          <div class="row"><span>Members</span><span>${members.length} · ${men} <span>men</span> · ${women} <span>women</span></span></div>
           <div class="row"><span>Registered</span><span>${esc(fmtDateTime(f.createdAt))}${f.createdBy?' · '+esc(f.createdBy):''}</span></div>
           <div class="row"><span>Last updated</span><span>${esc(fmtDateTime(f.updatedAt||f.createdAt))}${f.updatedBy?' · '+esc(f.updatedBy):''}</span></div>
         </div>
@@ -3176,7 +3176,233 @@ const I18N = {
     'e.g. Masjid e Mohammadi':'e.g. Masjid e Mohammadi',
     'e.g. 60 bachche, 3 ustad':'e.g. 60 students, 3 teachers',
     '10-digit mobile':'10-digit mobile',
-    "Abhi kisi ka occupation nahi bhara — member form me \"Kaam / occupation\" likho (jaise Plumber).":"No occupation filled yet — write the work/occupation in the member form (e.g. Plumber)."
+    "Abhi kisi ka occupation nahi bhara — member form me \"Kaam / occupation\" likho (jaise Plumber).":"No occupation filled yet — write the work/occupation in the member form (e.g. Plumber).",
+    "— locked":"— locked",
+    "optional, leave empty for auto-generate":"optional, leave empty for auto-generate",
+    "(Owner)":"(Owner)",
+    "← Back":"← Back",
+    "+ Add custom document":"+ Add custom document",
+    "+ Add document":"+ Add document",
+    "+ Add Household":"+ Add Household",
+    "+ Add member":"+ Add member",
+    "+ Photo":"+ Photo",
+    "1 · Location & housing":"1 · Location & housing",
+    "2 · Members":"2 · Members",
+    "Aadhaar":"Aadhaar",
+    "Aalima (women)":"Aalima (women)",
+    "Account":"Account",
+    "Additional Documents":"Additional Documents",
+    "Address / landmark":"Address / landmark",
+    "Administration":"Administration",
+    "Admins & approval":"Admins & approval",
+    "Age":"Age",
+    "All households":"All households",
+    "All members":"All members",
+    "All streets":"All streets",
+    "All Students":"All Students",
+    "Any remark about this household":"Any remark about this household",
+    "App version":"App version",
+    "Appearance":"Appearance",
+    "Auto: MEMC-2026-000001":"Auto: MEMC-2026-000001",
+    "Ayushman Bharat":"Ayushman Bharat",
+    "Backup (JSON)":"Backup (JSON)",
+    "Backup now":"Backup now",
+    "Backup reminder:":"Backup reminder:",
+    "Backup to Drive":"Backup to Drive",
+    "Bank passbook":"Bank passbook",
+    "Basic government documents":"Basic government documents",
+    "Birth certificate":"Birth certificate",
+    "Births this month":"Births this month",
+    "By Family ID":"By Family ID",
+    "By QR scan":"By QR scan",
+    "Cancel":"Cancel",
+    "Cement sheet (house type)":"Cement sheet (house type)",
+    "Cement sheet houses":"Cement sheet houses",
+    "Challenged":"Challenged",
+    "Click sidebar logo to change website logo • Click your avatar to edit your profile • Super admin can add/edit/remove admins with photo, email, phone and age":"Click sidebar logo to change website logo • Click your avatar to edit your profile • Super admin can add/edit/remove admins with photo, email, phone and age",
+    "Click to open full details":"Click to open full details",
+    "Click to upload/change website logo from gallery":"Click to upload/change website logo from gallery",
+    "College students":"College students",
+    "College Students":"College Students",
+    "Connect Google Drive":"Connect Google Drive",
+    "Dashboard":"Dashboard",
+    "Data & backup":"Data & backup",
+    "Date of birth":"Date of birth",
+    "Day":"Day",
+    "Deaths this month":"Deaths this month",
+    "Del":"Del",
+    "Disability pension":"Disability pension",
+    "Docs":"Docs",
+    "Documents & Govt. Schemes":"Documents & Govt. Schemes",
+    "Documents held":"Documents held",
+    "e.g. Abdul Rahman":"e.g. Abdul Rahman",
+    "e.g. CM relief fund":"e.g. CM relief fund",
+    "e.g. Masjid Road":"e.g. Masjid Road",
+    "Edit":"Edit",
+    "Editable":"Editable",
+    "Education":"Education",
+    "eg XXXXX01":"eg XXXXX01",
+    "Email":"Email",
+    "Emerald Lattice theme · day & night.":"Emerald Lattice theme · day & night.",
+    "Employment status":"Employment status",
+    "Export Excel (.xlsx)":"Export Excel (.xlsx)",
+    "Export PDF / Print":"Export PDF / Print",
+    "Family & Demographics":"Family & Demographics",
+    "Family ID":"Family ID",
+    "FAMILY ID":"FAMILY ID",
+    "Father name":"Father name",
+    "Fill the household details, then add each member.":"Fill the household details, then add each member.",
+    "Find":"Find",
+    "Find family":"Find family",
+    "Force update":"Force update",
+    "Free bus pass":"Free bus pass",
+    "Full name *":"Full name *",
+    "Gender":"Gender",
+    "Government / welfare schemes":"Government / welfare schemes",
+    "Higher secondary students":"Higher secondary students",
+    "Higher Secondary Students":"Higher Secondary Students",
+    "House no.":"House no.",
+    "House number":"House number",
+    "House type":"House type",
+    "Household":"Household",
+    "Household / head name *":"Household / head name *",
+    "Households":"Households",
+    "ID Cards":"ID Cards",
+    "Kapidu Thittam card":"Kapidu Thittam card",
+    "Khidmath Committee":"Khidmath Committee",
+    "Khidmath Committee · Survey":"Khidmath Committee · Survey",
+    "Language":"Language",
+    "Location & Housing":"Location & Housing",
+    "Log out":"Log out",
+    "Logged in as":"Logged in as",
+    "Logged in:":"Logged in:",
+    "Madarsa students":"Madarsa students",
+    "Madarsa Students":"Madarsa Students",
+    "Magalir Urimai Thogai":"Magalir Urimai Thogai",
+    "male":"male",
+    "female":"female",
+    "Marital":"Marital",
+    "Marital status":"Marital status",
+    "Married":"Married",
+    "Married men":"Married men",
+    "Married women":"Married women",
+    "Masjid e Mohammadi":"Masjid e Mohammadi",
+    "Masjid Profile":"Masjid Profile",
+    "Max 6":"Max 6",
+    "Member 1":"Member 1",
+    "Members with an occupation":"Members with an occupation",
+    "Men Aalim":"Men Aalim",
+    "Men Hafiz":"Men Hafiz",
+    "Mohalla, gali, landmark":"Mohalla, gali, landmark",
+    "Mother name":"Mother name",
+    "Moulding (house type)":"Moulding (house type)",
+    "Moulding houses":"Moulding houses",
+    "Mufti (men)":"Mufti (men)",
+    "My Profile - Edit photo/name/phone":"My Profile - Edit photo/name/phone",
+    "Name":"Name",
+    "Nazira (men)":"Nazira (men)",
+    "Nazira (women)":"Nazira (women)",
+    "No documents marked.":"No documents marked.",
+    "Notes (optional)":"Notes (optional)",
+    "Number of children":"Number of children",
+    "Occupations":"Occupations",
+    "Old age pension":"Old age pension",
+    "Open menu":"Open menu",
+    "Other / kachcha (house type)":"Other / kachcha (house type)",
+    "Other / kachcha houses":"Other / kachcha houses",
+    "Other scheme":"Other scheme",
+    "Owner":"Owner",
+    "Owner (Fixed)":"Owner (Fixed)",
+    "Palm leaf (house type)":"Palm leaf (house type)",
+    "Palm leaf houses":"Palm leaf houses",
+    "PAN card":"PAN card",
+    "Passport":"Passport",
+    "PDF / Print":"PDF / Print",
+    "Phone":"Phone",
+    "Phone number":"Phone number",
+    "Physically challenged — all":"Physically challenged — all",
+    "Physically challenged (total)":"Physically challenged (total)",
+    "Physically challenged men":"Physically challenged men",
+    "Physically challenged women":"Physically challenged women",
+    "Plumber, Electrician, Painter, Helper…":"Plumber, Electrician, Painter, Helper…",
+    "PM Awas Yojana":"PM Awas Yojana",
+    "Primary (1-5)":"Primary (1-5)",
+    "Primary students":"Primary students",
+    "Primary Students":"Primary Students",
+    "Public totals refresh":"Public totals refresh",
+    "Read-only public view":"Read-only public view",
+    "Relation":"Relation",
+    "Relation to head":"Relation to head",
+    "Religious Education":"Religious Education",
+    "Restore & Google Drive":"Restore & Google Drive",
+    "Restore from backup file":"Restore from backup file",
+    "Save & add another":"Save & add another",
+    "Save & generate Family ID":"Save & generate Family ID",
+    "Scan from camera":"Scan from camera",
+    "Scan QR to open edit form after admin login. QR contains Family ID.":"Scan QR to open edit form after admin login. QR contains Family ID.",
+    "Scheme-wise count":"Scheme-wise count",
+    "Schemes":"Schemes",
+    "School scholarship":"School scholarship",
+    "School TC":"School TC",
+    "Search household, Family ID, phone, street…":"Search household, Family ID, phone, street…",
+    "Self":"Self",
+    "Self / Wife / Son…":"Self / Wife / Son…",
+    "session start":"session start",
+    "Smart card":"Smart card",
+    "Street name *":"Street name *",
+    "Super Admin":"Super Admin",
+    "Total Aalim & Hafiz":"Total Aalim & Hafiz",
+    "Total Aalim & Hafiz (men + women)":"Total Aalim & Hafiz (men + women)",
+    "Total child / students":"Total child / students",
+    "Type":"Type",
+    "Ujjwala gas":"Ujjwala gas",
+    "Unmarried":"Unmarried",
+    "Unmarried men":"Unmarried men",
+    "Unmarried women":"Unmarried women",
+    "Upload QR image":"Upload QR image",
+    "User ID":"User ID",
+    "Version":"Version",
+    "View":"View",
+    "Voter ID":"Voter ID",
+    "Widow pension":"Widow pension",
+    "Widows":"Widows",
+    "Women Aalim":"Women Aalim",
+    "Women Hafiz":"Women Hafiz",
+    "Yes":"Yes",
+    "No":"No",
+    "khaali":"khaali",
+    "Separate series:":"Separate series:",
+    "All rights reserved.":"All rights reserved.",
+    "households on record.":"households on record.",
+    "member(s) found":"member(s) found",
+    "member(s)":"member(s)",
+    "House":"House",
+    "public view (phone hidden)":"public view (phone hidden)",
+    "men":"men",
+    "women":"women",
+    "report":"report",
+    "English":"English",
+    "Hinglish":"Hinglish",
+    "Tamil":"Tamil",
+    "Urdu":"Urdu",
+    "— optional, leave empty for auto-generate":"— optional, leave empty for auto-generate",
+    "Head of family":"Head of family",
+    "Scan to verify":"Scan to verify",
+    "Terms & Conditions":"Terms & Conditions",
+    "Mutavalli":"Mutavalli",
+    "Secretary":"Secretary",
+    "Member":"Member",
+    "Mohalla Survey":"Mohalla Survey",
+    "yrs":"yrs",
+    "Issued":"Issued",
+    "No members to print":"No members to print",
+    "Wife":"Wife",
+    "Son":"Son",
+    "Daughter":"Daughter",
+    "Father":"Father",
+    "Mother":"Mother",
+    "Brother":"Brother",
+    "Sister":"Sister"
   },
   /* Hinglish — jo strings English me likhi gayi hain unka Hinglish version.
      (Baaki app ki source strings pehle se Hinglish hain, unka kuch nahi chahiye.) */
@@ -3892,7 +4118,233 @@ const I18N = {
     "e.g. Masjid e Mohammadi":"مثلاً مسجدِ محمدی",
     "10-digit mobile":"۱۰ ہندسوں کا موبائل",
     "Naye admins sirf owner approve kar sakta hai.":"نئے ایڈمن صرف مالک منظور کر سکتا ہے۔",
-    "Abhi kisi ka occupation nahi bhara — member form me \"Kaam / occupation\" likho (jaise Plumber).":"ابھی کسی کا پیشہ درج نہیں — ممبر فارم میں «کام / پیشہ» لکھیں (مثلاً پلمبر)۔"
+    "Abhi kisi ka occupation nahi bhara — member form me \"Kaam / occupation\" likho (jaise Plumber).":"ابھی کسی کا پیشہ درج نہیں — ممبر فارم میں «کام / پیشہ» لکھیں (مثلاً پلمبر)۔",
+    "— locked":"— مقفل",
+    "optional, leave empty for auto-generate":"اختیاری — خودکار بنانے کے لیے خالی چھوڑ دیں",
+    "(Owner)":"(مالک)",
+    "← Back":"→ واپس",
+    "+ Add custom document":"+ اپنی دستاویز شامل کریں",
+    "+ Add document":"+ دستاویز شامل کریں",
+    "+ Add Household":"+ گھر شامل کریں",
+    "+ Add member":"+ رکن شامل کریں",
+    "+ Photo":"+ تصویر",
+    "1 · Location & housing":"۱ · مقام اور رہائش",
+    "2 · Members":"۲ · ارکان",
+    "Aadhaar":"آدھار",
+    "Aalima (women)":"عالمہ (خواتین)",
+    "Account":"اکاؤنٹ",
+    "Additional Documents":"اضافی دستاویزات",
+    "Address / landmark":"پتہ / نشانی",
+    "Administration":"انتظامیہ",
+    "Admins & approval":"ایڈمن اور منظوری",
+    "Age":"عمر",
+    "All households":"تمام گھر",
+    "All members":"تمام ارکان",
+    "All streets":"تمام گلیاں",
+    "All Students":"تمام طلبہ",
+    "Any remark about this household":"اس گھر کے بارے میں کوئی ریمارک",
+    "App version":"ایپ ورژن",
+    "Appearance":"ظاہری شکل",
+    "Auto: MEMC-2026-000001":"خودکار: MEMC-2026-000001",
+    "Ayushman Bharat":"آیوشمان بھارت",
+    "Backup (JSON)":"بیک اپ (JSON)",
+    "Backup now":"ابھی بیک اپ لیں",
+    "Backup reminder:":"بیک اپ یاد دہانی:",
+    "Backup to Drive":"ڈرائیو پر بیک اپ",
+    "Bank passbook":"بینک پاس بک",
+    "Basic government documents":"بنیادی سرکاری دستاویزات",
+    "Birth certificate":"پیدائش سرٹیفکیٹ",
+    "Births this month":"اس ماہ پیدائشیں",
+    "By Family ID":"فیملی آئی ڈی سے",
+    "By QR scan":"QR اسکین سے",
+    "Cancel":"منسوخ",
+    "Cement sheet (house type)":"سیمنٹ شیٹ (مکان کی قسم)",
+    "Cement sheet houses":"سیمنٹ شیٹ کے گھر",
+    "Challenged":"معذور",
+    "Click sidebar logo to change website logo • Click your avatar to edit your profile • Super admin can add/edit/remove admins with photo, email, phone and age":"سائٹ کا لوگو بدلنے کے لیے سائیڈ بار کا لوگو دبائیں • پروفائل بدلنے کے لیے اپنا اوتار دبائیں • سپر ایڈمن تصویر، ای میل، فون اور عمر کے ساتھ ایڈمن شامل/ترمیم/ہٹا سکتا ہے",
+    "Click to open full details":"پوری تفصیل کھولنے کے لیے دبائیں",
+    "Click to upload/change website logo from gallery":"گیلری سے سائٹ کا لوگو اپ لوڈ یا تبدیل کرنے کے لیے دبائیں",
+    "College students":"کالج کے طلبہ",
+    "College Students":"کالج کے طلبہ",
+    "Connect Google Drive":"گوگل ڈرائیو سے رابطہ",
+    "Dashboard":"ڈیش بورڈ",
+    "Data & backup":"ڈیٹا اور بیک اپ",
+    "Date of birth":"تاریخِ پیدائش",
+    "Day":"دن",
+    "Deaths this month":"اس ماہ وفیات",
+    "Del":"حذف",
+    "Disability pension":"معذوری پنشن",
+    "Docs":"دستاویزات",
+    "Documents & Govt. Schemes":"دستاویزات اور سرکاری اسکیمیں",
+    "Documents held":"موجود دستاویزات",
+    "e.g. Abdul Rahman":"مثلاً عبدالرحمٰن",
+    "e.g. CM relief fund":"مثلاً وزیراعلیٰ ریلیف فنڈ",
+    "e.g. Masjid Road":"مثلاً مسجد روڈ",
+    "Edit":"ترمیم",
+    "Editable":"قابلِ ترمیم",
+    "Education":"تعلیم",
+    "eg XXXXX01":"مثلاً XXXXX01",
+    "Email":"ای میل",
+    "Emerald Lattice theme · day & night.":"ایمرلڈ لیٹس تھیم · دن اور رات۔",
+    "Employment status":"ملازمت کی حالت",
+    "Export Excel (.xlsx)":"ایکسل ایکسپورٹ (.xlsx)",
+    "Export PDF / Print":"PDF ایکسپورٹ / پرنٹ",
+    "Family & Demographics":"خاندان اور آبادی",
+    "Family ID":"فیملی آئی ڈی",
+    "FAMILY ID":"فیملی آئی ڈی",
+    "Father name":"والد کا نام",
+    "Fill the household details, then add each member.":"گھر کی تفصیل بھریں، پھر ہر رکن شامل کریں۔",
+    "Find":"تلاش",
+    "Find family":"خاندان تلاش کریں",
+    "Force update":"زبردستی اپ ڈیٹ",
+    "Free bus pass":"مفت بس پاس",
+    "Full name *":"پورا نام *",
+    "Gender":"جنس",
+    "Government / welfare schemes":"سرکاری / فلاحی اسکیمیں",
+    "Higher secondary students":"ہائر سیکنڈری طلبہ",
+    "Higher Secondary Students":"ہائر سیکنڈری طلبہ",
+    "House no.":"مکان نمبر",
+    "House number":"مکان نمبر",
+    "House type":"مکان کی قسم",
+    "Household":"گھر",
+    "Household / head name *":"گھر / سربراہ کا نام *",
+    "Households":"گھر",
+    "ID Cards":"آئی ڈی کارڈ",
+    "Kapidu Thittam card":"کپیڈو تھٹم کارڈ",
+    "Khidmath Committee":"خدمت کمیٹی",
+    "Khidmath Committee · Survey":"خدمت کمیٹی · سروے",
+    "Language":"زبان",
+    "Location & Housing":"مقام اور رہائش",
+    "Log out":"لاگ آؤٹ",
+    "Logged in as":"لاگ ان بطور",
+    "Logged in:":"لاگ ان:",
+    "Madarsa students":"مدرسہ کے طلبہ",
+    "Madarsa Students":"مدرسہ کے طلبہ",
+    "Magalir Urimai Thogai":"مگلر ارمئی توگئی",
+    "male":"مرد",
+    "female":"خاتون",
+    "Marital":"ازدواجی حالت",
+    "Marital status":"ازدواجی حالت",
+    "Married":"شادی شدہ",
+    "Married men":"شادی شدہ مرد",
+    "Married women":"شادی شدہ خواتین",
+    "Masjid e Mohammadi":"مسجدِ محمدی",
+    "Masjid Profile":"مسجد پروفائل",
+    "Max 6":"زیادہ سے زیادہ ۶",
+    "Member 1":"رکن ۱",
+    "Members with an occupation":"پیشہ رکھنے والے ارکان",
+    "Men Aalim":"مرد عالم",
+    "Men Hafiz":"مرد حافظ",
+    "Mohalla, gali, landmark":"محلہ، گلی، نشانی",
+    "Mother name":"والدہ کا نام",
+    "Moulding (house type)":"ڈھلائی (مکان کی قسم)",
+    "Moulding houses":"ڈھلائی کے گھر",
+    "Mufti (men)":"مفتی (مرد)",
+    "My Profile - Edit photo/name/phone":"میری پروفائل - تصویر/نام/فون میں ترمیم",
+    "Name":"نام",
+    "Nazira (men)":"ناظرہ (مرد)",
+    "Nazira (women)":"ناظرہ (خواتین)",
+    "No documents marked.":"کوئی دستاویز نشان زد نہیں۔",
+    "Notes (optional)":"نوٹس (اختیاری)",
+    "Number of children":"بچوں کی تعداد",
+    "Occupations":"پیشے",
+    "Old age pension":"بڑھاپے کی پنشن",
+    "Open menu":"مینو کھولیں",
+    "Other / kachcha (house type)":"دیگر / کچا (مکان کی قسم)",
+    "Other / kachcha houses":"دیگر / کچے گھر",
+    "Other scheme":"دیگر اسکیم",
+    "Owner":"مالک",
+    "Owner (Fixed)":"مالک (مقرر)",
+    "Palm leaf (house type)":"تال پتّے کی چھت (مکان کی قسم)",
+    "Palm leaf houses":"تال پتّے کے گھر",
+    "PAN card":"پین کارڈ",
+    "Passport":"پاسپورٹ",
+    "PDF / Print":"PDF / پرنٹ",
+    "Phone":"فون",
+    "Phone number":"فون نمبر",
+    "Physically challenged — all":"معذور — سب",
+    "Physically challenged (total)":"معذور (کل)",
+    "Physically challenged men":"معذور مرد",
+    "Physically challenged women":"معذور خواتین",
+    "Plumber, Electrician, Painter, Helper…":"پلمبر، الیکٹریشن، پینٹر، ہیلپر…",
+    "PM Awas Yojana":"پی ایم آواس یوجنا",
+    "Primary (1-5)":"پرائمری (۱-۵)",
+    "Primary students":"پرائمری طلبہ",
+    "Primary Students":"پرائمری طلبہ",
+    "Public totals refresh":"عوامی اعداد تازہ کریں",
+    "Read-only public view":"عوامی منظر (صرف پڑھنے کے لیے)",
+    "Relation":"رشتہ",
+    "Relation to head":"سربراہ سے رشتہ",
+    "Religious Education":"دینی تعلیم",
+    "Restore & Google Drive":"بحالی اور گوگل ڈرائیو",
+    "Restore from backup file":"بیک اپ فائل سے بحال کریں",
+    "Save & add another":"محفوظ کریں اور اگلا شامل کریں",
+    "Save & generate Family ID":"محفوظ کریں اور فیملی آئی ڈی بنائیں",
+    "Scan from camera":"کیمرے سے اسکین",
+    "Scan QR to open edit form after admin login. QR contains Family ID.":"ایڈمن لاگ ان کے بعد ترمیم فارم کھولنے کے لیے QR اسکین کریں۔ QR میں فیملی آئی ڈی ہے۔",
+    "Scheme-wise count":"اسکیم کے حساب سے گنتی",
+    "Schemes":"اسکیمیں",
+    "School scholarship":"اسکول اسکالرشپ",
+    "School TC":"اسکول ٹی سی",
+    "Search household, Family ID, phone, street…":"گھر، فیملی آئی ڈی، فون، گلی تلاش کریں…",
+    "Self":"خود",
+    "Self / Wife / Son…":"خود / بیوی / بیٹا…",
+    "session start":"سیشن شروع",
+    "Smart card":"اسمارٹ کارڈ",
+    "Street name *":"گلی کا نام *",
+    "Super Admin":"سپر ایڈمن",
+    "Total Aalim & Hafiz":"کل عالم اور حافظ",
+    "Total Aalim & Hafiz (men + women)":"کل عالم اور حافظ (مرد + خواتین)",
+    "Total child / students":"کل بچے / طلبہ",
+    "Type":"قسم",
+    "Ujjwala gas":"اجولا گیس",
+    "Unmarried":"غیر شادی شدہ",
+    "Unmarried men":"غیر شادی شدہ مرد",
+    "Unmarried women":"غیر شادی شدہ خواتین",
+    "Upload QR image":"QR تصویر اپ لوڈ کریں",
+    "User ID":"یوزر آئی ڈی",
+    "Version":"ورژن",
+    "View":"دیکھیں",
+    "Voter ID":"ووٹر آئی ڈی",
+    "Widow pension":"بیوہ پنشن",
+    "Widows":"بیوہ",
+    "Women Aalim":"خواتین عالمہ",
+    "Women Hafiz":"خواتین حافظہ",
+    "Yes":"ہاں",
+    "No":"نہیں",
+    "khaali":"خالی",
+    "Separate series:":"الگ سیریز:",
+    "All rights reserved.":"جملہ حقوق محفوظ ہیں۔",
+    "households on record.":"گھر ریکارڈ میں ہیں۔",
+    "member(s) found":"ارکان ملے",
+    "member(s)":"رکن",
+    "House":"مکان",
+    "public view (phone hidden)":"عوامی منظر (فون چھپا ہوا)",
+    "men":"مرد",
+    "women":"خواتین",
+    "report":"رپورٹ",
+    "English":"انگریزی",
+    "Hinglish":"ہنگلش",
+    "Tamil":"تمل",
+    "Urdu":"اردو",
+    "— optional, leave empty for auto-generate":"— اختیاری، خودکار بنانے کے لیے خالی چھوڑیں",
+    "Head of family":"گھر کا سربراہ",
+    "Scan to verify":"تصدیق کے لیے اسکین کریں",
+    "Terms & Conditions":"شرائط و ضوابط",
+    "Mutavalli":"متولی",
+    "Secretary":"سیکرٹری",
+    "Member":"ممبر",
+    "Mohalla Survey":"محلہ سروے",
+    "yrs":"سال",
+    "Issued":"جاری",
+    "No members to print":"پرنٹ کرنے کے لیے کوئی رکن نہیں",
+    "Wife":"بیوی",
+    "Son":"بیٹا",
+    "Daughter":"بیٹی",
+    "Father":"والد",
+    "Mother":"والدہ",
+    "Brother":"بھائی",
+    "Sister":"بہن"
   }
 };
 
@@ -3994,7 +4446,7 @@ function setLang(code){
   try { renderShell(); } catch(e){}
   try { go(state.view, state.param); } catch(e){}  // re-render content
   translateTree(document.body);                    // then translate what is on screen
-  try { toast('Language: ' + langLabel(code), 'ok'); } catch(e){}
+  try { toast(tStr('Language') + ': ' + tStr(langLabel(code)), 'ok'); } catch(e){}
 }
 
 /* ============================== MASJID PROFILE ============================== */
@@ -4146,7 +4598,7 @@ function viewAdminPanel(){
     </div>`:''}
     <div class="card">
       <div class="sec-title" style="margin-top:0">Admins & approval</div>
-      <p class="muted small"><span>Super admin naye admins banata hai, password reset karta hai aur website control karta hai.</span> <b>Super Admin: ${esc(ownerName())} (${esc(ownerEmail())})</b> — locked<br><span class="small">Click sidebar logo to change website logo • Click your avatar to edit your profile • Super admin can add/edit/remove admins with photo, email, phone and age</span></p>
+      <p class="muted small"><span>Super admin naye admins banata hai, password reset karta hai aur website control karta hai.</span> <b><span>Super Admin</span>: ${esc(ownerName())} (${esc(ownerEmail())})</b> — locked<br><span class="small">Click sidebar logo to change website logo • Click your avatar to edit your profile • Super admin can add/edit/remove admins with photo, email, phone and age</span></p>
       <div style="margin-top:12px">${isOwner()?viewUsersTable():viewUsersReadonly()}</div>
     </div>
     ${viewSettingsCard('adminpanel')}
@@ -4429,7 +4881,7 @@ function viewSettingsCard(ctx='adminpanel'){
             <option value="random" ${IS.idStyle!=='seq'?'selected':''}>Random (recommended) — ${esc(IS.adminPrefix)}102026#21200</option>
             <option value="seq" ${IS.idStyle==='seq'?'selected':''}>Number series — ${esc(IS.adminPrefix)}-2026-0101</option>
           </select></div>
-        <div class="field"><label>Super admin ID prefix</label><input class="inp" name="ownerPrefix" value="${esc(IS.ownerPrefix)}" placeholder="OW" maxlength="10" /><span class="hint">Alag series: ${esc(IS.ownerPrefix)}102026#48391</span></div>
+        <div class="field"><label>Super admin ID prefix</label><input class="inp" name="ownerPrefix" value="${esc(IS.ownerPrefix)}" placeholder="OW" maxlength="10" /><span class="hint"><span>Separate series:</span> ${esc(IS.ownerPrefix)}102026#48391</span></div>
         <div class="field"><label>Admin ID prefix</label><input class="inp" name="adminPrefix" value="${esc(IS.adminPrefix)}" placeholder="AD" maxlength="10" /><span class="hint">Har naye admin ko alag random ID</span></div>
         <div class="field"><label>Admin ID start number (series style)</label><input class="inp" name="adminStart" type="number" min="1" max="9999" value="${esc(IS.adminStart)}" /><span class="hint">Sirf number-series style me — default 101</span></div>
         <div class="field"><label>Admin ID suffix</label><input class="inp" name="adminSuffix" value="${esc(IS.adminSuffix)}" placeholder="khaali" maxlength="10" /><span class="hint">ID ke aakhir me — khaali bhi chhod sakte ho</span></div>
@@ -5758,7 +6210,7 @@ function idCardFront(fam, c, base){
   const a = ageFromDob(head.dob);
   const dobText = head.dob ? (fmtDate(head.dob) || head.dob) : '—';
   const issued = new Date().toLocaleDateString('en-GB').split('/').join('-');
-  const footL = String(c.footLeft||'').trim() || ('Members '+mem.length+' · Issued '+issued);
+  const footL = String(c.footLeft||'').trim() || (tStr('Members')+' '+mem.length+' · '+tStr('Issued')+' '+issued);
   const footR = String(c.footRight||'').trim() || (c.org+' · '+c.sub);
   const qrText = location.origin + location.pathname + '#qedit=' + encodeURIComponent(fam.id);
   const qrMarkup = qrSvgTag(qrText);
@@ -5769,25 +6221,25 @@ function idCardFront(fam, c, base){
   <div class="dome">${idCrestSVG(c).startsWith('<svg') ? idCrestSVG(c) : ''}</div>
   <div class="idtop">
     <div class="crest">${idCrestSVG(c)}</div>
-    <div class="org"><b>${esc(c.org)}</b><span>${esc(c.sub)} · Mohalla Survey</span></div>
+    <div class="org"><b>${esc(c.org)}</b><span>${esc(c.sub)} · ${esc(tStr('Mohalla Survey'))}</span></div>
     <div class="tag">${esc(c.tag)}</div>
   </div>
   <div class="idbody">
     <div class="idleft">
-      <div class="fidlab">Family ID</div>
+      <div class="fidlab">${esc(tStr('Family ID'))}</div>
       <div class="fid">${esc(fam.id)}</div>
       <div class="rule"></div>
       <div class="rows">
-        <div class="r"><span class="k">Head of family</span><span class="v">${esc(head.name||'—')}</span></div>
-        <div class="r"><span class="k">Relation</span><span class="v">${esc(head.relation||'Self')}</span></div>
-        <div class="r"><span class="k">Date of birth</span><span class="v">${esc(dobText)}${a!==null?' · '+a+' yrs':''}</span></div>
-        <div class="r"><span class="k">Phone</span><span class="v">${esc(fam.phone||'—')}</span></div>
-        <div class="r"><span class="k">Address</span><span class="v">${esc(addr||'—')}</span></div>
+        <div class="r"><span class="k">${esc(tStr('Head of family'))}</span><span class="v">${esc(head.name||'—')}</span></div>
+        <div class="r"><span class="k">${esc(tStr('Relation'))}</span><span class="v">${esc(tStr(head.relation||'Self'))}</span></div>
+        <div class="r"><span class="k">${esc(tStr('Date of birth'))}</span><span class="v">${esc(dobText)}${a!==null?' · '+a+' '+esc(tStr('yrs')):''}</span></div>
+        <div class="r"><span class="k">${esc(tStr('Phone'))}</span><span class="v">${esc(fam.phone||'—')}</span></div>
+        <div class="r"><span class="k">${esc(tStr('Address'))}</span><span class="v">${esc(addr||'—')}</span></div>
       </div>
     </div>
     <div class="idright">
       <div class="qrbox" data-qr="${esc(qrText)}">${qrMarkup || `<div style="font-size:6pt;color:#0f5c47;text-align:center;padding:4mm 1mm">QR: ${esc(fam.id)}</div>`}</div>
-      <div class="qrlab">Scan to verify</div>
+      <div class="qrlab">${esc(tStr('Scan to verify'))}</div>
       <div class="qrid">${esc(fam.id)}</div>
     </div>
   </div>
@@ -5806,15 +6258,15 @@ function idCardBack(c){
   <div class="idtop">
     <div class="crest">${idCrestSVG(c)}</div>
     <div class="org"><b>${esc(c.org)}</b><span>${esc(c.sub)}</span></div>
-    <div class="tag">Terms &amp; Conditions</div>
+    <div class="tag">${esc(tStr('Terms & Conditions'))}</div>
   </div>
   <div class="idterms">
-    <h4>Terms &amp; Conditions</h4>
+    <h4>${esc(tStr('Terms & Conditions'))}</h4>
     <p>${esc(terms||'—')}</p>
     <div class="idsign">
-      ${sigBox(c.sigMutavalli,'Mutavalli')}
-      ${sigBox(c.sigSecretary,'Secretary')}
-      ${sigBox(c.sigMember,'Member')}
+      ${sigBox(c.sigMutavalli,tStr('Mutavalli'))}
+      ${sigBox(c.sigSecretary,tStr('Secretary'))}
+      ${sigBox(c.sigMember,tStr('Member'))}
     </div>
   </div>
   <div class="idfoot"><span>${esc(c.org)}</span><span>${esc(c.sub)}</span></div>
@@ -5823,7 +6275,7 @@ function idCardBack(c){
 function printIdCards(fam){
   if(!fam) return;
   const mem = fam.members || [];
-  if(!mem.length){ toast('No members to print','err'); return; }
+  if(!mem.length){ toast(tStr('No members to print'),'err'); return; }
   const c = idcardCfg();
   const base = location.href.replace(/[^/]*$/,'');
   const qrText = location.origin + location.pathname + '#qedit=' + encodeURIComponent(fam.id);
@@ -5920,7 +6372,7 @@ function printFamilies(fams, title){
     </div>`;
   }).join('');
   const yr = new Date().getFullYear();
-  const foot = `<div class="pfoot">© ${yr} ${esc(CFG.ORG_NAME||'Masjid e Mohammadi')} · ${esc(CFG.ORG_SUB||'Khidmath Committee')} — All rights reserved. · ${esc(String(title))} report</div>`;
+  const foot = `<div class="pfoot">© ${yr} ${esc(CFG.ORG_NAME||'Masjid e Mohammadi')} · ${esc(CFG.ORG_SUB||'Khidmath Committee')} — <span>All rights reserved.</span> · ${esc(String(title))} <span>report</span></div>`;
   const area = $('#printArea'); area.innerHTML = head + body + foot;
   /* har family ka apna QR — Family ID se generate hota hai, isliye print/PDF me bhi aata hai */
   Array.prototype.forEach.call(area.querySelectorAll('.qr[data-qr]'), el => renderQR(el, el.dataset.qr || ''));

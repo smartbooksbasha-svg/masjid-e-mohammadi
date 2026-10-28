@@ -597,3 +597,18 @@ Open: wire Supabase keys; real OTP SMS later.
   follows logo and reverts when logo cleared.
 - ⚠️ Test var collisions: `t1/t2/t3` were already declared — prefix new ones (`lt1…`).
 - Cache `memc-app-v104`, `APP_VER='v104'`, commit `98176fe`, live verified (app.js + sw.js both v104).
+
+## v105 (2026-10-28) — Urdu language (RTL) LIVE
+- **`ur` dictionary = 420 keys, English ke barabar** (koi key fallback par nahi). Urdu script me hai,
+  RTL layout ke saath. `LANGS` me `['ur','Urdu']`, `index.html` `#langSel` me `<option value="ur">اردو (Urdu)</option>`.
+- **RTL**: `setLang()` aur `translateTree()` dono `document.documentElement.dir` set karte hain
+  (`ur` → `rtl`, warna `ltr`); boot par bhi LANG padhne ke turant baad dir set hota hai (LTR flash na ho).
+  Layout flex hai isliye `direction:rtl` sidebar ko khud right par le jata hai — sirf border swap karna pada.
+- **RTL CSS block** (styles.css tail, `html[dir="rtl"]`): body direction + Urdu font stack
+  (`Noto Naskh Arabic` → `Noto Nastaliq Urdu`), sidebar border-left, `.kv`/`.aud-meta` text-align,
+  `.mono` + email/tel/password/number inputs `direction:ltr` (ID aur numbers sahi padhe jayein),
+  `.pw-eye` left par, mobile drawer `translateX(100%)`.
+- **Gotcha**: ek key jo `en` me hi nahi thi (occupation empty hint) sirf `ta` me add hui thi → `ur`/`en`
+  me missing rehne se wo Hinglish me dikh rahi thi. `tools/i18n-verify.js` ka ur check sirf en-keys
+  dekhta hai, isliye smoke test me `/[\u0600-\u06FF]/` + Hinglish regex dono rakhe.
+- Tests: **170 asserts**. Cache `memc-app-v105`, commit `7554593`, live verified (app.js, sw.js, index.html).

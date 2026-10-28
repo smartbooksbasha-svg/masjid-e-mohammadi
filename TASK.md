@@ -25,3 +25,8 @@ Step 1 — QR scan edit option
 - [x] Uploaded logo → site favicon + auth crest (applyFavicon)
 - [x] Mobile 360/380px text + table layout pass
 - [x] Tests 164 green, deployed + verified live
+
+## v105 — DONE (2026-10-28, commit 7554593, cache memc-app-v105)
+- [x] Urdu dictionary (420 keys) + langSel option
+- [x] RTL layout (dir attr, sidebar mirror, LTR for IDs/inputs, eye button, mobile drawer)
+- [x] i18n verify 4 languages 0 leftover, tests 170 green, deployed + verified

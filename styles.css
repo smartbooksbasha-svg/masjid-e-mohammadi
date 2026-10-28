@@ -714,64 +714,29 @@ a:focus-visible,summary:focus-visible,[tabindex]:focus-visible{outline:2px solid
 .sb-foot .ver{margin-top:8px;font-size:.66rem;letter-spacing:.04em;opacity:.55;font-family:var(--mono,ui-monospace,monospace)}
 .auth-ver{margin-top:14px;text-align:center;font-size:.68rem;letter-spacing:.06em;opacity:.5;font-family:var(--mono,ui-monospace,monospace)}
 
-/* ================= MOBILE TEXT / LAYOUT PASS (v104) ================= */
-/* Har text apni jagah rahe — koi overflow, koi cut-off, koi side-scroll nahi. */
+/* ================= MOBILE TEXT / LAYOUT PASS (v106 — safe) ================= */
+/* Sirf overflow aur tap-size theek karo — alignment/layout ko chhedo mat. */
 @media (max-width: 640px){
   html{ -webkit-text-size-adjust:100%; }
   .content{ padding:12px 10px 44px; }
-  #content .card, .card{ padding:14px; border-radius:14px; }
-  .page-head{ gap:8px; margin-bottom:12px; }
+  #content .card, .card{ padding:15px; border-radius:14px; }
   .page-head h1{ font-size:1.2rem; line-height:1.25; }
   .page-head p{ font-size:.85rem; }
-  .sec-title{ font-size:.82rem; letter-spacing:.06em; }
-  .hint, .muted.small{ font-size:.78rem; line-height:1.45; }
-  .lead{ font-size:.92rem; }
   /* lambi ID / email / URL kabhi box se bahar na jaye */
-  .mono, .kv .row span, td, th, .aud-d, .aud-main b, .auth-card, .sb-foot{
-    overflow-wrap:anywhere; word-break:break-word;
-  }
-  /* table: phone par side-scroll ki jagah text wrap */
-  .table-wrap{ overflow-x:auto; }
-  .table-wrap table, table{ min-width:100%; font-size:.8rem; }
-  th, td{ padding:9px 10px; font-size:.8rem; line-height:1.35; }
-  th{ font-size:.68rem; letter-spacing:.04em; }
-  /* key-value rows ek line me tute na */
-  .kv .row{ flex-wrap:wrap; gap:2px 10px; }
-  .kv .row span:last-child{ text-align:left; }
-  /* buttons poore size ke, text cut na ho */
-  .btn{ font-size:.85rem; padding:10px 14px; min-height:42px; white-space:normal; }
-  .btn.sm{ font-size:.8rem; padding:8px 11px; min-height:36px; }
-  .btn.block{ width:100%; }
-  /* stat / category cards */
-  .ct-body b{ font-size:.92rem; line-height:1.3; }
-  .ct-sub{ font-size:.75rem; line-height:1.35; }
-  .metric b{ font-size:1.3rem; }
-  .metric span{ font-size:.78rem; line-height:1.35; }
-  /* chips, badges, tabs wrap karein */
-  .badge{ font-size:.68rem; padding:3px 8px; }
-  .aud-chips .chip{ font-size:.78rem; padding:6px 11px; }
-  .auth-card{ padding:20px 16px; }
-  .auth-card h1{ font-size:1.2rem; }
-  .auth-brand .t{ font-size:.9rem; }
-  .auth-brand .s{ font-size:.72rem; }
-  /* topbar */
-  .topbar{ min-height:54px; }
-  .topbar .title{ font-size:.85rem; max-width:44vw; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .lang-sel{ font-size:.72rem; }
+  .mono, td, th, .aud-d, .aud-main b{ overflow-wrap:anywhere; }
+  /* buttons: text cut na ho, tap 42px */
+  .btn{ min-height:42px; white-space:normal; }
+  .btn.sm{ min-height:36px; }
   /* inputs: 16px se kam font par iOS zoom karta hai */
   .inp, select.inp, textarea.inp{ font-size:16px; }
-  .field label{ font-size:.8rem; }
-  /* footer / version */
-  .sb-foot{ font-size:.72rem; line-height:1.5; }
+  /* topbar title ellipsis */
+  .topbar .title{ font-size:.88rem; max-width:44vw; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 }
 @media (max-width: 380px){
   .content{ padding:10px 8px 40px; }
   #content .card, .card{ padding:12px; }
-  th, td{ padding:8px 7px; font-size:.75rem; }
   .btn{ padding:9px 12px; }
-  .ct-no{ width:24px; height:24px; font-size:.75rem; }
 }
-
 /* ================= URDU (RTL) — v105 ================= */
 /* Urdu right-to-left padhi jati hai: poora layout mirror ho jata hai. */
 html[dir="rtl"] body{
