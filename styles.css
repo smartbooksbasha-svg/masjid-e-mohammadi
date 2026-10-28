@@ -691,3 +691,21 @@ a:focus-visible,summary:focus-visible,[tabindex]:focus-visible{outline:2px solid
   .aud-meta span{margin-top:0}
 }
 @media print{ .aud-chips, .ph-actions{display:none} }
+
+/* ---- password field with show/hide eye ---- */
+.pw-wrap{position:relative;display:block}
+.pw-wrap .inp{padding-right:44px}
+.pw-eye{
+  position:absolute;top:50%;right:6px;transform:translateY(-50%);
+  width:34px;height:34px;display:grid;place-items:center;
+  border:0;background:transparent;color:var(--muted);cursor:pointer;
+  border-radius:9px;transition:color .15s,background .15s;
+}
+.pw-eye svg{width:18px;height:18px;display:block}
+.pw-eye:hover,.pw-eye:focus-visible{color:var(--fg);background:rgba(127,127,127,.14)}
+.pw-eye[aria-pressed="true"]{color:var(--accent)}
+/* temp password reveal cell in admins table */
+.tp{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.tp code{font-family:var(--mono,ui-monospace,monospace);font-size:.82rem;letter-spacing:.02em;
+  background:rgba(127,127,127,.12);border:1px solid var(--line);border-radius:7px;padding:2px 7px}
+.tp .btn{min-height:28px;padding:2px 8px;font-size:.75rem}

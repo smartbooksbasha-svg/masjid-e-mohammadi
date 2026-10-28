@@ -438,8 +438,9 @@ function setSession(s){
   try {
     const admins = DB.admins(); let ch = false;
     admins.forEach(a=>{
-      if (String(a.email||'').toLowerCase() === e && a.tempPass){
-        delete a.tempPass; a.firstLoginAt = a.firstLoginAt || Date.now(); ch = true;
+      if (String(a.email||'').toLowerCase() === e && a.tempPass && !a.firstLoginAt){
+        /* temp password dikhta rehta hai — admin khud badle to hat jayega */
+        a.firstLoginAt = Date.now(); ch = true;
       }
     });
     if (ch) DB.setAdmins(admins);
@@ -578,6 +579,8 @@ const ICON = {
   image:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>',
   search:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>',
   camera:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>',
+  eye:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>',
+  eyeOff:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>',
   exit: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></svg>',
   dash:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>',
   list:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="3.5" cy="6" r="1"/><circle cx="3.5" cy="12" r="1"/><circle cx="3.5" cy="18" r="1"/></svg>',
@@ -677,10 +680,16 @@ function isOwner(){
 }
 /* ---------------- ID / password format (super admin settings) ---------------- */
 const IDSET_DEFAULT = {
-  adminPrefix:'ADM', adminSuffix:'',      /* ID = <prefix>-<year>-<0001>[-<suffix>] */
+  ownerPrefix:'OWN', ownerStart:1,        /* super admin = OWN-<year>-<001> (alag series) */
+  adminPrefix:'ADM', adminSuffix:'', adminStart:101,  /* admin = ADM-<year>-<101> se shuru */
   passPrefix:'', passSuffix:'',           /* password = <prefix><6 random><suffix> */
   famPrefix:'MEMC', famRandom:true        /* family id = MEMC-<yy><4 random> */
 };
+/* password input + show/hide eye button */
+function pwBox(inputHtml){
+  return `<div class="pw-wrap">${inputHtml}<button type="button" class="pw-eye" data-act="pw-eye" aria-pressed="false" aria-label="Show password" title="Show password">${ICON.eye}</button></div>`;
+}
+
 function idset(){
   const c = Object.assign({}, IDSET_DEFAULT, DB.idset() || {});
   const clean = (v, max, up) => {
@@ -688,8 +697,11 @@ function idset(){
     if (up) x = x.toUpperCase();
     return x.replace(/[^A-Za-z0-9\-_]/g, '');
   };
+  c.ownerPrefix = clean(c.ownerPrefix, 10, true) || 'OWN';
+  c.ownerStart  = Math.min(9999, Math.max(1, parseInt(c.ownerStart, 10) || 1));
   c.adminPrefix = clean(c.adminPrefix, 10, true) || 'ADM';
   c.adminSuffix = clean(c.adminSuffix, 10, true);
+  c.adminStart  = Math.min(9999, Math.max(1, parseInt(c.adminStart, 10) || 101));
   c.passPrefix   = clean(c.passPrefix, 10, false);
   c.passSuffix   = clean(c.passSuffix, 10, false);
   c.famPrefix    = clean(c.famPrefix, 10, true) || 'MEMC';
@@ -702,14 +714,27 @@ function idRand(n){
   for (let i=0;i<n;i++) out += ID_RAND_ALPHABET[Math.floor(Math.random()*ID_RAND_ALPHABET.length)];
   return out;
 }
-function genUserId(){
+function genOwnerId(){
   const cfg = idset();
-  let n = 1;
-  const re = new RegExp('-([0-9]{1,6})(?:-' + cfg.adminSuffix.replace(/[-_]/g,'\\$&') + ')?$');
+  let n = Math.max(1, Number(cfg.ownerStart) || 1) - 1;
+  const re = new RegExp('^' + cfg.ownerPrefix.replace(/[-_]/g,'\\$&') + '-[0-9]{4}-([0-9]{1,5})$');
   DB.admins().forEach(a=>{
     const m = String(a.userId||'').match(re);
-    if (m) n = Math.max(n, Number(m[1]) + 1);
+    if (m) n = Math.max(n, Number(m[1]));
   });
+  return cfg.ownerPrefix + '-' + new Date().getFullYear() + '-' + pad(n + 1, 3);
+}
+function genUserId(){
+  const cfg = idset();
+  const esc2 = v => String(v||'').replace(/[-_]/g,'\\$&');
+  /* sirf ADMIN series ginti me aati hai — owner ki OWN-... ID chhod do */
+  const re = new RegExp('^' + esc2(cfg.adminPrefix) + '-[0-9]{4}-([0-9]{1,6})(?:-' + esc2(cfg.adminSuffix) + ')?$');
+  let mx = 0;
+  DB.admins().forEach(a=>{
+    const m = String(a.userId||'').match(re);
+    if (m) mx = Math.max(mx, Number(m[1]));
+  });
+  const n = Math.max(Math.max(1, Number(cfg.adminStart) || 101), mx + 1);
   const tail = cfg.adminSuffix ? '-' + cfg.adminSuffix : '';
   return cfg.adminPrefix + '-' + new Date().getFullYear() + '-' + pad(n, 4) + tail;
 }
@@ -782,7 +807,7 @@ function renderLogin(){
     <p class="lead">Sirf admin / super admin ke liye. Baaki sab public dashboard dekh sakte hain.</p>
     <form id="loginForm">
       <div class="field"><label>User ID / Email ID</label><input class="inp" name="email" type="text" required autocomplete="username" placeholder="ADM-2026-0001" /></div>
-      <div class="field"><label>Password</label><input class="inp" name="pass" type="password" required autocomplete="current-password" /></div>
+      <div class="field"><label>Password</label>${pwBox('<input class="inp" name="pass" type="password" required autocomplete="current-password" />')}</div>
       <div id="loginAlert"></div>
       <button class="btn block" type="submit">Login</button>
       <div class="auth-foot">
@@ -1061,8 +1086,8 @@ function renderNewPassword(){
     <p class="lead">Enter new password. You will be logged in after.</p>
     <form id="newPassForm">
       <div class="grid g2">
-        <div class="field"><label>New password</label><input class="inp" name="pass" type="password" required minlength="6" /></div>
-        <div class="field"><label>Confirm</label><input class="inp" name="pass2" type="password" required minlength="6" /></div>
+        <div class="field"><label>New password</label>${pwBox('<input class="inp" name="pass" type="password" required minlength="6" />')}</div>
+        <div class="field"><label>Confirm</label>${pwBox('<input class="inp" name="pass2" type="password" required minlength="6" />')}</div>
       </div>
       <div id="npAlert"></div>
       <button class="btn block" type="submit">Save password</button>
@@ -3384,9 +3409,9 @@ function viewMyProfile(){
     <div class='card' style='max-width:720px'>
       <div class='sec-title' style='margin-top:0'>Change password</div>
       <form id='profPassForm' class='grid g3'>
-        <div class='field'><label>Current password</label><input class='inp' name='cur' type='password' required autocomplete='current-password' /></div>
-        <div class='field'><label>New password</label><input class='inp' name='np' type='password' required minlength='6' autocomplete='new-password' /></div>
-        <div class='field'><label>Confirm new password</label><input class='inp' name='np2' type='password' required minlength='6' autocomplete='new-password' /></div>
+        <div class='field'><label>Current password</label>${pwBox("<input class='inp' name='cur' type='password' required autocomplete='current-password' />")}</div>
+        <div class='field'><label>New password</label>${pwBox("<input class='inp' name='np' type='password' required minlength='6' autocomplete='new-password' />")}</div>
+        <div class='field'><label>Confirm new password</label>${pwBox("<input class='inp' name='np2' type='password' required minlength='6' autocomplete='new-password' />")}</div>
         <div class='field' style='justify-content:flex-end'><button class='btn' type='submit'>Update password</button></div>
       </form>
       <p class='muted small' style='margin-top:6px'>Kam se kam 6 characters. Password bhool jao to super admin reset kar sakta hai.</p>
@@ -3526,6 +3551,9 @@ function saveIdsetForm(form){
   if (!isOwner()){ toast('Sirf super admin','err'); return; }
   const E = form.elements;
   DB.setIdsSet({
+    ownerPrefix: String(E.ownerPrefix ? E.ownerPrefix.value : '').trim(),
+    ownerStart:  1,
+    adminStart:  Number(E.adminStart ? E.adminStart.value : 101) || 101,
     adminPrefix: String(E.adminPrefix.value||'').trim(),
     adminSuffix: String(E.adminSuffix.value||'').trim(),
     passPrefix:  String(E.passPrefix.value||'').trim(),
@@ -3708,8 +3736,10 @@ function viewUsersTable(){
     </tbody></table></div>`:''}
 
     ${showList?`
-    <div class="table-wrap" style="margin-top:14px"><table><thead><tr><th>User ID</th><th>Admin (Photo / Name / Email)</th><th>Phone</th><th>Age</th><th>Role</th><th>Action</th></tr></thead><tbody>
-    ${act.map(a=>{ const isO = String(a.email).toLowerCase()===owner || a.role==='owner'; const ini=(a.name||a.email).split(/[ @.]/).filter(Boolean).map(w=>w[0]).slice(0,2).join('').toUpperCase(); return `<tr><td class="mono">${esc(a.userId||'—')}</td><td><div style="display:flex;gap:10px;align-items:center"><span class="av" style="width:36px;height:36px;font-size:.8rem;overflow:hidden;border-radius:12px;border:1px solid var(--line)">${a.photo?`<img src='${esc(a.photo)}' style='width:100%;height:100%;object-fit:cover'/>`:esc(ini)}</span><div><div style="font-weight:600">${esc(a.name||'—')}</div><div class="muted small">${esc(a.email)}</div></div></div></td><td>${esc(a.phone||'—')}</td><td>${esc(a.age||'—')}</td><td>${isO?'<span class="badge">Super Admin</span>':'<span class="badge gray">Admin</span>'}</td><td style="display:flex;gap:6px;flex-wrap:wrap">${isO?'<span class="muted small">Locked</span>':`<button class="btn sm" data-act="admin-edit" data-id="${esc(a.email)}">Edit</button><button class="btn sm ghost" data-act="reset-admin-pass" data-id="${esc(a.email)}">Reset password</button><button class="btn sm ghost" data-act="del-admin" data-id="${esc(a.email)}">Remove</button>`}</td></tr>`; }).join('')}
+    <div class="table-wrap" style="margin-top:14px"><table><thead><tr><th>User ID</th><th>Admin (Photo / Name / Email)</th><th>Phone</th><th>Age</th><th>Password</th><th>Role</th><th>Action</th></tr></thead><tbody>
+    ${act.map(a=>{ const isO = String(a.email).toLowerCase()===owner || a.role==='owner'; const ini=(a.name||a.email).split(/[ @.]/).filter(Boolean).map(w=>w[0]).slice(0,2).join('').toUpperCase(); return `<tr><td class="mono">${esc(a.userId||'—')}</td><td><div style="display:flex;gap:10px;align-items:center"><span class="av" style="width:36px;height:36px;font-size:.8rem;overflow:hidden;border-radius:12px;border:1px solid var(--line)">${a.photo?`<img src='${esc(a.photo)}' style='width:100%;height:100%;object-fit:cover'/>`:esc(ini)}</span><div><div style="font-weight:600">${esc(a.name||'—')}</div><div class="muted small">${esc(a.email)}</div></div></div></td><td>${esc(a.phone||'—')}</td><td>${esc(a.age||'—')}</td><td>${isO?'<span class="muted small">—</span>':(a.tempPass
+        ? `<div class="tp" data-pw="${esc(a.tempPass)}" data-shown="0"><code>••••••</code><button class="btn ghost sm" data-act="tp-show">Show</button><button class="btn ghost sm" data-act="tp-copy" title="Copy User ID + password">${ICON.clipboard}</button></div>`
+        : '<span class="muted small">Badla ja chuka hai</span>')}</td><td>${isO?'<span class="badge">Super Admin</span>':'<span class="badge gray">Admin</span>'}</td><td style="display:flex;gap:6px;flex-wrap:wrap">${isO?'<span class="muted small">Locked</span>':`<button class="btn sm" data-act="admin-edit" data-id="${esc(a.email)}">Edit</button><button class="btn sm ghost" data-act="reset-admin-pass" data-id="${esc(a.email)}">Reset password</button><button class="btn sm ghost" data-act="del-admin" data-id="${esc(a.email)}">Remove</button>`}</td></tr>`; }).join('')}
     </tbody></table></div>`:''}
   `;
 }
@@ -3750,7 +3780,9 @@ function viewSettingsCard(ctx='adminpanel'){
       <p class="muted small" style="margin:10px 0 0">${esc(driveStatusText())}</p>
       ${isOwner()?`<div class="sec-title" style="font-size:.9rem">ID &amp; password format</div>
       <form id="idsetForm" class="grid g3">
-        <div class="field"><label>Admin ID prefix</label><input class="inp" name="adminPrefix" value="${esc(IS.adminPrefix)}" placeholder="ADM" maxlength="10" /><span class="hint">ID shuru me: ${esc(IS.adminPrefix)}-2026-0001</span></div>
+        <div class="field"><label>Super admin ID prefix</label><input class="inp" name="ownerPrefix" value="${esc(IS.ownerPrefix)}" placeholder="OWN" maxlength="10" /><span class="hint">Alag series: ${esc(IS.ownerPrefix)}-2026-001</span></div>
+        <div class="field"><label>Admin ID prefix</label><input class="inp" name="adminPrefix" value="${esc(IS.adminPrefix)}" placeholder="ADM" maxlength="10" /><span class="hint">ID shuru me: ${esc(IS.adminPrefix)}-2026-101</span></div>
+        <div class="field"><label>Admin ID start number</label><input class="inp" name="adminStart" type="number" min="1" max="9999" value="${esc(IS.adminStart)}" /><span class="hint">Pehla admin isi number se shuru (default 101)</span></div>
         <div class="field"><label>Admin ID suffix</label><input class="inp" name="adminSuffix" value="${esc(IS.adminSuffix)}" placeholder="khaali" maxlength="10" /><span class="hint">ID ke aakhir me — khaali bhi chhod sakte ho</span></div>
         <div class="field"><label>Password prefix</label><input class="inp" name="passPrefix" value="${esc(IS.passPrefix)}" placeholder="khaali" maxlength="10" /><span class="hint">Beech ke 6 characters hamesha random rehte hain</span></div>
         <div class="field"><label>Password suffix</label><input class="inp" name="passSuffix" value="${esc(IS.passSuffix)}" placeholder="khaali" maxlength="10" /></div>
@@ -3765,6 +3797,7 @@ function viewSettingsCard(ctx='adminpanel'){
       <div class="sec-title" style="font-size:.9rem">Owner (Fixed)</div>
       <div class="kv">
         <div class="row"><span>Name</span><span><b>${esc(ownerName())}</b></span></div>
+        <div class="row"><span>User ID</span><span class="mono">${esc((DB.admins().find(a=>String(a.email).toLowerCase()===String(ownerEmail()).toLowerCase())||{}).userId || '—')}</span></div>
         <div class="row"><span>Email</span><span class="mono">${esc(ownerEmail())}</span></div>
       </div>
       <p class="muted small" style="margin-top:6px">Owner details lock hain, change nahi ho sakte.</p>
@@ -3886,6 +3919,17 @@ document.addEventListener('click', (e)=>{
   const ADMIN_ACTS = ['load-sample','clear-data','export-excel','print-all','backup-json','restore-json','drive-connect','drive-backup','edit-family','del-family','del-admin','saveMasjid','delPhoto','print-family','approve-admin','reject-admin','close-creds','copy-creds','publish-public'];
   if (ADMIN_ACTS.includes(act) && !isAdmin()){ toast('Ye sirf admin kar sakta hai','err'); return; }
 
+  if (act==='pw-eye'){
+    const wrap = el.closest('.pw-wrap'); const inp = wrap && wrap.querySelector('input');
+    if (!inp) return;
+    const show = inp.type === 'password';
+    inp.type = show ? 'text' : 'password';
+    el.innerHTML = show ? ICON.eyeOff : ICON.eye;
+    el.setAttribute('aria-pressed', show ? 'true' : 'false');
+    el.setAttribute('title', show ? 'Hide password' : 'Show password');
+    el.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+    return;
+  }
   if (act==='scan-qr'){ startQrScan(); return; }
 
   if (act==='toggle-theme') { toggleTheme(); const b=$('#themeBtn2'); if(b){ const t=document.documentElement.getAttribute('data-theme'); b.innerHTML = themeIcon(t) + (t==='night'?' Night':' Day'); } return; }
@@ -4048,6 +4092,23 @@ document.addEventListener('click', (e)=>{
     if (!isOwner()){ toast('Sirf owner reject kar sakta hai','err'); return; }
     const admins = DB.admins().filter(x=>String(x.userId||'').toLowerCase()!==String(id).toLowerCase() && String(x.email).toLowerCase()!==String(id).toLowerCase());
     DB.setAdmins(admins); toast('Request reject ho gayi'); go('users'); return;
+  }
+  if (act==='tp-show'){
+    const cell = el.closest('.tp'); if(!cell) return;
+    const code = cell.querySelector('code'); if(!code) return;
+    const shown = cell.dataset.shown === '1';
+    cell.dataset.shown = shown ? '0' : '1';
+    code.textContent = shown ? '••••••' : (cell.dataset.pw || '');
+    el.textContent = shown ? 'Show' : 'Hide';
+    return;
+  }
+  if (act==='tp-copy'){
+    const cell = el.closest('.tp'); if(!cell) return;
+    const row = cell.closest('tr'); const uidEl = row && row.querySelector('td.mono');
+    const txt = 'User ID: ' + (uidEl ? uidEl.textContent.trim() : '') + '\nPassword: ' + (cell.dataset.pw||'') + '\nLogin: ' + location.href;
+    try { navigator.clipboard.writeText(txt); toast('User ID + password copy ho gaya','ok'); }
+    catch(e){ toast('Copy nahi hua — haath se likh lo','err'); }
+    return;
   }
   if (act==='close-creds'){ state.newCreds = null; go('users'); return; }
   if (act==='copy-creds'){
@@ -5268,8 +5329,15 @@ function migrateAdmins(){
   try {
     const admins = DB.admins(); let n = 0, ch = false;
     admins.forEach(a=>{ const m = String(a.userId||'').match(/(\d+)$/); if (m) n = Math.max(n, Number(m[1])); });
+    const cfg = idset();
+    const ownRe = new RegExp('^' + cfg.ownerPrefix.replace(/[-_]/g,'\\$&') + '-');
     admins.forEach(a=>{
-      if (!a.userId){ n += 1; a.userId = 'ADM-' + new Date().getFullYear() + '-' + pad(n, 4); ch = true; }
+      const isOwn = String(a.email||'').toLowerCase() === String(ownerEmail()||'').toLowerCase();
+      if (isOwn && !ownRe.test(String(a.userId||''))){
+        a.userId = genOwnerId(); ch = true;      /* super admin ki ID alag series */
+      } else if (!a.userId){
+        n += 1; a.userId = cfg.adminPrefix + '-' + new Date().getFullYear() + '-' + pad(n, cfg.adminStart > 99 ? 4 : 3); ch = true;
+      }
       if (!a.status){ a.status = 'active'; ch = true; }
     });
     /* owner sirf config OWNER_EMAIL ya manually set memc_owner se decide hota hai */

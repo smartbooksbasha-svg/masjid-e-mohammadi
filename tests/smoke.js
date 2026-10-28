@@ -357,6 +357,56 @@ const wait = ms => new Promise(r => setTimeout(r, ms || 120));
   ok(!!DL.doc.querySelector('#authScreen') && !DL.doc.querySelector('#authScreen').hidden, '#login link opens the admin login box');
   ok(!!DL.doc.querySelector('#loginForm'), 'login form is ready on the direct link');
 
+  /* ---------------- 8d. v99 — alag ID series + temp password + eye toggle ---------------- */
+  const V9 = await boot({ admin: OWNER.email, admins: [OWNER, ADMIN] });
+  /* owner ki ID alag series (OWN-...), admin ki ADM-... */
+  const ownRec = JSON.parse(V9.win.localStorage.getItem('memc_admins')).find(a => a.email === OWNER.email);
+  ok(/^OWN-/.test(String(ownRec.userId)), 'super admin ID alag series me hai: ' + ownRec.userId);
+  ok(/^ADM-/.test(String(JSON.parse(V9.win.localStorage.getItem('memc_admins')).find(a => a.email === ADMIN.email).userId)), 'admin ID ADM- series me rehti hai');
+  /* naya admin ID 101 se shuru hota hai */
+  const newId = V9.win.eval('genUserId()');
+  ok(/-0*101$/.test(String(newId)), 'naya admin ID 101 se shuru hota hai: ' + newId);
+  const newOwn = V9.win.eval('genOwnerId()');
+  ok(/^OWN-\d{4}-\d{3}$/.test(String(newOwn)), 'owner ID ka format OWN-YYYY-NNN hai: ' + newOwn);
+  /* owner prefix badla to migrate naya ID deta hai */
+  V9.win.eval("DB.setIdsSet(Object.assign({}, idset(), { ownerPrefix:'MUT' }))");
+  V9.win.eval('migrateAdmins()');
+  const own2 = JSON.parse(V9.win.localStorage.getItem('memc_admins')).find(a => a.email === OWNER.email);
+  ok(/^MUT-/.test(String(own2.userId)), 'owner prefix badalne par owner ID update hoti hai: ' + own2.userId);
+
+  /* temp password login ke baad bhi super admin ko dikhta hai */
+  const T = await boot({ admin: OWNER.email, admins: [
+    Object.assign({}, OWNER),
+    Object.assign({}, ADMIN, { tempPass: 'Ab12Cd34' })
+  ], view: 'adminpanel' });
+  T.win.eval("state.showAdmins = true; go('adminpanel')"); await wait(150);
+  const tpCell = T.doc.querySelector('.tp');
+  ok(!!tpCell, 'admins table me password cell hai');
+  ok(tpCell && tpCell.dataset.pw === 'Ab12Cd34', 'temp password data me maujood hai');
+  ok(tpCell && /••••••/.test(tpCell.querySelector('code').textContent), 'password by default masked hai');
+  tpCell.querySelector('[data-act="tp-show"]').dispatchEvent(new T.win.MouseEvent('click', { bubbles: true }));
+  ok(tpCell.querySelector('code').textContent === 'Ab12Cd34', 'Show dabane par password dikhta hai');
+  tpCell.querySelector('[data-act="tp-show"]').dispatchEvent(new T.win.MouseEvent('click', { bubbles: true }));
+  ok(/••••••/.test(tpCell.querySelector('code').textContent), 'dobara dabane par chhup jata hai');
+  /* login par tempPass delete nahi hota */
+  T.win.eval("startSession(" + JSON.stringify(ADMIN.email) + ")");
+  const afterLogin = JSON.parse(T.win.localStorage.getItem('memc_admins')).find(a => a.email === ADMIN.email);
+  ok(afterLogin.tempPass === 'Ab12Cd34', 'login ke baad bhi temp password bacha rehta hai');
+  ok(!!afterLogin.firstLoginAt, 'pehla login mark ho jata hai');
+
+  /* eye toggle password inputs par */
+  const EY = await boot({});
+  EY.win.eval("openAuth('login')"); await wait(150);
+  const eyeBtn = EY.doc.querySelector('#loginForm .pw-eye');
+  ok(!!eyeBtn, 'login password field par eye button hai');
+  const pwInp = EY.doc.querySelector('#loginForm input[name="pass"]');
+  ok(pwInp.type === 'password', 'password chhupa hua shuru hota hai');
+  eyeBtn.dispatchEvent(new EY.win.MouseEvent('click', { bubbles: true }));
+  ok(pwInp.type === 'text', 'eye dabane par password dikhta hai');
+  ok(/aria-pressed="true"/.test(eyeBtn.outerHTML), 'eye button pressed state set karta hai');
+  eyeBtn.dispatchEvent(new EY.win.MouseEvent('click', { bubbles: true }));
+  ok(pwInp.type === 'password', 'dobara dabane par password chhup jata hai');
+
   /* ---------------- 9. backup round trip ---------------- */
   const backup = A.win.eval("JSON.stringify({ families:DB.families(), masjid:DB.masjid() })");
   ok(JSON.parse(backup).families.length === 1, 'backup payload contains households');

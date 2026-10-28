@@ -505,3 +505,18 @@ Open: wire Supabase keys; real OTP SMS later.
   `init()` tak hash `login` nahi bachta. Fix: `BOOT_HASH` ko replaceState se PEHLE capture karo, init wahi padhe.
 - Login = **User ID ya email**; owner email `smartbooksbasha@gmail.com`, pehla admin ID `ADM-2026-0001`.
 - Cache `memc-app-v97`, commit `053e46d`, tests 115 green.
+
+## v98 — auto-update + login guard (2026-10-28)
+- **Website khud update:** `index.html` ka SW registration ab `{updateViaCache:'none'}`, `reg.update()` har 5 min
+  + window focus + visibilitychange, aur `controllerchange` par ek baar auto reload (sirf jab pehle se controller
+  tha — first install par reload nahi). `sw.js` already network-first + `skipWaiting()` + `clients.claim()`.
+  Isliye har deploy ke baad user ko kuch nahi karna — agla page load naya code leta hai.
+- **jsQR self-hosted** (`vendor/jsQR.js`, 257 KB) — last CDN dependency gaya; `sw.js` SHELL me add.
+- **Login guard** (`memc_authguard` = `{fails, lockUntil, hiddenUntil}`):
+  - 3 galat try → **5 minute lock**, login button disabled + live `mm:ss` countdown (`applyLoginGuard()`,
+    `_lockTimer` 1s interval), lock khatam hote hi form khud chalu.
+  - 6 galat try → **admin panel hide** (`hiddenUntil` +30 min): public chip se Admin button aur sidebar ka
+    "Admin login" link gayab, `openAuth()` refuse karta hai (stale form bhi clear).
+  - Success (`loginOk()`) ya lock expiry par counter reset. `renderShell()` guard state padhta hai.
+- Tests **126 asserts green** (3-try lock, countdown text + tick, 6-try hide, button/link hidden, openAuth block,
+  reset). Cache `memc-app-v98`, commit `41fd8d6`.
