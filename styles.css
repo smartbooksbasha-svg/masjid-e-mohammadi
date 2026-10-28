@@ -230,6 +230,8 @@ select.inp{appearance:none;background-image:linear-gradient(45deg,transparent 50
 .lnk{cursor:pointer;color:var(--accent);font-family:var(--font-display);border-bottom:1px dashed currentColor}
 .lnk:hover{filter:brightness(1.15)}
 tr.clickable{cursor:pointer}
+tr.scheme-none td{background:var(--surface-2);font-style:italic}
+tr.scheme-none:hover td{background:var(--accent-soft)}
 tr.clickable:hover td{background:var(--accent-soft)}
 @media(hover:none){.metric.click:hover{background:transparent}.metric.click:hover span{color:var(--muted);text-decoration-color:transparent}.metric.click:hover b{color:var(--text)}tr.clickable:hover td{background:transparent}}
 @media(prefers-reduced-motion:reduce){.metric.click,.metric.click span{transition:none}}

@@ -1482,7 +1482,7 @@ function viewCat(param){
   if (n===6){
     metrics = [['Members with all basic documents',s.membersWithAllDocs],['Members with no basic document',s.membersWithNoDocs],['Scheme mili',s.scheme.applied],['Scheme nahi mili',s.scheme.notApplied]].map(([l,v])=>metric(l,v)).join('');
     extra = tbl(['Document','Have','Don\'t have'], BASIC_DOCS.map(([k,l])=>`<tr><td>${esc(l)}</td><td><b>${s.docs[k]}</b></td><td>${Math.max(0,s.pop-s.docs[k])}</td></tr>`))
-      + tbl(['Scheme','Members'], SCHEMES.filter(([k])=>k!=='other').map(([k,l])=>`<tr><td>${esc(l)}</td><td><b>${s.scheme.counts[k]||0}</b></td></tr>`).concat(s.scheme.byName.map(([nm,c])=>`<tr><td>${esc(nm)}</td><td><b>${c}</b></td></tr>`)));
+      + tbl(['Scheme','Members'], SCHEMES.filter(([k])=>k!=='other').map(([k,l])=>`<tr><td>${esc(l)}</td><td><b>${s.scheme.counts[k]||0}</b></td></tr>`).concat(s.scheme.byName.map(([nm,c])=>`<tr><td>${esc(nm)}</td><td><b>${c}</b></td></tr>`)).concat([`<tr class="scheme-none"><td>Scheme nahi mili <span class="muted small">(koi scheme nahi)</span></td><td><b>${s.scheme.notApplied}</b></td></tr>`]));
   }
 
   return `<div class="page-head"><div><h1>${esc(cat[1])}</h1><p>${esc(cat[2])} · <span>public totals</span></p></div><div class="ph-actions">${back}</div></div>
@@ -1809,6 +1809,8 @@ function viewDashboard(){
           <thead><tr><th>Scheme</th><th>Members</th></tr></thead><tbody>
           ${SCHEMES.filter(([k])=>k!=='other').map(([k,l])=>`<tr class="clickable" data-act="mlist" data-f="scheme:${esc(k)}" data-title="${esc(l)}"><td>${esc(l)}</td><td><b>${s.scheme.counts[k]||0}</b></td></tr>`).join('')}
           ${s.scheme.byName.map(([nm,n])=>`<tr class="clickable" data-act="mlist" data-f="schemeName:${esc(nm)}" data-title="${esc(nm)}"><td>${esc(nm)}</td><td><b>${n}</b></td></tr>`).join('')}
+          <tr class="clickable scheme-none" data-act="mlist" data-f="schemeNone" data-title="Scheme nahi mili — members">
+            <td>Scheme nahi mili <span class="muted small">(koi scheme nahi)</span></td><td><b>${s.scheme.notApplied}</b></td></tr>
           </tbody></table></div>
         ${!s.scheme.applied ? '<p class="muted small" style="margin-top:10px">Abhi koi scheme mark nahi hui — member form me scheme chips tap karo.</p>' : ''}
       </section>

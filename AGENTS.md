@@ -283,3 +283,12 @@ Open: wire Supabase keys; real OTP SMS later.
 - Dashboard labels Hinglish-first rakhna hai ("Scheme mili" / "Scheme nahi mili"), formal
   English ("Scheme applied") nahi — Shan ne kaha: "scheme no scheme bhi change kar du".
 - Naya UI text Hinglish me likho aur `I18N.en` / `I18N.ta` me wahi string key ke saath add karo.
+
+## v82 — scheme rows = member list (2026-10-28)
+- Shan: "scheme wise count jab click karein to member ka naam, family id, View — waisa karo".
+- `s.scheme.byName` rows (custom "Other scheme" naam + legacy `govtScheme` records) bhi ab
+  clickable: `data-act="mlist" data-f="schemeName:<naam>"` → naya `MFD.schemeName` filter
+  (member.schemeName match ya `memberSchemes()` me naam) → `viewMembersList` (Name/Age/Gender/
+  Family ID/Street + View button).
+- Yaad rakho: har bucket ke liye list ka title us row ka apna naam hona chahiye.
+- Proof: `schemes-smoke.js` 13/13, poora suite 167/72/21/12 green. Cache `memc-app-v82`.
