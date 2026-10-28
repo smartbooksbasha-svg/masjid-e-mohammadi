@@ -254,6 +254,62 @@ const wait = ms => new Promise(r => setTimeout(r, ms || 120));
   A.win.eval("setLang('en')"); await wait(200);
   ok(!/Naya admin add karo/.test(A.text()) || /English|Admins/.test(A.text()), 'english switch applied');
 
+  /* ---------------- 8b. audit log (kisne kya kiya) ---------------- */
+  const AU = await boot({ admin: OWNER.email });
+  const logs = () => JSON.parse(AU.win.localStorage.getItem('memc_audit') || '[]');
+  ok(logs().some(r => r.a === 'login' && /Isthiyaque/.test(r.by)), 'login is recorded with the user name');
+  AU.win.eval("auditSave([])");
+
+  /* add a household through the real save path */
+  AU.win.eval("state.draft = blankDraft(); state.draft.street='Audit Street'; state.draft.houseType='cement'; state.draft.houseName='Audit Family'; state.draft.members=[{name:'Head',gender:'Male',dob:'1980-01-01',maritalStatus:'Married'}]; go('add')");
+  await wait(150);
+  AU.win.eval("saveFamily(false)");
+  await wait(150);
+  const addRow = logs().filter(r => r.a === 'family_add');
+  ok(addRow.length === 1, 'household add is logged');
+  ok(/Audit Family/.test(addRow[0].t), 'log entry carries the household name');
+  ok(/1 members/.test(addRow[0].d), 'log entry carries member count');
+
+  /* edit it */
+  const afid = AU.win.eval("DB.families()[0].id");
+  AU.win.eval("(function(){ const f=DB.families(); f[0].phone='9876543210'; f[0].members.push({name:'Two',gender:'Female',dob:'1985-02-02',maritalStatus:'Married'}); DB.setFamilies(f); })()");
+  const editRow = logs().filter(r => r.a === 'family_edit');
+  ok(editRow.length >= 1, 'household edit is logged');
+  ok(/phone/.test(editRow[0].d) && /members 1→2/.test(editRow[0].d), 'edit log names the changed fields');
+
+  /* delete it */
+  AU.win.eval("DB.setFamilies(DB.families().filter(f=>f.id!=='" + afid + "'))");
+  ok(logs().some(r => r.a === 'family_delete' && /Audit Family/.test(r.t)), 'household delete is logged');
+
+  /* admin add/remove */
+  AU.win.eval("(function(){ const a=DB.admins(); a.push({name:'New Guy',email:'new@example.com',userId:'ADM-2026-0009',status:'active'}); DB.setAdmins(a); })()");
+  ok(logs().some(r => r.a === 'admin_add' && /New Guy/.test(r.t)), 'admin add is logged');
+  AU.win.eval("DB.setAdmins(DB.admins().filter(a=>a.email!=='new@example.com'))");
+  ok(logs().some(r => r.a === 'admin_remove' && /New Guy/.test(r.t)), 'admin remove is logged');
+
+  /* session housekeeping must not spam the log */
+  const before = logs().length;
+  AU.win.eval("touchSession()");
+  AU.win.eval("startSession('" + OWNER.email + "')");
+  ok(logs().length <= before + 1, 'session refresh does not spam the audit log');
+
+  /* owner-only screen */
+  AU.win.eval("go('audit')");
+  await wait(120);
+  ok(!!AU.doc.querySelector('#auditList'), 'audit screen renders for owner');
+  ok(/Household add/.test(AU.doc.querySelector('#content').textContent), 'audit rows show action labels');
+  ok(AU.doc.querySelectorAll('.aud-row').length >= 4, 'audit rows are listed');
+
+  const AD = await boot({ admin: ADMIN.email, admins: [OWNER, ADMIN] });
+  ok(!AD.doc.querySelector('#nav').textContent.includes('Audit log'), 'plain admin does not see the audit menu');
+  AD.win.eval("go('audit')");
+  await wait(120);
+  ok(/Super admin only/.test(AD.text()), 'plain admin cannot open the audit screen');
+
+  /* clear keeps one honest entry */
+  AU.win.eval("auditSave([]); audit('audit_clear','Audit log','x')");
+  ok(logs().length === 1 && logs()[0].a === 'audit_clear', 'audit clear leaves a single record of itself');
+
   /* ---------------- 9. backup round trip ---------------- */
   const backup = A.win.eval("JSON.stringify({ families:DB.families(), masjid:DB.masjid() })");
   ok(JSON.parse(backup).families.length === 1, 'backup payload contains households');

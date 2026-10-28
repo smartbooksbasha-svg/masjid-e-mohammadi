@@ -7,7 +7,7 @@
 /* ---------------- config / constants ---------------- */
 const CFG = window.APP_CONFIG || {};
 const PREFIX = CFG.FAMILY_ID_PREFIX || 'MEMC';
-const LS = { admins:'memc_admins', families:'memc_families', seq:'memc_seq', session:'memc_session', theme:'memc_theme', seeded:'memc_seeded', masjid:'memc_masjid', events:'memc_events', logo:'memc_logo', formDraft:'memc_form_draft', idcard:'memc_idcard', idset:'memc_idset' };
+const LS = { admins:'memc_admins', families:'memc_families', seq:'memc_seq', session:'memc_session', theme:'memc_theme', seeded:'memc_seeded', masjid:'memc_masjid', events:'memc_events', logo:'memc_logo', formDraft:'memc_form_draft', idcard:'memc_idcard', idset:'memc_idset', audit:'memc_audit' };
 
 const DOC_TYPES = [
   ['aadhaar','Aadhaar Card'], ['pan','PAN Card'], ['passport','Passport'],
@@ -242,24 +242,160 @@ const DB = {
     } catch(e){}
     return [];
   },
-  setAdmins(v){ localStorage.setItem(LS.admins, JSON.stringify(v)); },
+  setAdmins(v, opts){
+    const before = (opts && opts.silent) ? null : DB.admins();
+    localStorage.setItem(LS.admins, JSON.stringify(v));
+    if (before) { try{ auditAdminsDiff(before, v); }catch(e){} }
+  },
   families(){ try{ return JSON.parse(localStorage.getItem(LS.families)||'[]'); }catch(e){ return []; } },
-  setFamilies(v){ localStorage.setItem(LS.families, JSON.stringify(v)); },
+  setFamilies(v, opts){
+    const before = (opts && opts.silent) ? null : DB.families();
+    localStorage.setItem(LS.families, JSON.stringify(v));
+    if (before) { try{ auditFamiliesDiff(before, v); }catch(e){} }
+  },
   seq(){ return parseInt(localStorage.getItem(LS.seq)||'0',10)||0; },
   setSeq(n){ localStorage.setItem(LS.seq, String(n)); },
   seeded(){ return localStorage.getItem(LS.seeded)==='1'; },
   setSeeded(){ localStorage.setItem(LS.seeded,'1'); },
   masjid(){ try{ return JSON.parse(localStorage.getItem(LS.masjid)||'null') || null; }catch(e){ return null; } },
-  setMasjid(v){ localStorage.setItem(LS.masjid, JSON.stringify(v)); },
+  setMasjid(v){
+    const old = DB.masjid() || {};
+    localStorage.setItem(LS.masjid, JSON.stringify(v));
+    try{
+      const nv = v || {}; const ch = [];
+      Object.keys(nv).forEach(k=>{
+        if (k === 'photos'){ const x=(old.photos||[]).length, y=(nv.photos||[]).length; if (x!==y) ch.push('photos ' + x + '→' + y); return; }
+        if (JSON.stringify(old[k]) !== JSON.stringify(nv[k])) ch.push(k);
+      });
+      if (ch.length) audit('masjid_save', nv.name || 'Masjid profile', ch.slice(0,6).join(', '));
+    }catch(e){}
+  },
   events(){ try{ return JSON.parse(localStorage.getItem(LS.events)||'[]'); }catch(e){ return []; } },
   setEvents(v){ localStorage.setItem(LS.events, JSON.stringify(v)); },
   logo(){ try{ return localStorage.getItem(LS.logo)||''; }catch(e){ return ''; } },
   setLogo(v){ if(!v) localStorage.removeItem(LS.logo); else localStorage.setItem(LS.logo, String(v)); },
   idcard(){ try{ return JSON.parse(localStorage.getItem(LS.idcard)||'null') || null; }catch(e){ return null; } },
-  setIdcard(v){ if(!v) localStorage.removeItem(LS.idcard); else localStorage.setItem(LS.idcard, JSON.stringify(v)); },
+  setIdcard(v){
+    const old = DB.idcard() || {};
+    if (!v) localStorage.removeItem(LS.idcard); else localStorage.setItem(LS.idcard, JSON.stringify(v));
+    try{
+      const nv = v || {}; const keys = new Set(Object.keys(old).concat(Object.keys(nv))); const ch = [];
+      keys.forEach(k=>{
+        if (JSON.stringify(old[k]) === JSON.stringify(nv[k])) return;
+        ch.push(/^sig/.test(k) ? ('signature ' + k.replace(/^sig/,'').toLowerCase()) : k);
+      });
+      if (ch.length) audit('settings', 'ID card design', ch.join(', '));
+    }catch(e){}
+  },
   idset(){ try{ return JSON.parse(localStorage.getItem(LS.idset)||'null') || null; }catch(e){ return null; } },
-  setIdsSet(v){ if(!v) localStorage.removeItem(LS.idset); else localStorage.setItem(LS.idset, JSON.stringify(v)); }
+  setIdsSet(v){
+    const old = DB.idset() || {};
+    if (!v) localStorage.removeItem(LS.idset); else localStorage.setItem(LS.idset, JSON.stringify(v));
+    try{
+      const nv = v || {}; const ch = [];
+      Object.keys(Object.assign({}, old, nv)).forEach(k=>{
+        if (JSON.stringify(old[k]) === JSON.stringify(nv[k])) return;
+        ch.push(k + ': ' + (old[k]||'—') + ' → ' + (nv[k]||'—'));
+      });
+      if (ch.length) audit('settings', 'ID & password format', ch.join(', '));
+    }catch(e){}
+  }
 };
+
+/* ============================================================
+   AUDIT LOG — "kab kisne kya kiya" (sirf super admin dekhta hai)
+   Har entry: { at, a:action, by:naam, uid, email, t:target, d:detail }
+   ============================================================ */
+const AUDIT_MAX = 1000;
+const AUDIT_ACT = {
+  login:'Login', logout:'Logout', login_fail:'Login fail',
+  family_add:'Household add', family_edit:'Household edit', family_delete:'Household delete',
+  admin_add:'Admin add', admin_edit:'Admin edit', admin_remove:'Admin remove',
+  settings:'Setting change', masjid_save:'Masjid profile save', publish:'Public totals publish',
+  backup:'Backup', backup_drive:'Drive backup', restore:'Restore', data_clear:'All data erased',
+  password_change:'Password change', audit_clear:'Audit log cleared'
+};
+const AUDIT_GROUPS = {
+  login:['login','logout','login_fail'],
+  data:['family_add','family_edit','family_delete','restore','data_clear','publish'],
+  admin:['admin_add','admin_edit','admin_remove'],
+  settings:['settings','masjid_save','backup','backup_drive','password_change','audit_clear']
+};
+function auditLog(){ try{ return JSON.parse(localStorage.getItem(LS.audit)||'[]'); }catch(e){ return []; } }
+function auditSave(v){ try{ localStorage.setItem(LS.audit, JSON.stringify((v||[]).slice(-AUDIT_MAX))); }catch(e){} }
+function auditWho(){
+  try{
+    const u = currentUser();
+    if (u) return { by:u.name || u.email || 'Admin', id:u.userId || '', email:u.email || '' };
+  }catch(e){}
+  return { by:'Public', id:'', email:'' };
+}
+function audit(action, target, detail, who){
+  try{
+    const w = who || auditWho();
+    const v = auditLog();
+    const row = { id:uid(), at:Date.now(), a:String(action||''), by:String(w.by||''),
+                  uid:String(w.id||''), email:String(w.email||''), t:String(target||''), d:String(detail||'') };
+    v.push(row);
+    auditSave(v);
+    /* cross-device: server par bhi bhejo (table na ho to chup-chaap skip) */
+    try { if (typeof SYNC !== 'undefined' && SYNC.pushAudit) SYNC.pushAudit(row); } catch(e){}
+  }catch(e){}
+}
+const FAM_FIELD_LABEL = { name:'naam', phone:'phone', address:'pata', street:'street', houseNo:'house no',
+  houseType:'house type', notes:'notes', docs:'documents', custom:'custom docs', masjidNote:'note' };
+function famLabel(f){ return (f && (f.name || f.houseName || (f.head && f.head.name))) || ('Family ' + ((f && f.id) || '')); }
+function famMemberCount(f){ return Array.isArray(f && f.members) ? f.members.length : 0; }
+function famChanges(a, b){
+  const out = [];
+  Object.keys(FAM_FIELD_LABEL).forEach(k=>{
+    if (JSON.stringify(a[k]==null?'':a[k]) !== JSON.stringify(b[k]==null?'':b[k])) out.push(FAM_FIELD_LABEL[k]);
+  });
+  const ca = famMemberCount(a), cb = famMemberCount(b);
+  if (ca !== cb) out.push('members ' + ca + '→' + cb);
+  else if (JSON.stringify(a.members||[]) !== JSON.stringify(b.members||[])) out.push('member details');
+  return out;
+}
+function auditFamiliesDiff(before, after){
+  const bm = new Map((before||[]).map(f=>[String(f.id), f]));
+  const am = new Map((after||[]).map(f=>[String(f.id), f]));
+  am.forEach((f,id)=>{
+    const old = bm.get(id);
+    if (!old){ audit('family_add', famLabel(f), 'ID ' + id + ' · ' + famMemberCount(f) + ' members'); return; }
+    const ch = famChanges(old, f);
+    if (ch.length) audit('family_edit', famLabel(f), 'ID ' + id + ' · ' + ch.join(', '));
+  });
+  bm.forEach((f,id)=>{ if (!am.has(id)) audit('family_delete', famLabel(f), 'ID ' + id + ' · ' + famMemberCount(f) + ' members'); });
+}
+function adminVolatile(a){
+  const c = Object.assign({}, a||{});
+  delete c.sess; delete c.lastLogin; delete c.tempPass; delete c.firstLoginAt;
+  return c;
+}
+function auditAdminsDiff(before, after){
+  const key = a => String(a.email || a.userId || a.name || '').toLowerCase();
+  const bm = new Map((before||[]).map(a=>[key(a), a]));
+  const am = new Map((after||[]).map(a=>[key(a), a]));
+  am.forEach((a,k)=>{
+    const old = bm.get(k);
+    const nm = a.name || a.email || a.userId || k;
+    if (!old){
+      audit('admin_add', nm, [a.userId||'', a.role==='owner'?'owner':'admin', a.pending?'pending':''].filter(Boolean).join(' · '));
+      return;
+    }
+    if (JSON.stringify(adminVolatile(old)) !== JSON.stringify(adminVolatile(a))){
+      const ch = [];
+      ['name','email','phone','age','status','role','userId'].forEach(f=>{
+        const x = String(old[f]==null?'':old[f]), y = String(a[f]==null?'':a[f]);
+        if (x !== y) ch.push(f + ': ' + (x||'—') + ' → ' + (y||'—'));
+      });
+      if (String(old.passHash||'') !== String(a.passHash||'')) ch.push('password changed');
+      if (!!old.photo !== !!a.photo) ch.push(a.photo ? 'photo added' : 'photo removed');
+      if (ch.length) audit('admin_edit', nm, ch.join(', '));
+    }
+  });
+  bm.forEach((a,k)=>{ if (!am.has(k)) audit('admin_remove', a.name || a.email || k, a.userId || ''); });
+}
 
 function getSession(){ try{ return JSON.parse(localStorage.getItem(LS.session)||'null'); }catch(e){ return null; } }
 function setSession(s){
@@ -322,6 +458,7 @@ function startSession(email, name){
   admins[i].lastLogin = Date.now();
   DB.setAdmins(admins);
   setSession({ kind:'admin', email, name: name || admins[i].name || '', token, exp });
+  audit('login', '', 'session start', { by: admins[i].name || email, id: admins[i].userId || '', email });
 }
 let _touchAt = 0;
 function touchSession(){
@@ -493,7 +630,7 @@ function purgeNonOwnerAdmins(){
       return !!(a.passHash || a.cloud || a.status === 'pending');
     });
     if (keep.length !== admins.length){ changed = true; }
-    if (changed) DB.setAdmins(keep);
+    if (changed) DB.setAdmins(keep, { silent:true });
   } catch(e){}
 }
 function migrateOwner(){
@@ -648,7 +785,7 @@ async function loginSubmit(e){
     const c = await CLOUD.get();
     if (!c){ if (btn){ btn.disabled=false; btn.textContent='Login'; } alertBox.innerHTML='<div class="alert err">Cloud connect nahi hua — internet check karo.</div>'; return; }
     const { error } = await c.auth.signInWithPassword({ email, password: pass });
-    if (error){ loginFailed(); if (btn){ btn.disabled=false; btn.textContent='Login'; } alertBox.innerHTML='<div class="alert err">'+esc(error.message)+'</div>'; return; }
+    if (error){ loginFailed(); audit('login_fail', email, String(error.message||'cloud login failed'), { by:email, id:'', email }); if (btn){ btn.disabled=false; btn.textContent='Login'; } alertBox.innerHTML='<div class="alert err">'+esc(error.message)+'</div>'; return; }
     loginOk();
     await cloudClaimAdmin(email, '', '');
     if (!adminByEmail(email)){
@@ -664,6 +801,7 @@ async function loginSubmit(e){
   if (!admin){ if (btn){ btn.disabled=false; btn.textContent='Login'; } alertBox.innerHTML='<div class="alert err">Is email se koi admin nahi hai.</div>'; return; }
   if (!(await checkPass(pass, admin))){
     loginFailed();
+    audit('login_fail', admin.name || email, 'wrong password', { by:admin.name || email, id:admin.userId || '', email });
     if (btn){ btn.disabled=false; btn.textContent='Login'; }
     alertBox.innerHTML='<div class="alert err">Incorrect password.' + (loginLocked()?' <b>60 second ruk jao.</b>':'') + '</div>';
     return;
@@ -870,6 +1008,7 @@ function renderNewPassword(){
       DB.setAdmins(admins);
     }
     const email = pending.email; pending = null;
+    audit('password_change', email, 'password reset via email', { by:email, id:'', email });
     toast('Password updated. Please login.');
     renderLogin();
   });
@@ -878,7 +1017,7 @@ function renderNewPassword(){
 /* ============================================================
    APP SHELL
    ============================================================ */
-const state = { view:'dashboard', param:null, draft:null, showAddAdmin:false, showAdmins:false };
+const state = { view:'dashboard', param:null, draft:null, showAddAdmin:false, showAdmins:false, auditFilter:'all', auditQuery:'', cloudAudit:null, cloudAuditTried:false };
 
 
 /* ============================================================
@@ -937,6 +1076,30 @@ const SYNC = {
       const { error } = await c.from('public_snapshot').upsert({ id:true, data:publicPayload(), updated_at:new Date().toISOString() });
       return !error;
     } catch(e){ return false; }
+  },
+  /* audit log server par — sirf authenticated admin likh/padh sakta hai */
+  async pushAudit(row){
+    try{
+      if (!this.on() || !isAdmin()) return false;
+      const c = await CLOUD.get(); if (!c) return false;
+      const { error } = await c.from('audit_log').insert({
+        id: row.id, at: new Date(row.at).toISOString(), action: row.a, who: row.by,
+        user_id: row.uid || '', email: row.email || '', target: row.t || '', detail: row.d || ''
+      });
+      return !error;
+    }catch(e){ return false; }
+  },
+  async fetchAudit(limit){
+    try{
+      if (!this.on()) return null;
+      const c = await CLOUD.get(); if (!c) return null;
+      const { data, error } = await c.from('audit_log')
+        .select('id,at,action,who,user_id,email,target,detail')
+        .order('at', { ascending:false }).limit(limit || 500);
+      if (error) return null;
+      return (data||[]).map(r=>({ id:r.id, at:Date.parse(r.at)||0, a:r.action, by:r.who||'',
+        uid:r.user_id||'', email:r.email||'', t:r.target||'', d:r.detail||'', cloud:true }));
+    }catch(e){ return null; }
   },
   async pullPublic(){
     const c = await CLOUD.get(); if (!c) return false;
@@ -997,7 +1160,7 @@ const SYNC = {
           return o;
         })
       }));
-      if (fams.length) DB.setFamilies(fams);
+      if (fams.length) DB.setFamilies(fams, { silent:true });
       const { data: mj } = await c.from('masjid').select('*').limit(1);
       if (mj && mj[0]) DB.setMasjid(mj[0]);
       /* public snapshot ko fresh rakho (anon sirf yahi padhta hai) */
@@ -1071,11 +1234,97 @@ function openPhoto(src){
   document.body.appendChild(d);
 }
 
+/* ---------- AUDIT LOG view (owner only) ---------- */
+function auditAll(){
+  const local = auditLog();
+  const cloud = Array.isArray(state.cloudAudit) ? state.cloudAudit : [];
+  const seen = new Set(local.map(r=>String(r.id)));
+  return local.concat(cloud.filter(r=>!seen.has(String(r.id)))).sort((a,b)=>b.at-a.at);
+}
+async function loadCloudAudit(){
+  if (state.cloudAuditTried) return;
+  state.cloudAuditTried = true;
+  try { state.cloudAudit = await SYNC.fetchAudit(500); } catch(e){ state.cloudAudit = null; }
+  if (state.view === 'audit'){
+    const c = $('#content'); if (c){ c.innerHTML = viewAudit(); afterRender('audit'); }
+  }
+}
+function auditFiltered(){
+  const f = state.auditFilter || 'all';
+  const q = String(state.auditQuery||'').toLowerCase().trim();
+  let rows = auditAll();
+  if (f !== 'all'){ const g = AUDIT_GROUPS[f] || []; rows = rows.filter(r=>g.indexOf(r.a) >= 0); }
+  if (q) rows = rows.filter(r=>((r.by||'')+' '+(r.t||'')+' '+(r.d||'')+' '+(AUDIT_ACT[r.a]||r.a)).toLowerCase().indexOf(q) >= 0);
+  return rows;
+}
+function auditTime(ts){ const d = new Date(ts); return pad(d.getHours(),2)+':'+pad(d.getMinutes(),2); }
+function auditDay(ts){
+  const d = new Date(ts), t = new Date();
+  const same = (a,b)=>a.getFullYear()===b.getFullYear() && a.getMonth()===b.getMonth() && a.getDate()===b.getDate();
+  if (same(d,t)) return 'Today';
+  if (same(d,new Date(t.getTime()-86400000))) return 'Yesterday';
+  return d.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
+}
+const AUDIT_CLASS = { login:'ok', logout:'ok', login_fail:'err', family_add:'ok', family_edit:'info',
+  family_delete:'err', admin_add:'ok', admin_edit:'info', admin_remove:'err', settings:'info',
+  masjid_save:'info', publish:'ok', backup:'ok', backup_drive:'ok', restore:'warn',
+  data_clear:'err', password_change:'warn', audit_clear:'warn' };
+
+function viewAudit(){
+  if (!isOwner()) return `<div class="empty"><h3>Super admin only</h3></div>`;
+  const rows = auditFiltered(), total = auditAll().length;
+  const cloudRows = Array.isArray(state.cloudAudit) ? state.cloudAudit.length : 0;
+  const chips = [['all','Sab'],['login','Login'],['data','Data'],['admin','Admins'],['settings','Settings']];
+  let html = `<div class="page-head">
+    <div><h1>Audit log</h1><p>Kab kisne kya kiya — <b>${rows.length}</b> / ${total} entries</p></div>
+    <div class="ph-actions">
+      <button class="btn ghost sm" type="button" data-act="audit-export">${ICON.dl} CSV</button>
+      <button class="btn danger sm" type="button" data-act="audit-clear">Clear log</button>
+    </div>
+  </div>
+  <div class="card">
+    <p class="muted small" style="margin:0 0 10px">${state.cloudAudit === null && !state.cloudAuditTried ? 'Server se entries load ho rahi hain…' : (cloudRows ? (cloudRows + ' server entries included') : 'Is device ka log — cross-device ke liye supabase/audit.sql run karo')}</p>
+    <div class="aud-chips">${chips.map(([k,l])=>`<button type="button" class="chip${(state.auditFilter||'all')===k?' on':''}" data-act="audit-filter" data-f="${k}">${l}</button>`).join('')}</div>
+    <input class="inp" id="auditQ" type="search" placeholder="Search — naam, family, action…" value="${esc(state.auditQuery||'')}" style="margin:12px 0" />
+    <div class="aud-list" id="auditList">`;
+  if (!rows.length){
+    html += `<div class="empty" style="padding:26px 10px"><h3>Koi entry nahi</h3><p class="muted small">Admin jab kuch add/edit karega, entry yahan dikhegi.</p></div>`;
+  }
+  let day = '';
+  rows.forEach(r=>{
+    const d = auditDay(r.at);
+    if (d !== day){ day = d; html += `<div class="aud-day">${esc(d)}</div>`; }
+    const label = AUDIT_ACT[r.a] || r.a;
+    html += `<div class="aud-row" data-s="${esc(((r.by||'')+' '+(r.t||'')+' '+(r.d||'')+' '+label).toLowerCase())}">
+      <span class="aud-badge ${AUDIT_CLASS[r.a]||'info'}">${esc(label)}</span>
+      <div class="aud-main"><b>${esc(r.t||'—')}</b>${r.d?`<span class="aud-d">${esc(r.d)}</span>`:''}</div>
+      <div class="aud-meta"><b>${esc(r.by||'—')}</b><span>${esc(auditTime(r.at))}${r.uid?' · '+esc(r.uid):''}${r.cloud?' · ☁':''}</span></div>
+    </div>`;
+  });
+  return html + `</div></div>`;
+}
+
+function exportAuditCSV(){
+  if (!isOwner()) return;
+  const rows = [['Date','Time','Action','Who','User ID','Email','Target','Detail']];
+  auditLog().forEach(r=>{
+    const d = new Date(r.at);
+    rows.push([d.toLocaleDateString('en-GB'), auditTime(r.at), AUDIT_ACT[r.a]||r.a, r.by||'', r.uid||'', r.email||'', r.t||'', r.d||'']);
+  });
+  const csv = rows.map(r=>r.map(x=>'"'+String(x==null?'':x).replace(/"/g,'""')+'"').join(',')).join('\r\n');
+  const blob = new Blob(['\ufeff'+csv], {type:'text/csv;charset=utf-8'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = 'audit-log-' + todayStr() + '.csv'; a.click(); URL.revokeObjectURL(a.href);
+  audit('settings', 'Audit CSV', 'exported ' + (rows.length-1) + ' entries');
+  toast('CSV download ho gaya');
+}
+
 function navItems(){
   if (!isAdmin()) return [ ['dashboard','Dashboard',ICON.dash], ['find','Find family',ICON.search] ];
   return [ ['dashboard','Dashboard',ICON.dash], ['families','Households',ICON.list],
            ['add','Add Household',ICON.plus], ['find','Find family',ICON.search], ['masjid','Masjid Profile',ICON.mosque],
-           ['adminpanel','Administration',ICON.gear] ];
+           ['adminpanel','Administration',ICON.gear] ]
+         .concat(isOwner() ? [['audit','Audit log',ICON.list]] : []);
 }
 
 function renderShell(){
@@ -1142,7 +1391,7 @@ function go(view, param){
       saveFormDraft();
     }
   } catch(e){}
-  const ADMIN_ONLY = ['add','users','settings','families','detail','masjid','adminpanel','idcard'];
+  const ADMIN_ONLY = ['add','users','settings','families','detail','masjid','adminpanel','idcard','audit'];
   if (ADMIN_ONLY.includes(view) && !isAdmin()){ toast('Ye page sirf admin ke liye hai','err'); view='dashboard'; }
   // Push history state for back button
   try {
@@ -1152,7 +1401,7 @@ function go(view, param){
   } catch(e){}
   state.view = view; state.param = param||null;
   closeNav();
-  const titles = { dashboard:'Survey Dashboard', families:'Households', add:(state.param?'Edit Household':'Add Household'), detail:'Household Record', find:'Find family', adminpanel:'Administration', users:'Admins', settings:'Settings', masjid:'Masjid Profile', cat:'Survey Category', myprofile:'My Profile', 'admin-edit':'Edit Admin', idcard:'ID Card Design', memberlist:'Members', familylist:'Households list', streetlist:'Streets' };
+  const titles = { dashboard:'Survey Dashboard', families:'Households', add:(state.param?'Edit Household':'Add Household'), detail:'Household Record', find:'Find family', adminpanel:'Administration', users:'Admins', settings:'Settings', masjid:'Masjid Profile', cat:'Survey Category', myprofile:'My Profile', 'admin-edit':'Edit Admin', idcard:'ID Card Design', memberlist:'Members', familylist:'Households list', streetlist:'Streets', audit:'Audit log' };
   $('#pageTitle').textContent = titles[view] || 'Survey Dashboard';
   let html='';
   if (view==='dashboard') html = viewDashboard();
@@ -1167,6 +1416,7 @@ function go(view, param){
   else if (view==='myprofile') html = isAdmin()?viewMyProfile():`<div class='empty'><h3>Admin only</h3></div>`;
   else if (view==='admin-edit') html = isOwner()?viewAdminEdit(state.param):`<div class='empty'><h3>Owner only</h3></div>`;
   else if (view==='idcard') html = isOwner()?viewIdCardDesign():`<div class='empty'><h3>Super admin only</h3></div>`;
+  else if (view==='audit') html = viewAudit();
   else if (view==='cat') html = viewCat(state.param);
   else if (view==='memberlist') html = viewMembersList(state.memberListFilter||(()=>true), state.memberListTitle||'Members');
   else if (view==='familylist') html = viewFamilyList(state.familyListFilter||(()=>true), state.familyListTitle||'Households');
@@ -2695,7 +2945,67 @@ const I18N = {
     'ID-1 (85.6 × 54 mm)':'ID-1 (85.6 × 54 mm)',
     '5×3 = chaudi card, QR bada aur text saaf':'5×3 = wide card, bigger QR and clearer text'
   },
+    'Audit log':'Audit log',
+    'Kab kisne kya kiya':'Who did what, and when',
+    'Sab':'All',
+    'Login':'Login',
+    'Data':'Data',
+    'Admins':'Admins',
+    'Settings':'Settings',
+    'Today':'Today',
+    'Yesterday':'Yesterday',
+    'Koi entry nahi':'No entries yet',
+    'Admin jab kuch add/edit karega, entry yahan dikhegi.':'Every add, edit and delete will show up here.',
+    'Search — naam, family, action…':'Search — name, household, action…',
+    'Clear log':'Clear log',
+    'Household add':'Household added',
+    'Household edit':'Household edited',
+    'Household delete':'Household deleted',
+    'Admin add':'Admin added',
+    'Admin edit':'Admin edited',
+    'Admin remove':'Admin removed',
+    'Setting change':'Setting changed',
+    'Masjid profile save':'Masjid profile saved',
+    'Public totals publish':'Public totals published',
+    'Backup':'Backup',
+    'Drive backup':'Drive backup',
+    'Restore':'Restore',
+    'All data erased':'All data erased',
+    'Password change':'Password change',
+    'Audit log cleared':'Audit log cleared',
+    'Login fail':'Login failed',
+    'Logout':'Logout',
   ta: {
+    'Audit log':'தணிக்கை பதிவு',
+    'Kab kisne kya kiya':'யார் எப்போது என்ன செய்தார்',
+    'Sab':'அனைத்தும்',
+    'Login':'உள்நுழைவு',
+    'Data':'தரவு',
+    'Admins':'நிர்வாகிகள்',
+    'Settings':'அமைப்புகள்',
+    'Today':'இன்று',
+    'Yesterday':'நேற்று',
+    'Koi entry nahi':'பதிவுகள் இல்லை',
+    'Admin jab kuch add/edit karega, entry yahan dikhegi.':'ஒவ்வொரு மாற்றமும் இங்கே தெரியும்.',
+    'Search — naam, family, action…':'தேடு — பெயர், குடும்பம், செயல்…',
+    'Clear log':'பதிவை அழி',
+    'Household add':'குடும்பம் சேர்க்கப்பட்டது',
+    'Household edit':'குடும்பம் திருத்தப்பட்டது',
+    'Household delete':'குடும்பம் நீக்கப்பட்டது',
+    'Admin add':'நிர்வாகி சேர்க்கப்பட்டார்',
+    'Admin edit':'நிர்வாகி திருத்தப்பட்டார்',
+    'Admin remove':'நிர்வாகி நீக்கப்பட்டார்',
+    'Setting change':'அமைப்பு மாற்றம்',
+    'Masjid profile save':'மசூதி விவரம் சேமிக்கப்பட்டது',
+    'Public totals publish':'பொது எண்ணிக்கை வெளியிடப்பட்டது',
+    'Backup':'காப்பு',
+    'Drive backup':'Drive காப்பு',
+    'Restore':'மீட்டமை',
+    'All data erased':'அனைத்து தரவும் அழிக்கப்பட்டது',
+    'Password change':'கடவுச்சொல் மாற்றம்',
+    'Audit log cleared':'தணிக்கை பதிவு அழிக்கப்பட்டது',
+    'Login fail':'உள்நுழைவு தோல்வி',
+    'Logout':'வெளியேறு',
     'Dashboard':'டாஷ்போர்டு',
     'Households':'குடும்பங்கள்',
     'Add Household':'குடும்பம் சேர்',
@@ -3499,7 +3809,7 @@ document.addEventListener('click', (e)=>{
   if (act==='close-auth'){ closeAuth(); return; }
   if (act==='auth-tab'){ pending=null; renderAuth(el.dataset.tab||'login'); return; }
   if (act==='auth-cancel'){ pending=null; renderAuth('login'); return; }
-  if (act==='admin-logout'){ try { if(!isAdmin()){ clearSession(); renderShell(); go('dashboard'); return; } } catch(e){} clearSession(); state.draft=null; renderShell(); go('dashboard'); return; }
+  if (act==='admin-logout'){ try { if(!isAdmin()){ clearSession(); renderShell(); go('dashboard'); return; } } catch(e){} audit('logout', '', ''); clearSession(); state.draft=null; renderShell(); go('dashboard'); return; }
   if (act==='myprofile'){ if(!isAdmin()){toast('Admin only','err');return;} go('myprofile'); return; }
   if (act==='admin-edit'){ if(!isOwner()){toast('Sirf owner edit kar sakta hai','err');return;} go('admin-edit', el.dataset.id); return; }
   if (act==='reset-admin-pass'){
@@ -3538,7 +3848,11 @@ document.addEventListener('click', (e)=>{
     toast('Admin hata diya'); go('users'); return;
   }
   if (act==='load-sample'){ loadSample(); enterApp(); go('dashboard'); toast('Sample data loaded'); return; }
-  if (act==='clear-data'){ if(confirm('Erase ALL household records on this device? This cannot be undone.')){ DB.setFamilies([]); DB.setSeq(0); toast('All household records erased'); go('dashboard'); } return; }
+  if (act==='clear-data'){ if(confirm('Erase ALL household records on this device? This cannot be undone.')){
+    const n = DB.families().length;
+    DB.setFamilies([], { silent:true }); DB.setSeq(0);
+    audit('data_clear', 'All households', n + ' records erased from this device');
+    toast('All household records erased'); go('dashboard'); } return; }
   if (act==='export-excel'){ exportExcel(); return; }
   if (act==='print-all'){ printFamilies(DB.families(), 'All Households'); return; }
   if (act==='print-family'){ const f=DB.families().find(x=>x.id===id); if(f) printFamilies([f], f.houseName||f.id); return; }
@@ -3631,10 +3945,23 @@ document.addEventListener('click', (e)=>{
     catch(e){ toast('Copy nahi hua — haath se likh lo','err'); }
     return;
   }
+  if (act==='audit-filter'){ state.auditFilter = el.dataset.f || 'all'; go('audit'); return; }
+  if (act==='audit-export'){ exportAuditCSV(); return; }
+  if (act==='audit-clear'){
+    if (!isOwner()){ toast('Sirf super admin','err'); return; }
+    if (!confirm('Poora audit log clear karna hai? Ye undo nahi hoga.')) return;
+    const n = auditLog().length;
+    auditSave([]);
+    audit('audit_clear', 'Audit log', n + ' entries removed');
+    toast('Audit log clear ho gaya'); go('audit'); return;
+  }
   if (act==='publish-public'){
     if (!isAdmin()){ toast('Sirf admin','err'); return; }
     if (!CLOUD.enabled()){ toast('Cloud off — public site ko totals nahi bheje ja sakte','err'); return; }
-    SYNC.publishSnapshot().then(ok=>toast(ok?'Public totals refresh ho gaye':'Refresh fail — schema v4 run hua hai?','' + (ok?'':'err')));
+    SYNC.publishSnapshot().then(ok=>{
+      audit('publish', 'Public totals', ok ? 'success' : 'failed');
+      toast(ok?'Public totals refresh ho gaye':'Refresh fail — schema v4 run hua hai?','' + (ok?'':'err'));
+    });
     return;
   }
   if (act==='drive-connect'){ driveConnect(); return; }
@@ -3931,7 +4258,19 @@ function afterRender(view){
   }
   if (view==='adminpanel'){
     const of = $('#ownerForm');
-    if (of && !of._bound){ of._bound=true; of.addEventListener('submit',e=>{ e.preventDefault(); const v=of.elements.oemail.value.trim().toLowerCase(); if(!isEmail(v)){toast('Valid email daalo','err');return;} setOwnerEmail(v); localStorage.setItem('memc_owner_src','user'); toast('Owner email save ho gaya'); go('adminpanel'); }); }
+    if (of && !of._bound){ of._bound=true; of.addEventListener('submit',e=>{ e.preventDefault(); const v=of.elements.oemail.value.trim().toLowerCase(); if(!isEmail(v)){toast('Valid email daalo','err');return;} const prev=ownerEmail(); setOwnerEmail(v); localStorage.setItem('memc_owner_src','user'); audit('settings','Owner email', prev + ' → ' + v); toast('Owner email save ho gaya'); go('adminpanel'); }); }
+  }
+  if (view==='audit'){
+    if (!state.cloudAuditTried && SYNC.on()) loadCloudAudit();
+    const q = $('#auditQ');
+    if (q && !q._boundAudit){
+      q._boundAudit = true;
+      q.addEventListener('input', ()=>{
+        const v = q.value.toLowerCase().trim();
+        state.auditQuery = q.value;
+        $$('#auditList .aud-row').forEach(r=>{ r.style.display = (!v || String(r.dataset.s||'').indexOf(v) >= 0) ? '' : 'none'; });
+      });
+    }
   }
   const tb=$('#themeBtn2'); if(tb){ const t=document.documentElement.getAttribute('data-theme'); tb.innerHTML = themeIcon(t) + (t==='night'?' Night':' Day'); }
 }
@@ -4199,6 +4538,7 @@ function backupJSON(){
   const blob = new Blob([JSON.stringify(data,null,2)], {type:'application/json'});
   const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='masjid-survey-backup-'+todayStr()+'.json'; a.click(); URL.revokeObjectURL(a.href);
   try { localStorage.setItem(LS_LASTBACKUP, String(Date.now())); } catch(e){}
+  audit('backup', 'JSON file', (data.families||[]).length + ' households');
   toast('Backup downloaded — is file ko Google Drive / laptop me rakh do');
 }
 
@@ -4221,7 +4561,7 @@ function restoreJSON(file){
     const clean = fams.filter(f=>f && typeof f==='object' && (f.id||f.houseName||(f.members&&f.members.length)))
       .map(f=> Object.assign({}, f, { id:String(f.id||'').trim() || ('MEMC-' + Date.now() + '-' + Math.floor(Math.random()*900+100)) }));
 
-    DB.setFamilies(clean);
+    DB.setFamilies(clean, { silent:true });
     if (data.masjid) DB.setMasjid(data.masjid);
     const maxSeq = clean.reduce((n,f)=>{ const m = String(f.id||'').match(/(\d+)\s*$/); return m ? Math.max(n, Number(m[1])) : n; }, 0);
     if (maxSeq) DB.setSeq(maxSeq);
@@ -4234,9 +4574,10 @@ function restoreJSON(file){
       const e = String(a && a.email || '').toLowerCase();
       if (e && !seen.has(e)){ admins.push({ email:e, name:a.name||e.split('@')[0], phone:a.phone||'', createdAt:a.createdAt||Date.now(), verified:true }); seen.add(e); added++; }
     });
-    if (added) DB.setAdmins(admins);
+    if (added) DB.setAdmins(admins, { silent:true });
 
     try { localStorage.setItem(LS_LASTBACKUP, String(Date.now())); } catch(e){}
+    audit('restore', 'Backup file', clean.length + ' households restored · ' + added + ' admins added');
     toast(tStr('Restore ho gaya')+' — ' + clean.length + ' families' + (added ? ' · ' + added + ' admin added' : ''), 'ok');
     try { go('dashboard'); } catch(e){}
 
@@ -4745,7 +5086,8 @@ function loadSample(){
     const docs = {}; DOC_TYPES.forEach(([k],idx)=>{ docs[k] = (idx % 2 === 0 && i % 2 === 0) ? 'yes' : 'no'; });
     fams.push(Object.assign({ id, createdAt:Date.now()- (sample.length-i)*86400000, createdBy:'sample', notes:'Sample record', docs, custom:[] }, s));
   });
-  DB.setFamilies(fams);
+  DB.setFamilies(fams, { silent:true });
+  audit('settings', 'Sample data', 'demo records loaded');
 }
 
 /* ============================================================
@@ -4799,7 +5141,7 @@ function migrateAdmins(){
       if (!a.status){ a.status = 'active'; ch = true; }
     });
     /* owner sirf config OWNER_EMAIL ya manually set memc_owner se decide hota hai */
-    if (ch) DB.setAdmins(admins);
+    if (ch) DB.setAdmins(admins, { silent:true });
   } catch(e){}
 }
 
@@ -4859,9 +5201,9 @@ window.addEventListener('popstate', (e)=>{
       state.param = e.state.param||null;
       // Re-render without pushing history
       const view = state.view;
-      const ADMIN_ONLY = ['add','users','settings','families','detail','masjid','adminpanel','idcard'];
+      const ADMIN_ONLY = ['add','users','settings','families','detail','masjid','adminpanel','idcard','audit'];
       if (ADMIN_ONLY.includes(view) && !isAdmin()){ toast('Ye page sirf admin ke liye hai','err'); state.view='dashboard'; state.param=null; }
-      const titles = { dashboard:'Survey Dashboard', families:'Households', add:(state.param?'Edit Household':'Add Household'), detail:'Household Record', find:'Find family', adminpanel:'Administration', users:'Admins', settings:'Settings', masjid:'Masjid Profile', cat:'Survey Category', myprofile:'My Profile', 'admin-edit':'Edit Admin', idcard:'ID Card Design', memberlist:'Members', familylist:'Households list', streetlist:'Streets' };
+      const titles = { dashboard:'Survey Dashboard', families:'Households', add:(state.param?'Edit Household':'Add Household'), detail:'Household Record', find:'Find family', adminpanel:'Administration', users:'Admins', settings:'Settings', masjid:'Masjid Profile', cat:'Survey Category', myprofile:'My Profile', 'admin-edit':'Edit Admin', idcard:'ID Card Design', memberlist:'Members', familylist:'Households list', streetlist:'Streets', audit:'Audit log' };
       $('#pageTitle').textContent = titles[state.view] || 'Survey Dashboard';
       let html='';
       if (state.view==='dashboard') html = viewDashboard();

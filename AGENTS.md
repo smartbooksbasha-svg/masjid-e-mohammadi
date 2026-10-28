@@ -452,3 +452,18 @@ Open: wire Supabase keys; real OTP SMS later.
 - `tests/preview.js` — card preview generator (sample family + sample signatures → `idcard-preview.html`,
   gitignored). Tests `npm test` 82 asserts green.
 - Cache `memc-app-v93`, commit `a266fa5`.
+
+## v94 — signed sessions + silent guards (2026-10-28)
+- **Session signed:** `startSession(email,name)` = random 36-char token + `exp` (12h, `SESSION_MS`),
+  admin record me sirf `sess:{h:fnv(token),exp}` + `lastLogin`. `currentUser()` reject karta hai jab
+  token missing/galat ho ya record/session exp nikal gaya ho. `touchSession()` (click/keydown/touchstart,
+  5-min throttle) expiry refresh karta hai. `setSession()` safe-fields list me `token`,`exp` add kiye
+  (warna token drop ho jata tha — pehla bug).
+- **Login paths:** saare `setSession({kind:'admin',email})` → `startSession(email)` (6 jagah).
+- **Guards silent:** right-click / F12 / Ctrl+Shift+I,J,C,K / Ctrl+U par koi toast nahi — bas block.
+- **Tests:** `boot()` me admin session ab `win.eval("startSession(email)")` se banti hai; 8 naye asserts
+  (no session, forged session, wrong token, real token, expiry present, expired session, silent guard)
+  → **90 asserts green**.
+- **Server verify:** anon `families` INSERT/DELETE/PATCH = 0 rows (RLS), `public_snapshot` PATCH/DELETE
+  ka payload hash same raha — data safe, sirf 204 (0 rows) milta hai.
+- Cache `memc-app-v94`, commit `9e6c508`.
