@@ -28,7 +28,7 @@ async function boot(opts) {
   const vc = new VirtualConsole();
   vc.on('jsdomError', () => {});
   const dom = new JSDOM(buildHtml(), {
-    url: 'https://smartbooksbasha-svg.github.io/masjid-e-mohammadi/',
+    url: 'https://smartbooksbasha-svg.github.io/masjid-e-mohammadi/' + (st.hash || ''),
     runScripts: 'dangerously', virtualConsole: vc, pretendToBeVisual: true,
     beforeParse(w) {
       w.localStorage.setItem('memc_seq', String(st.seq || 0));
@@ -322,6 +322,12 @@ const wait = ms => new Promise(r => setTimeout(r, ms || 120));
   /* clear keeps one honest entry */
   AU.win.eval("auditSave([]); audit('audit_clear','Audit log','x')");
   ok(logs().length === 1 && logs()[0].a === 'audit_clear', 'audit clear leaves a single record of itself');
+
+  /* ---------------- 8c. direct admin login link ---------------- */
+  const DL = await boot({ hash: '#login' });
+  await wait(300);
+  ok(!!DL.doc.querySelector('#authScreen') && !DL.doc.querySelector('#authScreen').hidden, '#login link opens the admin login box');
+  ok(!!DL.doc.querySelector('#loginForm'), 'login form is ready on the direct link');
 
   /* ---------------- 9. backup round trip ---------------- */
   const backup = A.win.eval("JSON.stringify({ families:DB.families(), masjid:DB.masjid() })");

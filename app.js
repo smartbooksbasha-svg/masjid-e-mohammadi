@@ -5194,6 +5194,9 @@ function migrateAdmins(){
 }
 
 function init(){
+  /* boot hash yaad rakho — enterApp() baad me hash badal deta hai (#dashboard) */
+  let _bootHash = '';
+  try { _bootHash = String(typeof BOOT_HASH === 'string' ? BOOT_HASH : '').toLowerCase(); } catch(e){}
   installGuards();
   migrateAdmins();
   migrateOwner();
@@ -5237,6 +5240,13 @@ function init(){
     if (b){ b.onclick = ()=>{ const s=$('#sidebar'); const sc=$('#scrimNav'); if(s) s.classList.add('open'); if(sc) sc.classList.add('show'); }; }
   } catch(e){}
   enterApp();   // public dashboard pehle — login optional
+  /* direct admin link: #login (ya #admin) → seedha login box khulta hai */
+  try {
+    const hh = _bootHash;
+    if (hh === 'login' || hh === 'admin'){
+      setTimeout(()=>{ try { openAuth('login'); } catch(e){} }, 120);
+    }
+  } catch(e){}
   // cloudAutoLogin() disabled - prevents auto-login on refresh
   try { new MutationObserver(()=>translateSoon()).observe(document.body, { childList:true, subtree:true }); } catch(e){}
   translateSoon();
@@ -5281,6 +5291,8 @@ window.addEventListener('popstate', (e)=>{
 });
 
 // Prevent back button from closing app - push initial state
+/* boot hash yaad rakho — neeche replaceState use #dashboard kar deta hai */
+const BOOT_HASH = (function(){ try { return (location.hash||'').replace(/^#/,'').toLowerCase(); } catch(e){ return ''; } })();
 try { history.replaceState({view:'dashboard', param:null}, '', '#dashboard'); } catch(e){}
 
 if (document.readyState==='loading') document.addEventListener('DOMContentLoaded', init);

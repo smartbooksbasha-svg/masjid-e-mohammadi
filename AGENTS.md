@@ -484,3 +484,17 @@ Open: wire Supabase keys; real OTP SMS later.
   Server rows view me merge hote hain (dedupe by id, `☁` mark).
 - Tests **106 asserts green** (login record, add/edit/delete fields, admin add/remove, no session spam, owner-only, clear).
 - Cache `memc-app-v95`, commit `15e4ee7`.
+
+## v96 — QR on print + English default (2026-10-28)
+- **QR bug (root cause):** `qrDataURL()` used the `QRCode` class (qrcodejs) — but `vendor/qrcode.js` is
+  **qrcode-generator**, whose global is the `qrcode()` FUNCTION. `typeof QRCode === 'undefined'` → returned ''
+  → card printed "QR unavailable". Fix: `qrSvgTag(text)` = `qrcode(0,'M')…createSvgTag({cellSize:4,margin:0,scalable:true})`
+  and the card embeds that **inline SVG** inside `.qrbox` (no img load race, crisp in PDF). `qrDataURL()` ab SVG→data-URL.
+- Print popup waits for every `document.images` (signature photos) to load before `window.print()`.
+- Tests inline `vendor/qrcode.js` now, so QR output is really exercised: asserts `<svg>` inside `.qrbox`,
+  no "QR unavailable", 2+ SVGs.
+- **Language:** `LANGS = [['en','English'],['hi','Hinglish'],['ta','Tamil']]`, `LANG='en'` default (saved value wins),
+  `setLang()` fallback → `en`. **Bug fixed:** v95 ka en-dict block `en` object ke BAAHAR chala gaya tha
+  (`},` usse pehle aa gaya) — isliye audit/masjid keys ignore ho rahi thi; ab andar hai (en 392 keys).
+  Masjid fields + audit sentences ki translations add.
+- Tests **113 asserts green**. Cache `memc-app-v96`, commit `050173c`.
