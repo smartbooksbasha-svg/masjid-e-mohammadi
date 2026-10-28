@@ -361,3 +361,21 @@ Open: wire Supabase keys; real OTP SMS later.
   print CSS, uploaded-logo override). Total suites 401 green. Cache `memc-app-v87`, commit `6206152`.
 - Preview file `idcard-preview.html` (repo root, gitignored) — `printIdCards` ka output capture karke
   localhost par dekhne ke liye.
+
+## v88 — ID card: bada text, designer (super admin), back-side terms (2026-10-28)
+- **Text bada**: saare card font sizes ab `IDCARD_DEFAULT.scale` (default 1.12) se multiply hote hain
+  (`idCardCSS` me `pt(n) = (n*scale)pt`). Rows 6.1pt→6.8pt, Family ID 9.4pt→10.5pt, QR 21mm.
+- **Back side**: har card ke saath doosra card chhapta hai — "Terms & Conditions" + text + Mutavalli /
+  Secretary / Member signature lines. Print me `page-break-before:always` (alag page).
+- **Designer (super admin only)**: route `idcard` → `viewIdCardDesign()`; Administration panel me
+  "ID Card Design → Open designer" card. Fields: logo upload/remove, background photo upload/remove +
+  strength slider (0-60), card colour (accent), text size (Normal/Bada/Bahut bada/Sabse bada),
+  org/sub/tag, footer left/right, terms textarea; buttons Save / Preview / Reset.
+  Storage: `memc_idcard` (`DB.idcard()/setIdcard()`), defaults `IDCARD_DEFAULT`, resolved by `idcardCfg()`.
+- **BADA FIX**: `purgeNonOwnerAdmins()` pehle **saare non-owner admins delete** kar deta tha
+  (v86 ke add kiye admins reboot par gayab!). Ab sirf: owner row ensure + kisi aur se `role:'owner'` strip;
+  delete sirf un accounts ka jinke paas `passHash`/`cloud`/`pending` kuch bhi nahi (legacy junk).
+- Suites: idcard 44 (designer fields, save round-trip, scale/bg/accent, plain-admin block), auth 50,
+  scan 167, counts 72, docs 21, features 12, schemes 17, i18n 38 = **421 green**.
+- Cache `memc-app-v88`, commit `4da26b5`. Preview `idcard-preview.html` (gitignored) regenerate:
+  `node $TMPDIR/zyvo/zycount/idcard-preview.js`.
