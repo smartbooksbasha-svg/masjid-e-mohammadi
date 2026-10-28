@@ -756,7 +756,7 @@ function renderNewPassword(){
 /* ============================================================
    APP SHELL
    ============================================================ */
-const state = { view:'dashboard', param:null, draft:null };
+const state = { view:'dashboard', param:null, draft:null, showAddAdmin:false, showAdmins:false };
 
 
 /* ============================================================
@@ -2508,7 +2508,26 @@ const I18N = {
     'Background lag gaya':'Background added',
     'Hata diya':'Removed',
     'Pehle ek family add karo':'Add a family first',
-    'Sirf super admin':'Super admin only'
+    'Sirf super admin':'Super admin only',
+
+    /* --- v89: signatures + admin panel collapse --- */
+    'Signature (card ke peeche)':'Signatures (on the back of the card)',
+    'Mutavalli ka signature':'Mutavalli signature',
+    'Secretary ka signature':'Secretary signature',
+    'Member ka signature':'Member signature',
+    'Abhi nahi lagaya':'Not added yet',
+    'Camera':'Camera',
+    'Gallery':'Gallery',
+    'Signature white paper par likh kar photo lo — camera ya gallery se. Photo ka background auto white ho jata hai.':'Sign on white paper and photograph it — camera or gallery. The background turns white automatically.',
+    'Signature lag gaya':'Signature added',
+    'Photo load nahi hui.':'Photo could not be loaded.',
+    'Galat signature slot':'Wrong signature slot',
+    'Naya admin add karo ya existing admin ka login dekho.':'Add a new admin or view existing admin logins.',
+    'Admins':'Admins',
+    'View admins':'View admins',
+    'Hide admins':'Hide admins',
+    '+ Add admin':'+ Add admin',
+    'Pending requests':'Pending requests'
   },
   ta: {
     'Dashboard':'டாஷ்போர்டு',
@@ -2887,6 +2906,34 @@ function viewAdminPanel(){
     </div>
   `;
 }
+/* signature photo -> saaf white background + dark strokes (print ke liye) */
+function signatureImage(src){
+  return new Promise((resolve,reject)=>{
+    const img = new Image();
+    img.onload = ()=>{
+      try{
+        const maxW = 760;
+        const k = Math.min(1, maxW/(img.naturalWidth||img.width||maxW));
+        const w = Math.max(60, Math.round((img.naturalWidth||img.width)*k));
+        const h = Math.max(40, Math.round((img.naturalHeight||img.height)*k));
+        const cv = document.createElement('canvas'); cv.width=w; cv.height=h;
+        const ctx = cv.getContext('2d');
+        ctx.fillStyle='#fff'; ctx.fillRect(0,0,w,h);
+        ctx.drawImage(img,0,0,w,h);
+        const dt = ctx.getImageData(0,0,w,h); const px = dt.data;
+        for (let i=0;i<px.length;i+=4){
+          const lum = 0.299*px[i] + 0.587*px[i+1] + 0.114*px[i+2];
+          const v = lum > 186 ? 255 : Math.max(0, Math.round(lum*0.45));
+          px[i]=v; px[i+1]=v; px[i+2]=v; px[i+3]=255;
+        }
+        ctx.putImageData(dt,0,0);
+        resolve(cv.toDataURL('image/jpeg',0.85));
+      }catch(e){ reject(e); }
+    };
+    img.onerror = reject;
+    img.src = src;
+  });
+}
 function saveIdcardForm(form){
   if (!isOwner()){ toast('Sirf super admin','err'); return; }
   const E = form.elements;
@@ -2906,6 +2953,19 @@ function saveIdcardForm(form){
 }
 function saveIdcardDraft(){
   const form = $('#idcardForm'); if (form) saveIdcardForm(form);
+}
+function sigEditor(src, key, label){
+  return `<div class="field">
+    <label>${esc(label)}</label>
+    <div style="border:1px dashed var(--line);border-radius:12px;height:76px;display:grid;place-items:center;background:#fff;overflow:hidden">
+      ${src?`<img src="${esc(src)}" alt="" style="max-width:96%;max-height:68px;object-fit:contain" />`:'<span class="muted small">Abhi nahi lagaya</span>'}
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+      <button class="btn ghost sm" type="button" data-act="idc-sig" data-id="${key}:cam">Camera</button>
+      <button class="btn ghost sm" type="button" data-act="idc-sig" data-id="${key}:gal">Gallery</button>
+      ${src?`<button class="btn ghost sm" type="button" data-act="idc-sig-rm" data-id="${key}">Remove</button>`:''}
+    </div>
+  </div>`;
 }
 function viewIdCardDesign(){
   if (!isOwner()) return `<div class='empty'><h3>Super admin only</h3><p>Card design sirf super admin badal sakta hai.</p></div>`;
@@ -2954,6 +3014,14 @@ function viewIdCardDesign(){
           </select></div>
       </div>
 
+      <div class="sec-title">Signature (card ke peeche)</div>
+      <div class="grid g3" style="align-items:start">
+        ${sigEditor(c.sigMutavalli,'sigMutavalli','Mutavalli ka signature')}
+        ${sigEditor(c.sigSecretary,'sigSecretary','Secretary ka signature')}
+        ${sigEditor(c.sigMember,'sigMember','Member ka signature')}
+      </div>
+      <span class="hint" style="display:block;margin-top:6px">Signature white paper par likh kar photo lo — camera ya gallery se. Photo ka background auto white ho jata hai.</span>
+
       <div class="sec-title">Card par likha text</div>
       <div class="grid g2">
         <div class="field"><label>Committee / masjid naam</label><input class="inp" name="org" value="${esc(c.org)}" placeholder="Masjid e Mohammadi" /></div>
@@ -2997,34 +3065,42 @@ function credsCard(){
   </div>`;
 }
 function viewUsersTable(){
-  // reuse existing viewUsers logic minimal
   const admins = DB.admins().slice().sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
   const owner = ownerEmail();
-  const pend = (admins.filter(a=>a.status==='pending'));
-  const act = (admins.filter(a=>a.status!=='pending'));
+  const pend = admins.filter(a=>a.status==='pending');
+  const act = admins.filter(a=>a.status!=='pending');
+  const showAdd = !!state.showAddAdmin;
+  const showList = !!state.showAdmins;
   return `
-    <div class="sec-title" style="margin-top:0">Pending requests (legacy)</div>
-    ${pend.length?`<div class="table-wrap"><table><thead><tr><th>Name</th><th>Email</th><th>Mobile</th><th>User ID</th><th>Action</th></tr></thead><tbody>
+    <div class="card-h" style="margin-bottom:10px"><div>
+      <h3>Admins <span class="muted small">(${act.length})</span></h3>
+      <div class="hint">Naya admin add karo ya existing admin ka login dekho.</div></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        ${showAdd?'<button class="btn ghost sm" data-act="admin-add-cancel">Cancel</button>':'<button class="btn sm" data-act="admin-add">+ Add admin</button>'}
+        <button class="btn ghost sm" data-act="admin-list">${showList?'Hide admins':'View admins'}</button>
+      </div>
+    </div>
+
+    ${showAdd?`<form id="addAdminForm" class="grid g3" style="margin-top:4px">
+      <div class="field"><label>Name</label><input class="inp" name="name" required /></div>
+      <div class="field"><label>Email ID</label><input class="inp" name="email" type="email" required /><span class="hint">Login isi email ya User ID se hoga</span></div>
+      <div class="field"><label>Mobile</label><input class="inp" name="phone" inputmode="numeric" /></div>
+      <div class="field"><label>Age</label><input class="inp" name="age" type="number" min="18" max="100" /></div>
+      <div class="field"><label>Photo</label><input type="file" class="inp" name="photo" accept="image/*" /></div>
+      <div class="field" style="justify-content:flex-end"><button class="btn" type="submit">Create admin</button></div>
+      <p class="muted small" style="grid-column:1/-1;margin:0">User ID aur password app khud banayegi — bante hi screen par dikhenge, admin ko bhej do.</p>
+    </form>`:''}
+
+    ${pend.length?`<div class="sec-title">Pending requests</div>
+    <div class="table-wrap"><table><thead><tr><th>Name</th><th>Email</th><th>Mobile</th><th>User ID</th><th>Action</th></tr></thead><tbody>
     ${pend.map(a=>`<tr><td>${esc(a.name||'—')}</td><td>${esc(a.email)}</td><td>${esc(a.phone||'—')}</td><td class="mono">${esc(a.userId||'—')}</td>
     <td style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn sm" data-act="approve-admin" data-id="${esc(a.email)}">Approve</button><button class="btn sm ghost" data-act="reject-admin" data-id="${esc(a.email)}">Reject</button></td></tr>`).join('')}
-    </tbody></table></div>`:`<p class="muted small">Koi pending request nahi.</p>`}
-    ${isOwner()?`<div class="card" style="margin-top:14px">
-      <div class="sec-title" style="margin-top:0">Add a new admin</div>
-      <form id="addAdminForm" class="grid g3">
-        <div class="field"><label>Name</label><input class="inp" name="name" required /></div>
-        <div class="field"><label>Email ID</label><input class="inp" name="email" type="email" required /><span class="hint">Login isi email ya User ID se hoga</span></div>
-        <div class="field"><label>Mobile</label><input class="inp" name="phone" inputmode="numeric" /></div>
-        <div class="field"><label>Age</label><input class="inp" name="age" type="number" min="18" max="100" /></div>
-        <div class="field"><label>Photo</label><input type="file" class="inp" name="photo" accept="image/*" /></div>
-        <div class="field" style="justify-content:flex-end"><button class="btn" type="submit">Create admin</button></div>
-      </form>
-      <p class="muted small" style="margin-top:6px">User ID aur password app khud banayegi — bante hi screen par dikhenge, admin ko bhej do.</p>
-    </div>`:''}
+    </tbody></table></div>`:''}
 
-    <div class="sec-title">Active admins (Super Admin + Admin)</div>
-    <div class="table-wrap"><table><thead><tr><th>User ID</th><th>Admin (Photo / Name / Email)</th><th>Phone</th><th>Age</th><th>Role</th><th>Action</th></tr></thead><tbody>
+    ${showList?`
+    <div class="table-wrap" style="margin-top:14px"><table><thead><tr><th>User ID</th><th>Admin (Photo / Name / Email)</th><th>Phone</th><th>Age</th><th>Role</th><th>Action</th></tr></thead><tbody>
     ${act.map(a=>{ const isO = String(a.email).toLowerCase()===owner || a.role==='owner'; const ini=(a.name||a.email).split(/[ @.]/).filter(Boolean).map(w=>w[0]).slice(0,2).join('').toUpperCase(); return `<tr><td class="mono">${esc(a.userId||'—')}</td><td><div style="display:flex;gap:10px;align-items:center"><span class="av" style="width:36px;height:36px;font-size:.8rem;overflow:hidden;border-radius:12px;border:1px solid var(--line)">${a.photo?`<img src='${esc(a.photo)}' style='width:100%;height:100%;object-fit:cover'/>`:esc(ini)}</span><div><div style="font-weight:600">${esc(a.name||'—')}</div><div class="muted small">${esc(a.email)}</div></div></div></td><td>${esc(a.phone||'—')}</td><td>${esc(a.age||'—')}</td><td>${isO?'<span class="badge">Super Admin</span>':'<span class="badge gray">Admin</span>'}</td><td style="display:flex;gap:6px;flex-wrap:wrap">${isO?'<span class="muted small">Locked</span>':`<button class="btn sm" data-act="admin-edit" data-id="${esc(a.email)}">Edit</button><button class="btn sm ghost" data-act="reset-admin-pass" data-id="${esc(a.email)}">Reset password</button><button class="btn sm ghost" data-act="del-admin" data-id="${esc(a.email)}">Remove</button>`}</td></tr>`; }).join('')}
-    </tbody></table></div>
+    </tbody></table></div>`:''}
   `;
 }
 function viewUsersReadonly(){
@@ -3264,6 +3340,9 @@ document.addEventListener('click', (e)=>{
   if (act==='print-all'){ printFamilies(DB.families(), 'All Households'); return; }
   if (act==='print-family'){ const f=DB.families().find(x=>x.id===id); if(f) printFamilies([f], f.houseName||f.id); return; }
   if (act==='print-idcards'){ const f=DB.families().find(x=>x.id===id); if(f) printIdCards(f); return; }
+  if (act==='admin-add'){ state.showAddAdmin = true; go(state.view||'adminpanel'); return; }
+  if (act==='admin-add-cancel'){ state.showAddAdmin = false; go(state.view||'adminpanel'); return; }
+  if (act==='admin-list'){ state.showAdmins = !state.showAdmins; go(state.view||'adminpanel'); return; }
   if (act==='idc-preview'){ if(!isOwner()){ toast('Sirf super admin','err'); return; } const f=DB.families()[0]; if(!f){ toast('Pehle ek family add karo','err'); return; } if(state.view==='idcard'){ try{ saveIdcardDraft(); }catch(e){} } printIdCards(f); return; }
   if (act==='idc-reset'){ if(!isOwner()){ toast('Sirf super admin','err'); return; } DB.setIdcard(null); toast('Card design reset ho gaya','ok'); go('idcard'); return; }
   if (act==='idc-logo' || act==='idc-bg'){
@@ -3282,6 +3361,29 @@ document.addEventListener('click', (e)=>{
       }catch(e){ toast('Image load nahi hua.','err'); }
     };
     inp.click(); return;
+  }
+  if (act==='idc-sig'){
+    if(!isOwner()){ toast('Sirf super admin','err'); return; }
+    const raw = String(id||''); const parts = raw.split(':'); const key = parts[0]; const mode = parts[1]||'gal';
+    if (!/^sig(Mutavalli|Secretary|Member)$/.test(key)){ toast('Galat signature slot','err'); return; }
+    const inp=document.createElement('input'); inp.type='file'; inp.accept='image/*';
+    if (mode==='cam'){ inp.setAttribute('capture','environment'); }
+    inp.onchange=async ev=>{
+      const f=ev.target.files[0]; if(!f) return;
+      try{
+        const d = await signatureImage(await readFileAsDataURL(f));
+        const cur = Object.assign({}, DB.idcard()||{});
+        cur[key]=d; DB.setIdcard(cur);
+        toast('Signature lag gaya','ok');
+        go('idcard');
+      }catch(e){ toast('Photo load nahi hui.','err'); }
+    };
+    inp.click(); return;
+  }
+  if (act==='idc-sig-rm'){
+    if(!isOwner()){ toast('Sirf super admin','err'); return; }
+    const cur = Object.assign({}, DB.idcard()||{}); delete cur[String(id||'')]; DB.setIdcard(cur);
+    toast('Hata diya','ok'); go('idcard'); return;
   }
   if (act==='idc-logo-rm' || act==='idc-bg-rm'){
     if(!isOwner()){ toast('Sirf super admin','err'); return; }
@@ -3308,6 +3410,7 @@ document.addEventListener('click', (e)=>{
         if (uid) await c.from('app_users').upsert({ id:a.email, user_id:uid, role:'admin', name:a.name||'', phone:a.phone||'' });
       } catch(e){} })();
     }
+    state.showAddAdmin = false;
     state.newCreds = Object.assign(creds, { mail: credsMailto(a) });
     toast('Admin approve ho gaya — credentials usko bhej do','ok');
     go('users'); return;
@@ -4159,11 +4262,15 @@ body{background:#eef2f0;padding:16px;font-family:"Segoe UI",Roboto,Arial,Helveti
 .idfoot b{color:${c.accent}}
 
 /* back side */
-.idterms{position:relative;height:calc(53.98mm - 11.6mm - 5.2mm);padding:2.4mm 3.2mm;overflow:hidden}
-.idterms h4{font-size:${pt(5.4)};letter-spacing:.5pt;text-transform:uppercase;color:${c.accent};margin-bottom:1.2mm}
-.idterms p{font-size:${pt(5.2)};line-height:1.42;color:#173a2f;white-space:pre-wrap;word-break:break-word}
-.idsign{display:flex;gap:6mm;margin-top:1.6mm;font-size:${pt(4.3)};color:#5c7a70}
-.idsign span{border-top:0.25mm solid #9db3aa;padding-top:.7mm;min-width:22mm;text-align:center}
+.idterms{position:relative;height:calc(53.98mm - 11.6mm - 5.2mm);padding:2.4mm 3.2mm;overflow:hidden;
+  display:flex;flex-direction:column}
+.idterms h4{font-size:${pt(5.4)};letter-spacing:.5pt;text-transform:uppercase;color:${c.accent};margin-bottom:1.2mm;flex:none}
+.idterms p{font-size:${pt(5.2)};line-height:1.42;color:#173a2f;white-space:pre-wrap;word-break:break-word;
+  flex:1;min-height:0;overflow:hidden}
+.idsign{display:flex;gap:4.5mm;margin-top:1.4mm;font-size:${pt(4.3)};color:#5c7a70;flex:none}
+.idsign .sg{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:10.5mm}
+.idsign .sg img{max-width:96%;max-height:7.4mm;object-fit:contain;margin-bottom:.3mm}
+.idsign .sg em{width:100%;text-align:center;border-top:0.25mm solid #9db3aa;padding-top:.6mm;font-style:normal;line-height:1.1}
 
 @media print{
   body{background:#fff;padding:0}
@@ -4215,6 +4322,9 @@ function idCardFront(fam, c, base){
   <div class="idfoot"><span>${esc(footL)}</span><span>${esc(footR)}</span></div>
 </div>`;
 }
+function sigBox(src,label){
+  return `<span class="sg">${src?`<img src="${esc(src)}" alt="" />`:''}<em>${esc(label)}</em></span>`;
+}
 function idCardBack(c){
   const terms = String(c.terms||'').trim();
   return `
@@ -4229,7 +4339,11 @@ function idCardBack(c){
   <div class="idterms">
     <h4>Terms &amp; Conditions</h4>
     <p>${esc(terms||'—')}</p>
-    <div class="idsign"><span>Mutavalli</span><span>Secretary</span><span>Member</span></div>
+    <div class="idsign">
+      ${sigBox(c.sigMutavalli,'Mutavalli')}
+      ${sigBox(c.sigSecretary,'Secretary')}
+      ${sigBox(c.sigMember,'Member')}
+    </div>
   </div>
   <div class="idfoot"><span>${esc(c.org)}</span><span>${esc(c.sub)}</span></div>
 </div>`;
