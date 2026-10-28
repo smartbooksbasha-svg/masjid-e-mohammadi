@@ -266,7 +266,7 @@ function setSession(s){
   try {
     if (!s) { clearSession(); return; }
     // Don't store photo/dataUrl in session to save space
-    const safe = { kind:s.kind, email:s.email, userId:s.userId, name:s.name, role:s.role };
+    const safe = { kind:s.kind, email:s.email, userId:s.userId, name:s.name, role:s.role, token:s.token, exp:s.exp };
     localStorage.setItem(LS.session, JSON.stringify(safe));
   } catch(e){ try { localStorage.setItem(LS.session, JSON.stringify(s)); } catch(x){} }
   try { cloudPulled = false; } catch(e){}
@@ -302,11 +302,51 @@ const CLOUD = {
   }
 };
 
+/* ---------- v94: signed session (localStorage me session nakli nahi ban sakta) ---------- */
+const SESSION_MS = 12 * 60 * 60 * 1000;   /* 12 ghante */
+function fnv(str){
+  let h = 2166136261;
+  str = String(str||'');
+  for (let i=0;i<str.length;i++){ h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return (h>>>0).toString(36);
+}
+function startSession(email, name){
+  email = String(email||'').trim();
+  if (!email) return;
+  const admins = DB.admins();
+  const i = admins.findIndex(a=>String(a.email).toLowerCase()===String(email).toLowerCase());
+  if (i < 0) return;
+  const token = uid(24) + uid(12);
+  const exp = Date.now() + SESSION_MS;
+  admins[i].sess = { h: fnv(token), exp };
+  admins[i].lastLogin = Date.now();
+  DB.setAdmins(admins);
+  setSession({ kind:'admin', email, name: name || admins[i].name || '', token, exp });
+}
+let _touchAt = 0;
+function touchSession(){
+  try{
+    if (Date.now() - _touchAt < 5*60*1000) return;
+    _touchAt = Date.now();
+    const s = getSession();
+    if (!s || s.kind !== 'admin' || !s.token) return;
+    const admins = DB.admins();
+    const i = admins.findIndex(a=>String(a.email).toLowerCase()===String(s.email||'').toLowerCase());
+    if (i < 0) return;
+    const exp = Date.now() + SESSION_MS;
+    admins[i].sess = { h: fnv(s.token), exp };
+    DB.setAdmins(admins);
+    setSession(Object.assign({}, s, { exp }));
+  }catch(e){}
+}
 function currentUser(){
   const s = getSession();
   if (!s || s.kind !== 'admin' || !s.email) return null;
   const a = DB.admins().find(x=>String(x.email).toLowerCase()===String(s.email).toLowerCase());
   if (!a || adminStatus(a) !== 'active') return null;
+  /* token verify — bina token ke session ghusa dena kaam nahi karega */
+  if (!s.token || !a.sess || a.sess.h !== fnv(s.token)) return null;
+  if (!(Number(a.sess.exp) > Date.now()) || !(Number(s.exp) > Date.now())) return null;
   return { id:a.email, email:a.email, name:a.name||a.email, role:'admin', userId:a.userId||'', owner:String(a.email).toLowerCase()===ownerEmail() };
 }
 function isAdmin(){ migrateAdmins(); return !!currentUser(); }
@@ -350,7 +390,6 @@ function installGuards(){
       const typing = t && (t.tagName==='INPUT' || t.tagName==='TEXTAREA' || t.isContentEditable);
       if (typing) return;                       /* input me paste chalta rahe */
       e.preventDefault();
-      softWarn('Right-click band hai');
       return false;
     }, { passive:false });
 
@@ -360,12 +399,16 @@ function installGuards(){
       const devtools = e.key==='F12'
         || (mod && e.shiftKey && ['i','j','c','k'].includes(k))
         || (mod && k==='u');
-      if (devtools){ e.preventDefault(); softWarn('Ye shortcut band hai'); }
+      if (devtools){ e.preventDefault(); }
     }, true);
 
     document.addEventListener('dragstart', (e)=>{
       if (e.target && e.target.tagName==='IMG') e.preventDefault();
     });
+
+    /* session ko active rakho, idle hone par expire */
+    ['click','keydown','touchstart'].forEach(ev=>
+      document.addEventListener(ev, ()=>{ try{ touchSession(); }catch(e){} }, { passive:true }));
   }catch(e){}
 }
 
@@ -613,7 +656,7 @@ async function loginSubmit(e){
       admins.push({ email, name:email.split('@')[0], phone:'', createdAt:Date.now(), verified:true, cloud:true });
       DB.setAdmins(admins);
     }
-    setSession({ kind:'admin', email });
+    startSession(email);
     closeAuth(); enterApp(); toast('Welcome back'); return;
   }
 
@@ -626,7 +669,7 @@ async function loginSubmit(e){
     return;
   }
   loginOk();
-  setSession({ kind:'admin', email });
+  startSession(email);
   closeAuth(); enterApp(); toast('Welcome back');
 }
 
@@ -692,7 +735,7 @@ async function cloudLinkCheck(){
     admins.push({ email, name:md.name||email.split('@')[0], phone:md.phone||'', createdAt:Date.now(), verified:true, cloud:true });
     DB.setAdmins(admins);
   }
-  setSession({ kind:'admin', email });
+  startSession(email);
   pending=null; closeAuth(); enterApp(); toast('Login successful');
 }
 
@@ -728,7 +771,7 @@ function renderCodeStep(){
         const admins = DB.admins();
         admins.push({ email:pending.email, name:pending.name, phone:pending.phone, createdAt:Date.now(), verified:true, cloud:true });
         DB.setAdmins(admins);
-        setSession({ kind:'admin', email:pending.email });
+        startSession(pending.email);
         pending=null; closeAuth(); enterApp(); toast('Admin account created'); return;
       }
       if (pending.kind === 'reset'){
@@ -743,7 +786,7 @@ function renderCodeStep(){
     if (!pending || code !== pending.code){ alertBox.innerHTML='<div class="alert err">Code galat hai — dobara dekho.</div>'; return; }
 
     if (pending.kind === 'login'){
-      setSession({ kind:'admin', email:pending.email });
+      startSession(pending.email);
       pending=null; closeAuth(); enterApp(); toast('Welcome back'); return;
     }
     if (pending.kind === 'register'){
@@ -751,7 +794,7 @@ function renderCodeStep(){
       const admins = DB.admins();
       admins.push({ email:pending.email, name:pending.name, phone:pending.phone, salt, passHash: await hashPass(pending.pass, salt), createdAt:Date.now(), verified:true });
       DB.setAdmins(admins);
-      setSession({ kind:'admin', email:pending.email });
+      startSession(pending.email);
       pending=null; closeAuth(); enterApp(); toast('Admin account created'); return;
     }
     if (pending.kind === 'reset'){
@@ -4741,7 +4784,7 @@ async function cloudAutoLogin(){
       admins.push({ email, name:md.name||email.split('@')[0], phone:md.phone||'', createdAt:Date.now(), verified:true, cloud:true, status:'active' });
       DB.setAdmins(admins);
     }
-    setSession({ kind:'admin', email });
+    startSession(email);
     enterApp(); toast('Email verified — admin login');
   } catch(e){}
 }

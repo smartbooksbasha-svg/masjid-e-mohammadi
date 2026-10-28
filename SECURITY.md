@@ -71,8 +71,13 @@ curl -s -o /dev/null -w '%{http_code}\n' "$URL/rest/v1/public_snapshot?select=id
   `object-src 'none'`, `base-uri 'self'`, `frame-ancestors 'none'`.
 - QR aur Excel libraries **self-hosted** (`vendor/`) — CDN compromise ka risk khatam.
 - Har user text `esc()` se escape hota hai (XSS test smoke me hai).
-- Session localStorage me sirf email hai; cloud writes RLS-protected hain, isliye
-  device par session edit karke cloud data badla nahi ja sakta.
+- **Session signed hai (v94)** — localStorage me sirf email nahi, ek random 36-char
+  token + expiry (12 ghante) hai. Admin record me sirf token ka FNV hash rehta hai,
+  isliye DevTools se `memc_session` me email daal kar admin ban jana kaam nahi karta
+  (token galat → reject). Session expire hone par dobara login karna padta hai;
+  kaam karte waqt 5 minute me ek baar expiry refresh hoti hai.
+- Cloud writes RLS-protected hain — device par kuch bhi edit karke server data
+  badla nahi ja sakta (anon INSERT/DELETE/PATCH = 0 rows, hash verify kiya gaya).
 
 ## 5. Tumhare liye baaki kaam (one time)
 

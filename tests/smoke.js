@@ -42,6 +42,11 @@ async function boot(opts) {
   });
   await new Promise(r => setTimeout(r, 650));
   const win = dom.window;
+  if (st.admin) {
+    /* signed session (v94) — forged localStorage session kaam nahi karta */
+    try { win.eval('startSession(' + JSON.stringify(st.admin) + ')'); win.renderShell(); win.go(st.view || 'dashboard'); } catch (e) {}
+    await new Promise(r => setTimeout(r, 120));
+  }
   return {
     win, doc: win.document,
     get html() { return cap; },
@@ -65,6 +70,7 @@ const wait = ms => new Promise(r => setTimeout(r, ms || 120));
   ok(evCtx.defaultPrevented, 'right-click blocked on content');
   const inp = P.win.document.createElement('input');
   P.doc.body.appendChild(inp);
+  ok(!/Right-click band hai/.test(P.doc.querySelector('#toasts').textContent || ''), 'right-click blocked silently (no popup)');
   const evCtx2 = new P.win.MouseEvent('contextmenu', { bubbles: true, cancelable: true });
   inp.dispatchEvent(evCtx2);
   ok(!evCtx2.defaultPrevented, 'right-click allowed inside inputs (paste)');
@@ -206,6 +212,25 @@ const wait = ms => new Promise(r => setTimeout(r, ms || 120));
   ok(/Super admin only/.test(B.text()), 'plain admin cannot open designer');
   B.win.eval("go('adminpanel')"); await wait(150);
   ok(!B.$('[data-act="admin-add"]'), 'plain admin has no add button');
+
+  /* ---------------- 6b. session forgery blocked ---------------- */
+  const F = await boot({});   /* no admin session */
+  ok(F.win.eval('isAdmin()') === false, 'no session = not admin');
+  F.win.localStorage.setItem('memc_session', JSON.stringify({ kind:'admin', email: OWNER.email, name:'x' }));
+  F.win.renderShell(); await wait(150);
+  ok(F.win.eval('isAdmin()') === false, 'forged session without token is rejected');
+  F.win.localStorage.setItem('memc_session', JSON.stringify({ kind:'admin', email: OWNER.email, token:'fake-token', exp: Date.now()+999999 }));
+  F.win.renderShell(); await wait(150);
+  ok(F.win.eval('isAdmin()') === false, 'wrong token is rejected');
+
+  const G = await boot({ admin: OWNER.email });
+  ok(G.win.eval('isAdmin()') === true, 'real login session works');
+  const sess = JSON.parse(G.win.localStorage.getItem('memc_session'));
+  ok(!!sess.token && sess.token.length > 20, 'session carries a random token');
+  ok(sess.exp > Date.now(), 'session has an expiry');
+  G.win.localStorage.setItem('memc_session', JSON.stringify(Object.assign({}, sess, { exp: Date.now() - 1000 })));
+  G.win.renderShell(); await wait(120);
+  ok(G.win.eval('isAdmin()') === false, 'expired session is rejected');
 
   /* ---------------- 7. public snapshot has no personal data ---------------- */
   const snap = A.win.eval('JSON.stringify(publicPayload().families)');
