@@ -392,3 +392,16 @@ Open: wire Supabase keys; real OTP SMS later.
   (`admin-add`, `admin-add-cancel`, `admin-list`). Admin banne ke baad form khud band.
 - Suites: idcard 50, auth 58, scan 169, counts 72, docs 21, features 12, schemes 17, i18n 38 = **437 green**.
 - Cache `memc-app-v89`, commit `e817321`. Preview me sample signatures (`idcard-preview.js` me SVG sig).
+
+## v90 — 3×5 inch card + QR always printed (2026-10-28)
+- **Card size**: default ab **3×5 inch portrait** (76.2 × 127 mm). `c.size = '3x5' | 'id1'`
+  (`IDCARD_DEFAULT.size='3x5'`, designer me "Card size" select). CSS ab flex-column shell —
+  `.idcard{width/height per size; display:flex;flex-direction:column}`, `.idbody` portrait me column,
+  id1 me row. 3×5 par font factor `s=1.5` (rows 10.25pt @ scale 1.12), QR box **33mm**.
+- **QR print fix**: pehle QR popup ke andar `vendor/qrcode.js` se banta tha + 650ms par print — race me
+  QR gayab ho jata tha. Ab `qrDataURL(text,700)` parent page me QR bana kar **PNG data URL** deta hai aur
+  front card me `<img>` chhapta hai; popup me koi external script nahi. `.qrbox[data-qr]` me payload bhi hai.
+- **Family ID auto**: `nextFamilyId(members)` = `YYYY` + 3-digit form no + `FM` + 2-digit members
+  (e.g. `2026001FM04`); save par lagta hai, QR me `#qedit=<id>` encode hota hai → scan par wahi family khulti hai.
+- Suites: idcard 57, auth 58, scan 169, counts 72, docs 21, features 12, schemes 17, i18n 38 = **444 green**.
+- Cache `memc-app-v90`, commit `bf9f80e`. Preview me asli QR (python `qrcode` se inject) — `idcard-preview.js` + post-step.
