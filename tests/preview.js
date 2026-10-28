@@ -9,7 +9,7 @@ const ROOT = path.join(__dirname, '..');
 function buildHtml() {
   let html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
   html = html.split('\n').filter(l => !/src="https?:/.test(l)).join('\n');
-  for (const f of ['config.js', 'app.js']) {
+  for (const f of ['vendor/qrcode.js', 'config.js', 'app.js']) {
     const src = fs.readFileSync(path.join(ROOT, f), 'utf8').split('</script>').join('<\\/script>');
     html = html.split('<script src="' + f + '" defer></script>').join('<script>\n' + src + '\n</script>');
   }
@@ -52,7 +52,7 @@ const sig = name => 'data:image/svg+xml;utf8,' + encodeURIComponent(
   dom.window.eval('printIdCards(DB.families()[0])');
   await new Promise(r => setTimeout(r, 200));
   if (!cap) { console.log('NO HTML'); process.exit(2); }
-  const out = cap.replace(/setTimeout\(function\(\)\{ try\{ window\.print\(\)[^<]*<\/script>/, '</script>');
+  const out = cap.replace(/<script>\s*\(function\(\)\{[\s\S]*?window\.print\(\)[\s\S]*?<\/script>/, '');
   fs.writeFileSync(path.join(ROOT, 'idcard-preview.html'), out);
   console.log('written idcard-preview.html', out.length, 'bytes');
   process.exit(0);

@@ -11,9 +11,10 @@ const ok = (cond, msg) => { if (cond) pass++; else { fail++; console.log('FAIL: 
 function buildHtml() {
   let html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
   html = html.split('\n').filter(l => !/src="https?:/.test(l)).join('\n');
-  for (const f of ['config.js', 'app.js']) {
+  for (const f of ['vendor/qrcode.js', 'config.js', 'app.js']) {
     const src = fs.readFileSync(path.join(ROOT, f), 'utf8').split('</script>').join('<\\/script>');
-    html = html.split('<script src="' + f + '" defer></script>').join('<script>\n' + src + '\n</script>');
+    const tag = f === 'vendor/qrcode.js' ? 'vendor/qrcode.js' : f;
+    html = html.split('<script src="' + tag + '" defer></script>').join('<script>\n' + src + '\n</script>');
   }
   return html;
 }
@@ -155,6 +156,18 @@ const wait = ms => new Promise(r => setTimeout(r, ms || 120));
   ok(/class="sg"/.test(card) && /Mutavalli/.test(card), 'signature slots on back');
   ok(/Terms &amp; Conditions/.test(card), 'terms on back');
   ok(!/vendor\/qrcode\.js/.test(card), 'no external qr script in print popup');
+  ok(/<svg[^>]*>/.test(card) && /class="qrbox"[^>]*>\s*<svg/.test(card), 'QR prints as inline SVG inside the card');
+  ok(!/QR unavailable/.test(card), 'no "QR unavailable" fallback on the card');
+  ok((card.match(/<svg/g) || []).length >= 2, 'QR svg present for front card');
+
+  /* ---------------- 3b. language: English default ---------------- */
+  ok(A.win.eval('LANG') === 'en', 'website defaults to English');
+  const sel = A.$('#langSel');
+  ok(sel && sel.options[0].value === 'en' && sel.options[0].textContent === 'English', 'English is the first language option');
+  ok(sel && sel.options.length >= 3, 'other languages stay available in the list');
+  A.win.eval("setLang('hi')"); await wait(150);
+  ok(/Household|Ghar|Add Household|Dashboard/.test(A.text()) && A.win.eval('LANG') === 'hi', 'switching to Hinglish still works');
+  A.win.eval("setLang('en')"); await wait(150);
 
   /* ---------------- 4. designer ---------------- */
   A.win.eval("go('idcard')"); await wait(200);

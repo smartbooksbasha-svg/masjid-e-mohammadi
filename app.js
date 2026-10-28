@@ -1276,14 +1276,14 @@ function viewAudit(){
   const cloudRows = Array.isArray(state.cloudAudit) ? state.cloudAudit.length : 0;
   const chips = [['all','Sab'],['login','Login'],['data','Data'],['admin','Admins'],['settings','Settings']];
   let html = `<div class="page-head">
-    <div><h1>Audit log</h1><p>Kab kisne kya kiya — <b>${rows.length}</b> / ${total} entries</p></div>
+    <div><h1>Audit log</h1><p><span>Kab kisne kya kiya</span> — <b>${rows.length}</b> / ${total} <span>entries</span></p></div>
     <div class="ph-actions">
       <button class="btn ghost sm" type="button" data-act="audit-export">${ICON.dl} CSV</button>
       <button class="btn danger sm" type="button" data-act="audit-clear">Clear log</button>
     </div>
   </div>
   <div class="card">
-    <p class="muted small" style="margin:0 0 10px">${state.cloudAudit === null && !state.cloudAuditTried ? 'Server se entries load ho rahi hain…' : (cloudRows ? (cloudRows + ' server entries included') : 'Is device ka log — cross-device ke liye supabase/audit.sql run karo')}</p>
+    <p class="muted small" style="margin:0 0 10px"><span>${state.cloudAudit === null && !state.cloudAuditTried ? 'Server se entries load ho rahi hain…' : (cloudRows ? 'Server entries included' : 'Is device ka log — cross-device ke liye supabase/audit.sql run karo')}</span>${cloudRows?' · <b>'+cloudRows+'</b>':''}</p>
     <div class="aud-chips">${chips.map(([k,l])=>`<button type="button" class="chip${(state.auditFilter||'all')===k?' on':''}" data-act="audit-filter" data-f="${k}">${l}</button>`).join('')}</div>
     <input class="inp" id="auditQ" type="search" placeholder="Search — naam, family, action…" value="${esc(state.auditQuery||'')}" style="margin:12px 0" />
     <div class="aud-list" id="auditList">`;
@@ -2556,7 +2556,7 @@ function viewUsers(){
    Approach: the Hinglish strings already in the UI are the KEYS. A dictionary maps each
    key to English / Tamil, and translateTree() rewrites the live text nodes. No build step,
    no data-i18n attributes to maintain — new strings simply stay Hinglish until added here. */
-const LANGS = [['hi','Hinglish'],['en','English'],['ta','Tamil']];
+const LANGS = [['en','English'],['hi','Hinglish'],['ta','Tamil']];
 const I18N = {
   en: {
     'Add Household':'Add Household',
@@ -2943,8 +2943,9 @@ const I18N = {
     '5 × 3 inch — landscape (default)':'5 × 3 inch — landscape (default)',
     '3 × 5 inch — portrait':'3 × 5 inch — portrait',
     'ID-1 (85.6 × 54 mm)':'ID-1 (85.6 × 54 mm)',
-    '5×3 = chaudi card, QR bada aur text saaf':'5×3 = wide card, bigger QR and clearer text'
-  },
+    '5×3 = chaudi card, QR bada aur text saaf':'5×3 = wide card, bigger QR and clearer text',
+
+    /* --- v95: audit log --- */
     'Audit log':'Audit log',
     'Kab kisne kya kiya':'Who did what, and when',
     'Sab':'All',
@@ -2975,6 +2976,32 @@ const I18N = {
     'Audit log cleared':'Audit log cleared',
     'Login fail':'Login failed',
     'Logout':'Logout',
+    'Server se entries load ho rahi hain…':'Loading entries from the server…',
+    'Server entries included':'Server entries included',
+    'Is device ka log — cross-device ke liye supabase/audit.sql run karo':'Log from this device — run supabase/audit.sql for cross-device',
+    'entries':'entries',
+    'Masjid ka naam':'Masjid name',
+    'Qayam saal':'Year established',
+    'Pura pata':'Full address',
+    'Rabta number':'Contact number',
+    'Masjid ka email ID':'Masjid email',
+    'Imam sahab ka naam':'Imam name',
+    'Muazzin ka naam':'Muazzin name',
+    'Raqba (sq ft / gaj)':'Area (sq ft / gaj)',
+    'Namazi capacity':'Prayer capacity',
+    'Kamre / halls':'Rooms / halls',
+    'Madrasa / maktab':'Madrasa / maktab',
+    'Waqf / registration no.':'Waqf / registration no.',
+    'Bank / account detail':'Bank / account details',
+    'Note / special remark':'Note / special remark',
+    'Save masjid details':'Save masjid details',
+    'Choose from gallery':'Choose from gallery',
+    'each photo stays on this phone':'each photo stays on this phone',
+    'Mohalla, shehar, pincode':'Mohalla, city, pincode',
+    'e.g. Masjid e Mohammadi':'e.g. Masjid e Mohammadi',
+    'e.g. 60 bachche, 3 ustad':'e.g. 60 students, 3 teachers',
+    '10-digit mobile':'10-digit mobile'
+  },
   ta: {
     'Audit log':'தணிக்கை பதிவு',
     'Kab kisne kya kiya':'யார் எப்போது என்ன செய்தார்',
@@ -3132,9 +3159,9 @@ const I18N = {
   }
 };
 
-let LANG = 'hi';
-try { const saved = localStorage.getItem('memc_lang'); if (saved) LANG = saved; } catch(e){}
-if (LANG !== 'hi' && !I18N[LANG]) LANG = 'hi';
+let LANG = 'en';                                   /* website default = English */
+try { const saved = localStorage.getItem('memc_lang'); if (saved && I18N[saved]) LANG = saved; } catch(e){}
+if (LANG !== 'hi' && !I18N[LANG]) LANG = 'en';
 
 const _norm = s => String(s).replace(/\s+/g,' ').trim();
 const _DICT = {};                                  // lang -> {normKey: text}
@@ -3213,10 +3240,11 @@ function translateSoon(){
 }
 
 function setLang(code){
-  if (code !== 'hi' && !I18N[code]) code = 'hi';
+  if (code !== 'hi' && !I18N[code]) code = 'en';
   LANG = code;
   try { localStorage.setItem('memc_lang', code); } catch(e){}
   const sel = $('#langSel'); if (sel) sel.value = code;
+  try { document.documentElement.setAttribute('lang', code); } catch(e){}
   try { renderShell(); } catch(e){}
   try { go(state.view, state.param); } catch(e){}  // re-render content
   translateTree(document.body);                    // then translate what is on screen
@@ -4824,7 +4852,7 @@ body{background:#eef2f0;padding:16px;font-family:"Segoe UI",Roboto,Arial,Helveti
   border-top:${portrait?'0.25mm dashed '+c.accent+'55':'0'};
   background:rgba(255,255,255,.8)}
 .qrbox{width:${QR}mm;height:${QR}mm;background:#fff;padding:1.1mm;border-radius:1.2mm;box-shadow:0 0 0 .25mm ${c.accent}33}
-.qrbox canvas,.qrbox img{width:100%!important;height:100%!important;display:block;object-fit:contain}
+.qrbox canvas,.qrbox img,.qrbox svg{width:100%!important;height:100%!important;display:block;object-fit:contain}
 .qrlab{font-size:${pt(4.2)};letter-spacing:.5pt;text-transform:uppercase;color:#5c7a70;font-weight:700}
 .qrid{font-family:"Courier New",monospace;font-size:${pt(4.6)};font-weight:700;color:${c.accent};text-align:center;max-width:${portrait?'60mm':(QR+3)+'mm'};word-break:break-all;line-height:1.15}
 
@@ -4853,8 +4881,20 @@ body{background:#eef2f0;padding:16px;font-family:"Segoe UI",Roboto,Arial,Helveti
 }`;
 }
 /* QR ko pehle se image bana lete hain — print popup me hamesha dikhega */
+/* QR ko inline SVG banao — print/PDF me image load ka koi risk nahi */
+function qrSvgTag(text){
+  try{
+    if (typeof qrcode === 'function'){
+      const qr = qrcode(0,'M'); qr.addData(String(text||'')); qr.make();
+      return qr.createSvgTag({ cellSize:4, margin:0, scalable:true });
+    }
+  }catch(e){}
+  return '';
+}
 function qrDataURL(text, px){
   try{
+    const svg = qrSvgTag(text);
+    if (svg) return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
     if (typeof QRCode === 'undefined') return '';
     const holder = document.createElement('div');
     holder.style.cssText = 'position:fixed;left:-9999px;top:0;width:1px;height:1px;overflow:hidden';
@@ -4878,7 +4918,7 @@ function idCardFront(fam, c, base){
   const footL = String(c.footLeft||'').trim() || ('Members '+mem.length+' · Issued '+issued);
   const footR = String(c.footRight||'').trim() || (c.org+' · '+c.sub);
   const qrText = location.origin + location.pathname + '#qedit=' + encodeURIComponent(fam.id);
-  const qrImg = qrDataURL(qrText, 700);
+  const qrMarkup = qrSvgTag(qrText);
   return `
 <div class="idcard">
   ${c.bg?`<div class="photo" style="background-image:url('${esc(c.bg)}')"></div>`:''}
@@ -4903,7 +4943,7 @@ function idCardFront(fam, c, base){
       </div>
     </div>
     <div class="idright">
-      <div class="qrbox" data-qr="${esc(qrText)}">${qrImg?`<img src="${qrImg}" alt="QR ${esc(fam.id)}" />`:'<div style="font-size:6pt;color:#0f5c47;text-align:center;padding:4mm 1mm">QR unavailable</div>'}</div>
+      <div class="qrbox" data-qr="${esc(qrText)}">${qrMarkup || `<div style="font-size:6pt;color:#0f5c47;text-align:center;padding:4mm 1mm">QR: ${esc(fam.id)}</div>`}</div>
       <div class="qrlab">Scan to verify</div>
       <div class="qrid">${esc(fam.id)}</div>
     </div>
@@ -4954,7 +4994,15 @@ function printIdCards(fam){
 ${idCardFront(fam, c, base)}
 ${idCardBack(c)}
 <script>
-setTimeout(function(){ try{ window.print(); }catch(e){} }, 400);
+(function(){
+  var imgs = [].slice.call(document.images), left = imgs.length;
+  function go(){ try{ window.print(); }catch(e){} }
+  if (!left){ setTimeout(go, 350); return; }
+  imgs.forEach(function(im){
+    if (im.complete){ if (--left === 0) setTimeout(go, 250); return; }
+    im.onload = im.onerror = function(){ if (--left === 0) setTimeout(go, 250); };
+  });
+})();
 </script>
 </body></html>`;
   const w = window.open('','_blank','width=900,height=760');

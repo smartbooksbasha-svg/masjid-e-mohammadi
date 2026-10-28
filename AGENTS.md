@@ -467,3 +467,20 @@ Open: wire Supabase keys; real OTP SMS later.
 - **Server verify:** anon `families` INSERT/DELETE/PATCH = 0 rows (RLS), `public_snapshot` PATCH/DELETE
   ka payload hash same raha — data safe, sirf 204 (0 rows) milta hai.
 - Cache `memc-app-v94`, commit `9e6c508`.
+
+## v95 — owner audit log (2026-10-28)
+- **Kya:** har kaam ka record — `{at, a, by, uid, email, t, d}` in `memc_audit` (cap `AUDIT_MAX` 1000),
+  sirf owner ko dikhta hai (`viewAudit()`, route `audit`, sidebar item sirf `isOwner()` par).
+- **Auto logging (diff-based):** `DB.setFamilies()` / `DB.setAdmins()` purani vs nayi list compare karte hain
+  (`auditFamiliesDiff` / `auditAdminsDiff`) → add / edit (kaun se field: `naam, phone, members 1→2`…) / delete.
+  Internal writes `{silent:true}` se chup: cloud pull, restore, purge, migrate, sample seed, session.
+  `adminVolatile()` (sess/lastLogin/tempPass/firstLoginAt) strip → session refresh log ko spam nahi karta.
+- **Explicit events:** login, login_fail, logout, publish, backup, restore, data_clear, masjid_save
+  (`DB.setMasjid` hook), settings (`DB.setIdsSet` / `DB.setIdcard` hooks), owner email, password_change, audit_clear.
+- **Screen:** filter chips (Sab/Login/Data/Admins/Settings), live search (DOM filter, re-render nahi),
+  day grouping (Today/Yesterday/date), colour badges, CSV export (`exportAuditCSV`), clear (khud ki ek entry chhodta hai).
+- **Cross-device (optional):** `SYNC.pushAudit()` / `SYNC.fetchAudit()` → `audit_log` table
+  (`supabase/audit.sql`, RLS: insert+select sirf `authenticated`, anon revoke). Table na ho to chup-chaap local-only.
+  Server rows view me merge hote hain (dedupe by id, `☁` mark).
+- Tests **106 asserts green** (login record, add/edit/delete fields, admin add/remove, no session spam, owner-only, clear).
+- Cache `memc-app-v95`, commit `15e4ee7`.
