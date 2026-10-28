@@ -379,3 +379,16 @@ Open: wire Supabase keys; real OTP SMS later.
   scan 167, counts 72, docs 21, features 12, schemes 17, i18n 38 = **421 green**.
 - Cache `memc-app-v88`, commit `4da26b5`. Preview `idcard-preview.html` (gitignored) regenerate:
   `node $TMPDIR/zyvo/zycount/idcard-preview.js`.
+
+## v89 — signature photos + collapsed admin panel (2026-10-28)
+- **Signatures on card back**: `sigMutavalli` / `sigSecretary` / `sigMember` in `memc_idcard`.
+  Designer me har slot ke 2 buttons — **Camera** (`capture="environment"`) aur **Gallery** (+ Remove).
+  `signatureImage(dataURL)` = canvas 760px, grayscale + threshold (lum>186 → white, warna dark) so white paper
+  photo prints clean. `sigBox(src,label)` back card me image + line; khaali slot sirf line dikhata hai.
+  `.idterms` ab flex column, `p` flex:1 overflow hidden, `.idsign` fixed 10.5mm → terms kabhi signature ko
+  dhak nahi sakta.
+- **Administration collapsed**: `state.showAddAdmin` / `state.showAdmins`. Panel sirf "Admins (n)" +
+  **+ Add admin** + **View admins** dikhata hai. Form aur admin table sirf click par khulte hain
+  (`admin-add`, `admin-add-cancel`, `admin-list`). Admin banne ke baad form khud band.
+- Suites: idcard 50, auth 58, scan 169, counts 72, docs 21, features 12, schemes 17, i18n 38 = **437 green**.
+- Cache `memc-app-v89`, commit `e817321`. Preview me sample signatures (`idcard-preview.js` me SVG sig).
