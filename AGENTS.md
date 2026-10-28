@@ -537,3 +537,18 @@ Open: wire Supabase keys; real OTP SMS later.
   set-new-password (2 field), My Profile change-password (3 field). CSS `.pw-wrap`/`.pw-eye` (+ `.tp` cells).
 - Tests **143 asserts green** (ID series, 101 start, owner prefix change → migrate, tempPass masked/reveal/copy,
   login ke baad tempPass bacha, eye toggle dono taraf). Cache `memc-app-v99`, commit `72c8b80`.
+
+## v100 — random User ID format (2026-10-28)
+- Shan ka order: ID random dikhe — `AD102026#21200` jaisa — aur **har naye admin ki alag**, super admin ki bhi.
+- `IDSET_DEFAULT` ab `{ idStyle:'random', ownerPrefix:'OW', adminPrefix:'AD', adminSuffix:'', adminStart:101, ... }`.
+  Format = `<prefix><2 random digits><year>#<5 random digits>` → `AD102026#21200`, owner `OW102026#48391`.
+  `makeRandomId(prefix)` 40 try tak unique ID dhoondta hai (`idTaken()`); `rndDigits(n)` helper.
+- `genUserId()`/`genOwnerId()` dono style ke hisaab se kaam karte hain; `idStyle:'seq'` par purana
+  number series (`ADM-2026-0101`) wapas aa jata hai — Settings → ID format me style select.
+- `idMatches(id, prefix)` decide karta hai ki migrate karna hai ya nahi; `migrateAdmins()` owner ko OW-series
+  aur admins ko AD-series me le aata hai (ek baar, phir stable).
+- `migrateIdsSet()` boot par purani (pre-v100) settings ko naye format par le jata hai
+  (`ownerPrefix OWN→OW`, `adminPrefix ADM→AD`, `idStyle:'random'`, suffix khaali).
+- Login lookup already case-insensitive hai aur `#` handle karta hai — koi change nahi chahiye tha.
+- Tests **148 asserts green** (format regex, do IDs kabhi same nahi, owner/admin prefix alag, prefix change →
+  migrate, purani settings → naya style). Cache `memc-app-v100`, commit `39ac144`.

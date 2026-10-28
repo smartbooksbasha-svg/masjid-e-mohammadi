@@ -686,6 +686,10 @@ const IDSET_DEFAULT = {
   passPrefix:'', passSuffix:'',           /* password = <prefix><6 random><suffix> */
   famPrefix:'MEMC', famRandom:true        /* family id = MEMC-<yy><4 random> */
 };
+/* app version — footer/settings me dikhta hai, update confirm karne ke liye */
+const APP_VER = 'v101';
+const APP_VER_AT = '2026-10-28';
+
 /* password input + show/hide eye button */
 function pwBox(inputHtml){
   return `<div class="pw-wrap">${inputHtml}<button type="button" class="pw-eye" data-act="pw-eye" aria-pressed="false" aria-label="Show password" title="Show password">${ICON.eye}</button></div>`;
@@ -1517,9 +1521,10 @@ function renderShell(){
     chip.title = 'Read-only public view';
   }
   const foot = document.querySelector('.sb-foot');
-  if (foot) foot.innerHTML = u
+  const verLine = `<div class="ver">${APP_VER} · ${APP_VER_AT}</div>`;
+  if (foot) foot.innerHTML = (u
     ? `Admin mode · you can add and edit`
-    : ('Public view · read only' + (guardHidden() ? '' : '<br><button class="linklike" type="button" data-act="open-auth" style="margin-top:8px">Admin login</button>'));
+    : ('Public view · read only' + (guardHidden() ? '' : '<br><button class="linklike" type="button" data-act="open-auth" style="margin-top:8px">Admin login</button>'))) + verLine;
   $$('#nav .nav-item').forEach(a=>a.classList.toggle('active', a.dataset.view===state.view || (state.view==='add' && a.dataset.view==='add')));
   closeNav();
 }
@@ -3849,6 +3854,15 @@ function viewSettingsCard(ctx='adminpanel'){
       <p class="muted small" style="margin-top:12px">Logged in: <b>${esc(u.email)}</b> ${isOwner()?'(Owner)':''}</p>
       <button class="btn danger sm" data-act="admin-logout" style="margin-top:10px">${ICON.exit} Log out</button>
     </div>
+
+    <div class="card" style="margin-top:14px">
+      <div class="sec-title" style="margin-top:0">App version</div>
+      <div class="kv">
+        <div class="row"><span>Version</span><span class="mono"><b>${APP_VER}</b> · ${APP_VER_AT}</span></div>
+      </div>
+      <p class="muted small" style="margin-top:6px">Site khud update hoti hai. Purana version dikh raha ho to neeche wala button dabao — cache saaf ho kar naya version khul jayega.</p>
+      <button class="btn sm ghost" data-act="force-update" style="margin-top:10px">Force update</button>
+    </div>
   `;
 }
 
@@ -4137,6 +4151,22 @@ document.addEventListener('click', (e)=>{
     if (!isOwner()){ toast('Sirf owner reject kar sakta hai','err'); return; }
     const admins = DB.admins().filter(x=>String(x.userId||'').toLowerCase()!==String(id).toLowerCase() && String(x.email).toLowerCase()!==String(id).toLowerCase());
     DB.setAdmins(admins); toast('Request reject ho gayi'); go('users'); return;
+  }
+  if (act==='force-update'){
+    (async ()=>{
+      try { toast('Naya version laa raha hoon…'); } catch(e){}
+      try {
+        if ('serviceWorker' in navigator){
+          const regs = await navigator.serviceWorker.getRegistrations();
+          await Promise.all(regs.map(r=>r.unregister()));
+        }
+      } catch(e){}
+      try { if (window.caches){ const ks = await caches.keys(); await Promise.all(ks.map(k=>caches.delete(k))); } } catch(e){}
+      const u = new URL(location.href);
+      u.searchParams.set('v', String(Date.now()));
+      location.replace(u.toString());
+    })();
+    return;
   }
   if (act==='tp-show'){
     const cell = el.closest('.tp'); if(!cell) return;

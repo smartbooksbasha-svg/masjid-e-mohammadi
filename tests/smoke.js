@@ -420,6 +420,11 @@ const wait = ms => new Promise(r => setTimeout(r, ms || 120));
   ok(mgSet.idStyle === 'random', 'purani settings naye random style par migrate hoti hain');
   ok(mgSet.adminPrefix === 'AD' && mgSet.ownerPrefix === 'OW', 'purane ADM/OWN prefix AD/OW ban jate hain');
 
+  /* version stamp + force update button */
+  ok(new RegExp(V9.win.eval('APP_VER')).test(V9.doc.querySelector('.sb-foot').textContent || ''), 'sidebar footer me app version dikhta hai');
+  V9.win.eval("go('settings')"); await wait(150);
+  ok(!!V9.doc.querySelector('[data-act="force-update"]'), 'Settings me Force update button hai');
+
   /* ---------------- 9. backup round trip ---------------- */
   const backup = A.win.eval("JSON.stringify({ families:DB.families(), masjid:DB.masjid() })");
   ok(JSON.parse(backup).families.length === 1, 'backup payload contains households');

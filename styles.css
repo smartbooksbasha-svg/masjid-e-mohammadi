@@ -709,3 +709,6 @@ a:focus-visible,summary:focus-visible,[tabindex]:focus-visible{outline:2px solid
 .tp code{font-family:var(--mono,ui-monospace,monospace);font-size:.82rem;letter-spacing:.02em;
   background:rgba(127,127,127,.12);border:1px solid var(--line);border-radius:7px;padding:2px 7px}
 .tp .btn{min-height:28px;padding:2px 8px;font-size:.75rem}
+
+/* version stamp in sidebar footer */
+.sb-foot .ver{margin-top:8px;font-size:.66rem;letter-spacing:.04em;opacity:.55;font-family:var(--mono,ui-monospace,monospace)}
