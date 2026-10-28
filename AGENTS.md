@@ -405,3 +405,13 @@ Open: wire Supabase keys; real OTP SMS later.
   (e.g. `2026001FM04`); save par lagta hai, QR me `#qedit=<id>` encode hota hai → scan par wahi family khulti hai.
 - Suites: idcard 57, auth 58, scan 169, counts 72, docs 21, features 12, schemes 17, i18n 38 = **444 green**.
 - Cache `memc-app-v90`, commit `bf9f80e`. Preview me asli QR (python `qrcode` se inject) — `idcard-preview.js` + post-step.
+
+## v91 — card 5×3 inch landscape default (2026-10-28)
+- **Shan ka final spec: card = 5×3 inch landscape (127 × 76.2 mm)**. `IDCARD_DEFAULT.size='5x3'`.
+- Size model ab teen modes: `5x3` (default, landscape, font ×1.32, QR 32mm, header 15.4mm, foot 7.4mm),
+  `3x5` (portrait 76.2×127, font ×1.5, QR 33mm), `id1` (85.6×53.98, font ×1, QR 21mm).
+  Layout ek hi flex shell: `.idcard{flex-direction:column}`, `.idbody` portrait me column warna row;
+  right col width `${QR+7}mm`, footer/header padding mode ke hisaab se.
+- Designer: "Card size" select me teeno options, hint "5×3 = chaudi card, QR bada aur text saaf".
+- Suites: idcard 58, auth 58, scan 169, counts 72, docs 21, features 12, schemes 17, i18n 38 = **445 green**.
+- Cache `memc-app-v91`, commit `7f04d81`.
