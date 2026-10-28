@@ -687,7 +687,7 @@ const IDSET_DEFAULT = {
   famPrefix:'MEMC', famRandom:true        /* family id = MEMC-<yy><4 random> */
 };
 /* app version — footer/settings me dikhta hai, update confirm karne ke liye */
-const APP_VER = 'v102';
+const APP_VER = 'v103';
 const APP_VER_AT = '2026-10-28';
 
 /* password input + show/hide eye button */
@@ -806,6 +806,7 @@ function authCard(inner){
     <button class="auth-x" type="button" data-act="close-auth" aria-label="Close">×</button>
     <div class="auth-brand"><span class="crest">M</span><div><div class="t">${esc(CFG.ORG_NAME||'Masjid e Mohammadi')}</div><div class="s">${esc(CFG.ORG_SUB||'Khidmath Committee')}</div></div></div>
     ${inner}
+    <div class="auth-ver">${APP_VER}</div>
   </div></div>`;
 }
 
@@ -841,7 +842,7 @@ function renderLogin(){
     <h1>Admin login</h1>
     <p class="lead">Sirf admin / super admin ke liye. Baaki sab public dashboard dekh sakte hain.</p>
     <form id="loginForm">
-      <div class="field"><label>User ID / Email ID</label><input class="inp" name="email" type="text" required autocomplete="username" placeholder="User ID ya email" /><span class="hint">Apni User ID login ke baad <b>My Profile</b> me dikhti hai — email se bhi login ho sakta hai.</span></div>
+      <div class="field"><label>User ID / Email ID</label><input class="inp" name="email" type="text" required autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="User ID ya email" /><span class="hint">Apni User ID login ke baad <b>My Profile</b> me dikhti hai — email se bhi login ho sakta hai.</span></div>
       <div class="field"><label>Password</label>${pwBox('<input class="inp" name="pass" type="password" required autocomplete="current-password" />')}</div>
       <div id="loginAlert"></div>
       <button class="btn block" type="submit">Login</button>

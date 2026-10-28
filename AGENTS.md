@@ -561,3 +561,10 @@ Open: wire Supabase keys; real OTP SMS later.
   saare SW registrations unregister + `caches.delete()` sab keys + `?v=<timestamp>` ke saath reload.
 - Cache-busting link for the user: `https://smartbooksbasha-svg.github.io/masjid-e-mohammadi/?v=101#login`.
 - Tests **150 asserts green** (footer version, force-update button). Cache `memc-app-v101`, commit `d01eeff`.
+
+## v102 — login field ka placeholder + User ID copy (2026-10-28)
+- Shan: "admin login me userid background me show ho raha hai" — login input ka **placeholder** nakli ID
+  (`AD102026#21200`) dikha raha tha, isliye lagta tha ki koi asli User ID pehle se bhari hai.
+- Placeholder ab neutral: `User ID ya email`; niche hint — "Apni User ID login ke baad **My Profile** me dikhti hai".
+- **My Profile → User ID** field ke saath **Copy** button (`data-act="copy-uid"`) — clipboard me ID, toast me bhi.
+- Tests **151 asserts green**. Cache `memc-app-v102`, commit `5f34f88`.

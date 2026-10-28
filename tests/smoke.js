@@ -430,6 +430,8 @@ const wait = ms => new Promise(r => setTimeout(r, ms || 120));
   PH.win.eval("openAuth('login')"); await wait(150);
   const uidInp = PH.doc.querySelector('#loginForm input[name="email"]');
   ok(!/#/.test(uidInp.getAttribute('placeholder') || ''), 'login placeholder me nakli User ID nahi: ' + uidInp.getAttribute('placeholder'));
+  ok(uidInp.getAttribute('autocomplete') === 'off', 'login field par browser autofill band hai');
+  ok(!!PH.doc.querySelector('.auth-ver'), 'login card me version stamp dikhta hai');
 
   /* ---------------- 9. backup round trip ---------------- */
   const backup = A.win.eval("JSON.stringify({ families:DB.families(), masjid:DB.masjid() })");

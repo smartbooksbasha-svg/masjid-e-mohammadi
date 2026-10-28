@@ -712,3 +712,4 @@ a:focus-visible,summary:focus-visible,[tabindex]:focus-visible{outline:2px solid
 
 /* version stamp in sidebar footer */
 .sb-foot .ver{margin-top:8px;font-size:.66rem;letter-spacing:.04em;opacity:.55;font-family:var(--mono,ui-monospace,monospace)}
+.auth-ver{margin-top:14px;text-align:center;font-size:.68rem;letter-spacing:.06em;opacity:.5;font-family:var(--mono,ui-monospace,monospace)}
