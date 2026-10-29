@@ -334,6 +334,21 @@ const AUDIT_GROUPS = {
 };
 function auditLog(){ try{ return JSON.parse(localStorage.getItem(LS.audit)||'[]'); }catch(e){ return []; } }
 function auditSave(v){ try{ localStorage.setItem(LS.audit, JSON.stringify((v||[]).slice(-AUDIT_MAX))); }catch(e){} }
+function getDeviceMeta(){
+  try {
+    const nav = navigator || {};
+    const scr = screen || {};
+    return {
+      deviceId: getDeviceId(),
+      ua: nav.userAgent || '',
+      platform: nav.platform || '',
+      lang: nav.language || '',
+      screen: (scr.width||'') + 'x' + (scr.height||''),
+      tz: (Intl.DateTimeFormat && Intl.DateTimeFormat().resolvedOptions().timeZone) || '',
+      href: (location && location.href) || ''
+    };
+  } catch(e){ return { deviceId: getDeviceId() }; }
+}
 function auditWho(){
   try{
     const u = currentUser();
@@ -346,7 +361,8 @@ function audit(action, target, detail, who){
     const w = who || auditWho();
     const v = auditLog();
     const row = { id:uid(), at:Date.now(), a:String(action||''), by:String(w.by||''),
-                  uid:String(w.id||''), email:String(w.email||''), t:String(target||''), d:String(detail||'') };
+                  uid:String(w.id||''), email:String(w.email||''), t:String(target||''), d:String(detail||''),
+                  dev: getDeviceMeta() };
     v.push(row);
     auditSave(v);
     /* cross-device: server par bhi bhejo (table na ho to chup-chaap skip) */
@@ -656,7 +672,7 @@ const IDSET_DEFAULT = {
   famPrefix:'MEMC', famRandom:true        /* family id = MEMC-<yy><4 random> */
 };
 /* app version — footer/settings me dikhta hai, update confirm karne ke liye */
-const APP_VER = 'v113';
+const APP_VER = 'v114';
 const APP_VER_AT = '2026-10-29';
 
 /* password input + show/hide eye button */
@@ -1521,10 +1537,12 @@ function viewAudit(){
     const d = auditDay(r.at);
     if (d !== day){ day = d; html += `<div class="aud-day">${esc(d)}</div>`; }
     const label = AUDIT_ACT[r.a] || r.a;
+    const dv = r.dev || {};
+    const devShort = [dv.deviceId?dv.deviceId.slice(0,12):'', dv.platform, dv.screen].filter(Boolean).join(' · ');
     html += `<div class="aud-row" data-s="${esc(((r.by||'')+' '+(r.t||'')+' '+(r.d||'')+' '+label).toLowerCase())}">
       <span class="aud-badge ${AUDIT_CLASS[r.a]||'info'}">${esc(label)}</span>
-      <div class="aud-main"><b>${esc(r.t||'—')}</b>${r.d?`<span class="aud-d">${esc(r.d)}</span>`:''}</div>
-      <div class="aud-meta"><b>${esc(r.by||'—')}</b><span>${esc(auditTime(r.at))}${r.uid?' · '+esc(r.uid):''}${r.cloud?' · ☁':''}</span></div>
+      <div class="aud-main"><b>${esc(r.t||'—')}</b>${r.d?`<span class="aud-d">${esc(r.d)}</span>`:''}${dv.href?`<div class="aud-d muted">Page: ${esc(dv.href)}</div>`:''}</div>
+      <div class="aud-meta"><b>${esc(r.by||'—')}</b><span>${esc(auditTime(r.at))}${r.uid?' · '+esc(r.uid):''}${r.cloud?' · ☁':''}${devShort?' · '+esc(devShort):''}</span></div>
     </div>`;
   });
   return html + `</div></div>`;
@@ -1532,17 +1550,17 @@ function viewAudit(){
 
 function exportAuditCSV(){
   if (!isOwner()) return;
-  const rows = [['Date','Time','Action','Who','User ID','Email','Target','Detail']];
+  const rows = [['Date','Time','Action','Who','User ID','Email','Target','Detail','DeviceId','Platform','Screen','TZ','Page','UA']];
   auditLog().forEach(r=>{
     const d = new Date(r.at);
-    rows.push([d.toLocaleDateString('en-GB'), auditTime(r.at), AUDIT_ACT[r.a]||r.a, r.by||'', r.uid||'', r.email||'', r.t||'', r.d||'']);
+    const dv = r.dev || {};
+    rows.push([d.toLocaleDateString('en-GB'), auditTime(r.at), AUDIT_ACT[r.a]||r.a, r.by||'', r.uid||'', r.email||'', r.t||'', r.d||'', dv.deviceId||'', dv.platform||'', dv.screen||'', dv.tz||'', dv.href||'', dv.ua||'']);
   });
   const csv = rows.map(r=>r.map(x=>'"'+String(x==null?'':x).replace(/"/g,'""')+'"').join(',')).join('\r\n');
   const blob = new Blob(['\ufeff'+csv], {type:'text/csv;charset=utf-8'});
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
   a.download = 'audit-log-' + todayStr() + '.csv'; a.click(); URL.revokeObjectURL(a.href);
   audit('settings', 'Audit CSV', 'exported ' + (rows.length-1) + ' entries');
-  toast('CSV download ho gaya');
 }
 
 function navItems(){
