@@ -672,7 +672,7 @@ const IDSET_DEFAULT = {
   famPrefix:'MEMC', famRandom:true        /* family id = MEMC-<yy><4 random> */
 };
 /* app version — footer/settings me dikhta hai, update confirm karne ke liye */
-const APP_VER = 'v116';
+const APP_VER = 'v117';
 const APP_VER_AT = '2026-10-29';
 
 /* password input + show/hide eye button */
@@ -5214,6 +5214,16 @@ document.addEventListener('click', (e)=>{
     try { printIdCards(fams); } catch(e){ toast('Print nahi hua','err'); }
     return;
   }
+  if (act==='print-selected-ids'){
+    if (!isAdmin()){ toast('Sirf admin','err'); return; }
+    const cbs = Array.from(document.querySelectorAll('.flist-cb:checked'));
+    if (!cbs.length){ toast('Pehle checkboxes se families select karo','err'); return; }
+    const ids = cbs.map(cb=> cb.dataset.id).filter(Boolean);
+    const fams = ids.map(x=> DB.families().find(f=>f.id===x)).filter(Boolean);
+    if (!fams.length){ toast('Selected families nahi mili','err'); return; }
+    try { printIdCards(fams); } catch(e){ toast('Print nahi hua','err'); }
+    return;
+  }
   if (act==='admin-add'){ state.showAddAdmin = true; go(state.view||'adminpanel'); return; }
   if (act==='admin-add-cancel'){ state.showAddAdmin = false; go(state.view||'adminpanel'); return; }
   if (act==='admin-list'){ state.showAdmins = !state.showAdmins; go(state.view||'adminpanel'); return; }
@@ -5754,6 +5764,28 @@ function saveFamily(){
   const members = d.members.filter(m=> (m.name||'').trim());
   if (!members.length) return fail('Add at least one member with a name.');
   if (d.phone && !/^[0-9+\-\s]{6,15}$/.test(d.phone)) return fail('Phone number looks invalid.');
+
+  /* duplicate warn */
+  try {
+    const famsNow = DB.families();
+    const headName = String(d.houseName||'').trim().toLowerCase();
+    const membersList = d.members || [];
+    const headDob = String(membersList[0] && membersList[0].dob || '').trim();
+    const headFather = String(membersList[0] && membersList[0].fatherName || '').trim().toLowerCase();
+    const dup = famsNow.find(f=>{
+      if (d.id && f.id === d.id) return false;
+      const hn = String(f.houseName||'').trim().toLowerCase();
+      const hm = (f.members||[])[0] || {};
+      if (hn && headName && hn === headName){
+        if (headDob && String(hm.dob||'').trim() && headDob === String(hm.dob||'').trim()) return true;
+        if (headFather && String(hm.fatherName||'').trim().toLowerCase() && headFather === String(hm.fatherName||'').trim().toLowerCase()) return true;
+      }
+      return false;
+    });
+    if (dup){
+      if (!confirm('Same house/head lag raha hai (duplicate ho sakta hai).\n\nFamily ID: ' + dup.id + '\nContinue karna hai?')) return fail('Duplicate warn ki wajah se save rok diya gaya.');
+    }
+  } catch(e){}
 
   /* duplicate warn: same head/father+d.o.b */
   try {
