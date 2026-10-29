@@ -112,18 +112,6 @@ const $  = (s, r=document) => r.querySelector(s);
 const $$ = (s, r=document) => Array.from(r.querySelectorAll(s));
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
-function sanitize(str){
-  if (str == null) return '';
-  return String(str).replace(/[<>]/g, function(c){
-    return c === '<' ? '&lt;' : '&gt;';
-  });
-}
-function sanitizeInput(el){
-  if (!el) return;
-  try {
-    if (el.value) el.value = String(el.value).replace(/[<>]/g,'');
-  } catch(e){}
-}
 
 function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
 function pad(n,l){ return String(n).padStart(l,'0'); }
@@ -198,7 +186,6 @@ function guardHidden(){
 }
 function guardLocked(){ return Date.now() < guardGet().lockUntil; }
 function mmss(sec){ sec = Math.max(0, Math.round(sec)); return pad(Math.floor(sec/60),2) + ':' + pad(sec%60,2); }
-function loginLocked(){ return guardLocked(); }
 function loginFailed(){
   const g = guardGet(); g.fails = (+g.fails || 0) + 1;
   if (g.fails >= GUARD_HIDE_AFTER){ g.hiddenUntil = Date.now() + GUARD_HIDE_MS; g.lockUntil = g.hiddenUntil; }
@@ -538,36 +525,9 @@ function fmtDateTime(ts){
   return p(d.getDate()) + '-' + p(d.getMonth()+1) + '-' + d.getFullYear() + ' · ' + p(d.getHours()) + ':' + p(d.getMinutes());
 }
 let _warnAt = 0;
-function softWarn(msg){
-  const now = Date.now();
-  if (now - _warnAt < 2500) return;
-  _warnAt = now;
-  toast(msg || 'Right-click band hai', 'err');
-}
 /* deterrent only — asli security server (Supabase RLS) me hai */
 function installGuards(){
   try{
-    document.addEventListener('contextmenu', (e)=>{
-      const t = e.target;
-      const typing = t && (t.tagName==='INPUT' || t.tagName==='TEXTAREA' || t.isContentEditable);
-      if (typing) return;                       /* input me paste chalta rahe */
-      e.preventDefault();
-      return false;
-    }, { passive:false });
-
-    document.addEventListener('keydown', (e)=>{
-      const k = String(e.key||'').toLowerCase();
-      const mod = e.ctrlKey || e.metaKey;
-      const devtools = e.key==='F12'
-        || (mod && e.shiftKey && ['i','j','c','k'].includes(k))
-        || (mod && k==='u');
-      if (devtools){ e.preventDefault(); }
-    }, true);
-
-    document.addEventListener('dragstart', (e)=>{
-      if (e.target && e.target.tagName==='IMG') e.preventDefault();
-    });
-
     /* session ko active rakho, idle hone par expire */
     ['click','keydown','touchstart'].forEach(ev=>
       document.addEventListener(ev, ()=>{ try{ touchSession(); }catch(e){} }, { passive:true }));
@@ -687,7 +647,7 @@ const IDSET_DEFAULT = {
   famPrefix:'MEMC', famRandom:true        /* family id = MEMC-<yy><4 random> */
 };
 /* app version — footer/settings me dikhta hai, update confirm karne ke liye */
-const APP_VER = 'v107';
+const APP_VER = 'v108';
 const APP_VER_AT = '2026-10-28';
 
 /* password input + show/hide eye button */
@@ -1366,6 +1326,31 @@ function enterApp(){
   }
 }
 
+/* v108 — prompt("Enter 1,2 or 3") ki jagah proper modal (birth/death/other) */
+let _evReasonCB = null;
+function askEventReason(cb){
+  _evReasonCB = cb || null;
+  const old = document.querySelector(".modal-scrim"); if (old) old.remove();
+  const scr = document.createElement("div");
+  scr.className = "modal-scrim no-i18n";
+  scr.innerHTML = `
+    <div class="modal-card">
+      <h3 class="modal-title">${esc(tStr("Wajah kya hai?"))}</h3>
+      <div class="modal-opts">
+        <button class="btn block" type="button" data-act="evr" data-ty="birth">${esc(tStr("Janam hua hai"))}</button>
+        <button class="btn block" type="button" data-act="evr" data-ty="death">${esc(tStr("Inteqal ho gaya"))}</button>
+        <button class="btn ghost block" type="button" data-act="evr" data-ty="other">${esc(tStr("Aur koi wajah"))}</button>
+        <button class="btn ghost sm block" type="button" data-act="evr-cancel">${esc(tStr("Cancel"))}</button>
+      </div>
+    </div>`;
+  scr.addEventListener("click", (e)=>{ if (e.target === scr) closeEventReason(); });
+  document.body.appendChild(scr);
+}
+function closeEventReason(){
+  _evReasonCB = null;
+  const old = document.querySelector(".modal-scrim"); if (old) old.remove();
+}
+
 function openPhoto(src){
   const d = document.createElement('div');
   d.className = 'lb';
@@ -1800,7 +1785,7 @@ function groupDetail(no){
     const arr = allMembers(); if (!arr.length) return empty;
     const rows = arr.map(({m,f})=>{
       const a = ageFromDob(m.dob);
-      return `<tr class="clickable" data-act="detail" data-id="${esc(f.id)}"><td>${esc(m.name)}</td><td>${esc(f.id)}</td><td>${esc(m.relation||'')}</td><td>${esc(m.gender||'')}</td><td>${a===null?'':a}</td><td>${esc(m.maritalStatus||'')}</td><td>${esc(String(m.children||''))}</td><td>${m.disability==='yes'?'Yes':'—'}</td></tr>`;
+      return `<tr class="clickable" data-act="detail" data-id="${esc(f.id)}"><td>${esc(m.name)}</td><td>${esc(f.id)}</td><td>${esc(m.relation||'')}</td><td>${esc(m.gender?tStr(m.gender):'—')}</td><td>${a===null?'':a}</td><td>${esc(m.maritalStatus?tStr(m.maritalStatus):'—')}</td><td>${esc(String(m.children||''))}</td><td>${m.disability==='yes'?'Yes':'—'}</td></tr>`;
     });
     return `<div class="grp-more"><div class="gm-head">Har fard — umar, marital status, bachche, disability</div><div class="table-wrap">${rowsHTML(['Name','Family','Relation','Gender','Age','Marital','Children','Disabled'], rows)}</div></div>`;
   }
@@ -1813,7 +1798,7 @@ function groupDetail(no){
   if (no === 4){
     const arr = allMembers().filter(({m})=>String(occName(m)||'').trim());
     if (!arr.length) return empty;
-    const rows = arr.map(({m,f})=>`<tr class="clickable" data-act="detail" data-id="${esc(f.id)}"><td>${esc(m.name)}</td><td>${esc(f.id)}</td><td>${esc(m.gender||'')}</td><td>${esc(occName(m))}</td></tr>`);
+    const rows = arr.map(({m,f})=>`<tr class="clickable" data-act="detail" data-id="${esc(f.id)}"><td>${esc(m.name)}</td><td>${esc(f.id)}</td><td>${esc(m.gender?tStr(m.gender):'—')}</td><td>${esc(occName(m))}</td></tr>`);
     return `<div class="grp-more"><div class="gm-head">Kaam karne wale log</div><div class="table-wrap">${rowsHTML(['Name','Family','Gender','Occupation'], rows)}</div></div>`;
   }
   if (no === 5){
@@ -2082,7 +2067,7 @@ function viewMembersList(filterFn, title){
     return `<tr>
       <td>${esc(m.name||'—')}</td>
       <td>${esc(age===null?'—':age)}</td>
-      <td>${esc(m.gender||'—')}</td>
+      <td>${esc(m.gender?tStr(m.gender):'—')}</td>
       <td>${esc(f.id)}</td>
       <td>${esc(streetName(f))}</td>
       <td><button class="btn ghost sm" data-act="detail" data-id="${esc(f.id)}">View</button></td>
@@ -2322,8 +2307,8 @@ function viewFamilies(){
     <div class="toolbar">
       <input class="inp grow" id="famSearch" placeholder="Search household, Family ID, phone, street…" />
       <select class="inp" id="famStreetF" style="max-width:200px"><option value="">All streets</option>${streets.map(st=>`<option ${pre===st?'selected':''}>${esc(st)}</option>`).join('')}</select>
-      <select class="inp" id="famGenderF" style="max-width:170px"><option value="">All genders</option>${GENDERS.map(g=>`<option>${g}</option>`).join('')}</select>
-      <select class="inp" id="famMaritalF" style="max-width:190px"><option value="">All marital status</option>${MARITAL.map(m=>`<option>${m}</option>`).join('')}</select>
+      <select class="inp" id="famGenderF" style="max-width:170px"><option value="">All genders</option>${GENDERS.map(g=>`<option value="${g}">${esc(tStr(g))}</option>`).join('')}</select>
+      <select class="inp" id="famMaritalF" style="max-width:190px"><option value="">All marital status</option>${MARITAL.map(x=>`<option value="${x}">${esc(tStr(x))}</option>`).join('')}</select>
     </div>
     <div id="famListWrap"></div>`;
 }
@@ -2478,9 +2463,6 @@ function segHTML(value, key){
     <button type="button" data-v="yes" class="${value==='yes'?'on':''}">Yes</button>
     <button type="button" data-v="no" class="${value!=='yes'?'on':''}">No</button></div>`;
 }
-function docRow(label, value, key, _x){
-  return `<div class="doc-row"><span class="nm">${esc(label)}</span>${segHTML(value,key)}</div>`;
-}
 
 /* documents: sirf jo mark hain wahi dikhte hain, baaki picker me */
 function renderDocs(){
@@ -2543,9 +2525,9 @@ function renderMembers(){
       <div class="member-grid">
         <div class="field"><label>Full name *</label><input class="inp" data-field="m.name" data-idx="${i}" value="${esc(m.name)}" /></div>
         <div class="field"><label>Relation to head</label><input class="inp" data-field="m.relation" data-idx="${i}" value="${esc(m.relation)}" placeholder="Self / Wife / Son…" /></div>
-        <div class="field"><label>Gender</label><select class="inp" data-field="m.gender" data-idx="${i}">${GENDERS.map(g=>`<option ${m.gender===g?'selected':''}>${g}</option>`).join('')}</select></div>
+        <div class="field"><label>Gender</label><select class="inp" data-field="m.gender" data-idx="${i}">${GENDERS.map(g=>`<option value="${g}" ${m.gender===g?'selected':''}>${esc(tStr(g))}</option>`).join('')}</select></div>
         <div class="field"><label>Date of birth</label><input class="inp" type="date" data-field="m.dob" data-idx="${i}" value="${esc(m.dob)}" /></div>
-        <div class="field"><label>Marital status</label><select class="inp" data-field="m.maritalStatus" data-idx="${i}">${MARITAL.map(x=>`<option ${m.maritalStatus===x?'selected':''}>${x}</option>`).join('')}</select></div>
+        <div class="field"><label>Marital status</label><select class="inp" data-field="m.maritalStatus" data-idx="${i}">${MARITAL.map(x=>`<option value="${x}" ${m.maritalStatus===x?'selected':''}>${esc(tStr(x))}</option>`).join('')}</select></div>
         <div class="field m-children" style="display:${(m.maritalStatus||'')==='Married'?'block':'none'}"><label>Number of children</label><input class="inp" inputmode="numeric" data-field="m.children" data-idx="${i}" value="${esc(m.children||'')}" placeholder="0"/></div>
         <div class="field child-hide-edu" style="display:${(isChild||isStudent)?'none':'block'}"><label>Education</label><select class="inp edu-sel" data-field="m.educationLevel" data-idx="${i}">
           ${EDU.map(([k,l])=>`<option value="${k}" ${edu===k?'selected':''}>${esc(l)}</option>`).join('')}</select></div>
@@ -2593,10 +2575,11 @@ function viewFamilyDetail(id){
   const docsYes = DOC_TYPES.filter(([k])=>f.docs && f.docs[k]==='yes').map(([,l])=>l);
   const customYes = (f.custom||[]).filter(c=>c.label && c.value==='yes').map(c=>c.label);
   const members = f.members||[];
-  const men = members.filter(m=>m.gender==='Male').length;
-  const women = members.filter(m=>m.gender==='Female').length;
+  const alive = members.filter(m=>!isDead(m));
+  const men = alive.filter(m=>m.gender==='Male').length;
+  const women = alive.filter(m=>m.gender==='Female').length;
   return `
-    <div class="page-head"><div><h1>${esc(f.houseName||'Household')}</h1><p class="one-line">${esc(streetName(f))}${f.houseNo?' · <span>House</span> '+esc(f.houseNo):''} · ${members.length} <span>member(s)</span>${canEdit?'':' · <span>public view (phone hidden)</span>'}</p></div>
+    <div class="page-head"><div><h1>${esc(f.houseName||'Household')}</h1><p class="one-line">${esc(streetName(f))}${f.houseNo?' · <span>House</span> '+esc(f.houseNo):''} · ${alive.length} <span>member(s)</span>${canEdit?'':' · <span>public view (phone hidden)</span>'}</p></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         ${canEdit?`<button class="btn ghost sm" data-act="print-family" data-id="${esc(f.id)}">${ICON.print} PDF</button>`:''}
         ${canEdit?`<button class="btn ghost sm" data-act="print-idcards" data-id="${esc(f.id)}">${ICON.id||ICON.print} ID Cards</button>`:''}
@@ -2617,7 +2600,7 @@ function viewFamilyDetail(id){
           <div class="row"><span>House type</span><span>${esc(labelOf(HOUSE_TYPES, houseTypeKey(f.houseType)))}</span></div>
           <div class="row"><span>Phone</span><span>${canEdit?esc(f.phone||'—'):esc(maskPhone(f.phone))}</span></div>
           <div class="row"><span>Address</span><span>${esc(f.address||'—')}</span></div>
-          <div class="row"><span>Members</span><span>${members.length} · ${men} <span>men</span> · ${women} <span>women</span></span></div>
+          <div class="row"><span>Members</span><span>${alive.length} · ${men} <span>men</span> · ${women} <span>women</span></span></div>
           <div class="row"><span>Registered</span><span>${esc(fmtDateTime(f.createdAt))}${f.createdBy?' · '+esc(f.createdBy):''}</span></div>
           <div class="row"><span>Last updated</span><span>${esc(fmtDateTime(f.updatedAt||f.createdAt))}${f.updatedBy?' · '+esc(f.updatedBy):''}</span></div>
         </div>
@@ -2627,9 +2610,9 @@ function viewFamilyDetail(id){
     <div class="sec-title">Members</div>
     <div class="table-wrap"><table><thead><tr><th>#</th><th>Name</th><th>Relation</th><th>Gender</th><th>Age</th><th>Education</th><th>Occupation</th><th>Deeni</th><th>Marital</th><th>Docs</th><th>Schemes</th><th>Challenged</th></tr></thead><tbody>
       ${members.map((m,i)=>{ const a=ageFromDob(m.dob); const md=m.docs||{}; const dc=BASIC_DOCS.filter(([k])=>md[k]==='yes').length; return `<tr>
-        <td>${i+1}</td><td>${esc(m.name||'—')}</td><td>${esc(m.relation||'—')}</td><td>${esc(m.gender||'—')}</td>
+        <td>${i+1}</td><td>${esc(m.name||'—')}</td><td>${esc(m.relation||'—')}</td><td>${esc(m.gender?tStr(m.gender):'—')}</td>
         <td>${a===null?'—':a}</td><td>${esc(EDU_LABEL[eduKey(m)]||m.education||'—')}</td><td>${esc(occName(m)||'—')}</td>
-        <td>${esc(DEENI_LABEL[m.religious]||'—')}</td><td>${esc(m.maritalStatus||'—')}</td>
+        <td>${esc(DEENI_LABEL[m.religious]||'—')}</td><td>${esc(m.maritalStatus?tStr(m.maritalStatus):'—')}</td>
         <td><span class="badge ${dc===BASIC_DOCS.length?'':'gray'}">${dc}/${BASIC_DOCS.length}</span></td>
         <td>${memberSchemes(m).length ? esc(memberSchemes(m).join(', ')) : '<span class="muted">—</span>'}</td>
         <td>${m.disability==='yes'?'Yes':'No'}</td></tr>`; }).join('')}
@@ -2647,78 +2630,6 @@ function viewFamilyDetail(id){
 /* ============================================================
    USERS (super admin)
    ============================================================ */
-function viewUsers(){
-  if (!isAdmin()) return `<div class="empty"><h3>Admins only</h3><p>Ye page sirf admin ke liye hai.</p></div>`;
-  const me = currentUser();
-  const owner = ownerEmail();
-  const pend = pendingAdmins();
-  const active = activeAdmins();
-  const creds = state.newCreds;
-  return `
-    <div class="page-head"><div><h1>Admins</h1><p>Super admin naya admin add karta hai — User ID aur password app khud banati hai.</p></div></div>
-
-    ${creds ? `<div class="card" style="border-color:var(--accent)">
-      <div class="card-h"><div><h3>Naye admin ka login — usko bhejo</h3>
-        <div class="hint">App ne khud banaya hai. Ye details sirf us admin ko do, kisi aur ko nahi.</div></div></div>
-      <div class="kv" style="margin-top:10px">
-        <div class="row"><span>Naam</span><span>${esc(creds.name)}</span></div>
-        <div class="row"><span>User ID (login)</span><span class="mono"><b>${esc(creds.userId)}</b></span></div>
-        <div class="row"><span>Temporary password</span><span class="mono"><b>${esc(creds.tempPass)}</b></span></div>
-        <div class="row"><span>Email</span><span class="mono">${esc(creds.email)}</span></div>
-      </div>
-      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px">
-        <a class="btn sm" href="${esc(creds.mail)}">${ICON.mail} Email the admin</a>
-        <a class="btn ghost sm" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent('Masjid Survey admin login\nUser ID: '+creds.userId+'\nPassword: '+creds.tempPass)}">WhatsApp</a>
-        <button class="btn ghost sm" data-act="copy-creds">Copy</button>
-        <button class="btn ghost sm" data-act="close-creds">Close</button>
-      </div>
-      <p class="muted small" style="margin-top:8px">Ye login turant kaam karta hai. Admin pehli baar login karke My Profile se photo/naam badal sakta hai.</p>
-    </div>` : ''}
-
-    <div class="card">
-      <div class="card-h"><div><h3>Pending requests</h3><div class="hint">Owner approve karega tabhi access milega</div></div>
-        <span class="badge ${pend.length?'':'gray'}">${pend.length}</span></div>
-      ${pend.length ? `<div class="table-wrap" style="margin-top:12px"><table><thead><tr><th>User ID</th><th>Name</th><th>Email</th><th>Mobile</th><th>Requested</th><th></th></tr></thead><tbody>
-        ${pend.map(a=>`<tr>
-          <td class="mono"><b>${esc(a.userId||'—')}</b></td><td>${esc(a.name||'—')}</td>
-          <td class="mono">${esc(a.email)}</td><td>${esc(a.phone||'—')}</td>
-          <td>${fmtDate(a.createdAt ? new Date(a.createdAt).toISOString() : '')}</td>
-          <td>${isOwner()
-            ? `<button class="btn sm" data-act="approve-admin" data-id="${esc(a.userId||a.email)}">Approve</button>
-               <button class="btn ghost sm" data-act="reject-admin" data-id="${esc(a.userId||a.email)}" style="color:var(--danger)">Reject</button>`
-            : '<span class="badge gray">Owner approval baaki</span>'}</td>
-        </tr>`).join('')}
-      </tbody></table></div>
-      ${pend.some(a=>a.tempPass)?`<p class="muted small" style="margin-top:8px">Temporary password: ${esc(pend.filter(a=>a.tempPass).map(a=>a.userId+' → '+a.tempPass).join(' · '))}</p>`:''}`
-      : '<p class="muted small" style="margin-top:10px">Koi pending request nahi.</p>'}
-    </div>
-
-    ${isOwner() ? `<div class="card">
-      <div class="sec-title" style="margin-top:0">Add a new admin</div>
-      <form id="addAdminForm" class="grid g3">
-        <div class="field"><label>Name</label><input class="inp" name="name" required /></div>
-        <div class="field"><label>Email ID</label><input class="inp" name="email" type="email" required /><span class="hint">Isi email par login confirm hoga</span></div>
-        <div class="field"><label>Mobile</label><input class="inp" name="phone" inputmode="numeric" /></div>
-        <div class="field"><label>Age</label><input class="inp" name="age" type="number" min="18" max="100" /></div>
-        <div class="field"><label>Photo</label><input type="file" class="inp" name="photo" accept="image/*" /></div>
-        <div class="field" style="justify-content:flex-end"><button class="btn" type="submit">Create admin</button></div>
-      </form>
-      <p class="muted small" style="margin-top:6px">User ID aur password app khud banayegi — bante hi screen par dikhenge, admin ko bhej do.</p>
-    </div>` : `<div class="card"><p class="muted small" style="margin:0">Naya admin sirf owner add kar sakta hai. Owner: <b>${esc(owner||'—')}</b></p></div>`}
-
-    <div class="sec-title">Active admins (${active.length})</div>
-    <div class="table-wrap"><table><thead><tr><th>User ID</th><th>Email (login)</th><th>Name</th><th>Mobile</th><th>Added</th><th></th></tr></thead><tbody>
-      ${active.map(a=>`<tr>
-        <td class="mono">${esc(a.userId||'—')}</td><td class="mono">${esc(a.email)}</td><td>${esc(a.name||'—')}</td><td>${esc(a.phone||'—')}</td>
-        <td>${fmtDate(a.createdAt ? new Date(a.createdAt).toISOString() : '')}</td>
-        <td>${String(a.email).toLowerCase()===String(me.email).toLowerCase()
-          ? '<span class="badge">You</span>' + (String(a.email).toLowerCase()===owner ? ' <span class="badge">Owner</span>' : '')
-          : (isOwner()
-              ? `<button class="btn ghost sm" data-act="del-admin" data-id="${esc(a.email)}" style="color:var(--danger)">Remove</button>`
-              : '<span class="muted small">—</span>')}</td>
-      </tr>`).join('')}
-    </tbody></table></div>`;
-}
 
 /* ============================================================
    SETTINGS
@@ -3409,7 +3320,13 @@ const I18N = {
     "Father":"Father",
     "Mother":"Mother",
     "Brother":"Brother",
-    "Sister":"Sister"
+    "Sister":"Sister",
+    'Wajah kya hai?':'What is the reason?',
+    'Janam hua hai':'Birth',
+    'Inteqal ho gaya':'Death',
+    'Aur koi wajah':'Other',
+    'Sample ghar add kar dein? Ye test data hai — baad me manually delete karne padenge.':'Add sample households? This is test data — they must be deleted manually later.',
+    'Sample data load ho gaya':'Sample data loaded',
   },
   /* Hinglish — jo strings English me likhi gayi hain unka Hinglish version.
      (Baaki app ki source strings pehle se Hinglish hain, unka kuch nahi chahiye.) */
@@ -4351,8 +4268,22 @@ const I18N = {
     "Father":"والد",
     "Mother":"والدہ",
     "Brother":"بھائی",
-    "Sister":"بہن"
-  }
+    "Sister":"بہن",
+    'Wajah kya hai?':'وجہ کیا ہے؟',
+    'Janam hua hai':'ولادت ہوئی',
+    'Inteqal ho gaya':'انتقال ہو گیا',
+    'Aur koi wajah':'دیگر وجہ',
+    'Cancel':'کینسل',
+    'Sample ghar add kar dein? Ye test data hai — baad me manually delete karne padenge.':'نمونہ گھر شامل کریں؟ یہ ٹیسٹ ڈیٹا ہے — بعد میں دستی طور پر حذف کرنے ہوں گے۔',
+    'Sample data load ho gaya':'نمونہ ڈیٹا لوڈ ہو گیا',
+    'Male':'مرد',
+    'Female':'عورت',
+    'Other':'دیگر',
+    'Unmarried':'غیر شادی شدہ',
+    'Married':'شادی شدہ',
+    'Widow':'بیوہ',
+    'Widower':'بیوہ مرد',
+    'Divorced':'طلاق یافتہ',}
 };
 
 let LANG = 'en';                                   /* website default = English */
@@ -4924,98 +4855,6 @@ function viewSettingsCard(ctx='adminpanel'){
   `;
 }
 
-function viewSettings(){
-  const u = currentUser();
-  const cloudOn = CLOUD.enabled();
-  return `
-    <div class="page-head"><div><h1>Settings</h1><p>Appearance, data, cloud aur account.</p></div></div>
-
-    <div class="card">
-      <div class="sec-title" style="margin-top:0">Appearance</div>
-      <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
-        <button class="toggle" data-act="toggle-theme" id="themeBtn2">${themeIcon(document.documentElement.getAttribute('data-theme'))} Day / Night</button>
-        <span class="muted small">Emerald Lattice theme · day &amp; night.</span>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="sec-title" style="margin-top:0">Data &amp; backup</div>
-      <div style="display:flex;gap:10px;flex-wrap:wrap">
-        <button class="btn ghost sm" data-act="export-excel">${ICON.dl} Export Excel (.xlsx)</button>
-        <button class="btn ghost sm" data-act="print-all">${ICON.print} Export PDF / Print</button>
-        <button class="btn ghost sm" data-act="backup-json">${ICON.dl} Backup (JSON)</button>
-        <button class="btn ghost sm" data-act="publish-public">${ICON.refresh} Public totals refresh</button>
-        <button class="btn ghost sm" data-act="load-sample">Load sample data</button>
-      </div>
-      <p class="muted small" style="margin:12px 0 0">Last backup: <b>${esc(backupHint())}</b> · har hafte ek backup lena zaroori hai (file Google Drive / laptop me rakho).</p>
-    </div>
-
-    <div class="card">
-      <div class="sec-title" style="margin-top:0">Restore &amp; Google Drive</div>
-      <div style="display:flex;gap:10px;flex-wrap:wrap">
-        <button class="btn ghost sm" data-act="restore-json">⭱ Restore from backup file</button>
-        <button class="btn ghost sm" data-act="drive-connect">${ICON.cloud} ${driveConnected()?'Drive connected':'Connect Google Drive'}</button>
-        <button class="btn ghost sm" data-act="drive-backup">${ICON.cloud} Backup to Drive</button>
-      </div>
-      <input type="file" id="restoreFile" accept="application/json,.json" hidden />
-      <p class="muted small" style="margin:12px 0 0">${esc(driveStatusText())}</p>
-      ${driveReady()?'':`<details class="details">
-        <summary>Drive setup (ek baar, ~10 min)</summary>
-        <ol class="steps">
-          <li><a href="https://console.cloud.google.com/projectcreate" target="_blank" rel="noopener">console.cloud.google.com</a> par naya project banao.</li>
-          <li><b>APIs &amp; Services → Library</b> → <b>Google Drive API</b> → Enable.</li>
-          <li><b>OAuth consent screen</b> → External → apna Gmail test user me add karo.</li>
-          <li><b>Credentials → Create OAuth client ID → Web application</b>.</li>
-          <li><b>Authorized JavaScript origins</b> me <span class="mono">${esc(location.origin)}</span> daalo (bina slash).</li>
-          <li>Client ID copy karke <span class="mono">config.js</span> → <span class="mono">GOOGLE_CLIENT_ID</span> me paste karo, phir page refresh.</li>
-        </ol>
-      </details>`}
-      <p class="muted small" style="margin-top:6px">Restore purana JSON backup wapas laata hai (is device ka data replace hota hai; admins sirf add hote hain).</p>
-    </div>
-
-    <div class="card">
-      <div class="sec-title" style="margin-top:0">Cloud sync &amp; email (Supabase)</div>
-      <p class="muted small">Status: <b style="color:${cloudOn?'var(--ok)':'var(--warn)'}">${cloudOn?'Connected':'Not connected — data is on this device only'}</b></p>
-      <div class="kv" style="margin-top:10px">
-        <div class="row"><span>Public website</span><span>${cloudOn?'Live for everyone':'Only this device'}</span></div>
-        <div class="row"><span>Email codes</span><span>${cloudOn?'Real email':'On-screen (demo)'}</span></div>
-      </div>
-      ${cloudOn ? '' : `<p class="muted small" style="margin-top:10px">Public dashboard aur asli email code ke liye Supabase free project chahiye: <span class="mono">supabase.com</span> → naya project → Settings → API se <b>Project URL</b> + <b>anon key</b>, aur <span class="mono">supabase/schema.sql</span> run karo. Phir dono values <span class="mono">config.js</span> me daalo.</p>`}
-    </div>
-
-    <div class="card">
-      <div class="sec-title" style="margin-top:0">Account</div>
-      <div class="kv"><div class="row"><span>Name</span><span>${esc(u.name||'—')}</span></div>
-        <div class="row"><span>User ID</span><span class="mono">${esc(u.userId||'—')}</span></div>
-        <div class="row"><span>Login email</span><span class="mono">${esc(u.email)}</span></div>
-        <div class="row"><span>Role</span><span>${u.owner?'Owner — approvals bhi':'Admin — full edit'}</span></div>
-        <div class="row"><span>Owner (approval email)</span><span class="mono">${esc(ownerEmail()||'—')}</span></div></div>
-      ${isOwner()?`<form id="ownerForm" class="grid g2" style="margin-top:14px">
-        <div class="field"><label>Approval email (owner)</label><input class="inp" name="owner" type="email" value="${esc(ownerEmail())}" />
-          <span class="hint">Naye admin ki request + credentials isi email par jaayengi</span></div>
-        <div class="field" style="justify-content:flex-end"><button class="btn sm" type="submit">Save</button></div>
-      </form>`:''}
-      <button class="btn danger sm" data-act="admin-logout" style="margin-top:16px">Log out</button>
-    </div>
-
-    <div class="card">
-      <div class="sec-title" style="margin-top:0">Security</div>
-      <div class="kv">
-        <div class="row"><span>Public website</span><span>${cloudOn?'Sirf totals (naam/phone kabhi nahi)':'Local demo — cloud off'}</span></div>
-        <div class="row"><span>Database</span><span>${cloudOn?'Row-level security on':'—'}</span></div>
-        <div class="row"><span>Admin password</span><span>PBKDF2 (1,20,000 rounds)</span></div>
-        <div class="row"><span>Galat login</span><span>5 try ke baad 60s lock</span></div>
-        <div class="row"><span>Naya admin</span><span>Owner approval ke bina login nahi</span></div>
-      </div>
-      <p class="muted small" style="margin-top:10px">Public totals sirf anonymous snapshot se aate hain. Detail kisike paas nahi jaata — na public ko, na search engine ko. Poora security note: <span class="mono">SECURITY.md</span> (repo me).</p>
-    </div>
-
-    <div class="card" style="border-color:var(--danger-brd)">
-      <div class="sec-title" style="margin-top:0;color:var(--danger)">Danger zone</div>
-      <p class="muted small" style="margin-bottom:12px">Deletes all household records on this device. Admin accounts are kept.</p>
-      <button class="btn danger sm" data-act="clear-data">Erase all household records</button>
-    </div>`;
-}
 
 /* ============================================================
    ACTIONS (event delegation)
@@ -5060,22 +4899,6 @@ document.addEventListener('click', (e)=>{
   if (act==='mlist' || act==='flist'){ openList(act, el.dataset.f, el.dataset.title); return; }
   if (act==='slist'){ state.streetBack = state.view; go('streetlist'); return; }
   if (act==='auth-check'){ cloudLinkCheck(); return; }
-  if (act==='magic-login'){
-    const f = $('#loginForm');
-    const email = f ? String(f.elements.email.value||'').trim().toLowerCase() : '';
-    const box = $('#loginAlert');
-    if (!isEmail(email)){ if (box) box.innerHTML='<div class="alert err">Pehle upar apna email daalo, phir ye button dabao.</div>'; return; }
-    if (mailMode() !== 'cloud'){ if (box) box.innerHTML='<div class="alert err">Email login ke liye cloud on hona chahiye.</div>'; return; }
-    (async ()=>{
-      const c = await CLOUD.get();
-      if (!c){ if (box) box.innerHTML='<div class="alert err">Cloud connect nahi hua — internet check karo.</div>'; return; }
-      const { error } = await c.auth.signInWithOtp({ email, options:{ shouldCreateUser:false, emailRedirectTo: location.origin + location.pathname } });
-      if (error){ if (box) box.innerHTML='<div class="alert err">'+esc(error.message)+'</div>'; return; }
-      pending = { kind:'login', email };
-      renderLinkSent();
-    })();
-    return;
-  }
   if (act==='grp-toggle'){
     const sec = el.closest('.grp'); if (!sec) return;
     if (!sec.dataset.filled){ sec.insertAdjacentHTML('beforeend', groupDetail(Number(sec.dataset.g)||0)); sec.dataset.filled='1'; }
@@ -5084,6 +4907,14 @@ document.addEventListener('click', (e)=>{
     return;
   }
   if (act==='photo'){ const src = el.dataset.src; if (src) openPhoto(src); return; }
+  if (act==='evr'){
+    const ty = el.dataset.ty || 'other';
+    const f = _evReasonCB;
+    closeEventReason();
+    if (f) f(ty);
+    return;
+  }
+  if (act==='evr-cancel'){ closeEventReason(); return; }
   if (act==='open-auth'){ openAuth('login'); return; }
   if (act==='close-auth'){ closeAuth(); return; }
   if (act==='auth-tab'){ pending=null; renderAuth(el.dataset.tab||'login'); return; }
@@ -5126,7 +4957,10 @@ document.addEventListener('click', (e)=>{
     DB.setAdmins(DB.admins().filter(a=>a.email!==id));
     toast('Admin hata diya'); go('users'); return;
   }
-  if (act==='load-sample'){ loadSample(); enterApp(); go('dashboard'); toast('Sample data loaded'); return; }
+  if (act==='load-sample'){
+    if (!DB.families().length && !confirm(tStr('Sample ghar add kar dein? Ye test data hai — baad me manually delete karne padenge.'))) return;
+    loadSample(); enterApp(); go('dashboard'); toast(tStr('Sample data load ho gaya')); return;
+  }
   if (act==='clear-data'){ if(confirm('Erase ALL household records on this device? This cannot be undone.')){
     const n = DB.families().length;
     DB.setFamilies([], { silent:true }); DB.setSeq(0);
@@ -5316,29 +5150,25 @@ document.addEventListener('click', (e)=>{
     m.photos.splice(+el.dataset.i,1);
     DB.setMasjid(m); toast('Photo hata di'); go(state.view, state.param); return;
   }
-  if (act==='add-member'){ 
-    const t = prompt('Add member reason\n1) Birth (this month/year)\n2) Death (this month/year)\n3) Other\nEnter 1,2 or 3');
-    const map = {'1':'birth','2':'death','3':'other'};
-    const ty = map[String(t||'').trim()] || 'other';
-    recordEvent(ty, 'Member added to household');
-    state.draft.members.push(blankMember()); renderMembers(); return; 
+  if (act==='add-member'){
+    askEventReason(ty=>{ recordEvent(ty, 'Member added to household'); state.draft.members.push(blankMember()); renderMembers(); });
+    return;
   }
-  if (act==='remove-member'){ 
-    const t = prompt('Remove member reason\n1) Birth (this month/year)\n2) Death (this month/year)\n3) Other\nEnter 1,2 or 3');
-    const map = {'1':'birth','2':'death','3':'other'};
-    const ty = map[String(t||'').trim()] || 'other';
-    recordEvent(ty, 'Member removed from household');
-    const idx = +el.dataset.idx;
-    if (ty === 'death'){
-      // Mark as deceased instead of removing - name stays in records
-      if (state.draft.members[idx]){
-        state.draft.members[idx].deceased = true;
-        state.draft.members[idx].deceasedDate = new Date().toISOString().slice(0,10);
+  if (act==='remove-member'){
+    askEventReason(ty=>{
+      recordEvent(ty, 'Member removed from household');
+      const idx = +el.dataset.idx;
+      if (ty === 'death'){
+        if (state.draft.members[idx]){
+          state.draft.members[idx].deceased = true;
+          state.draft.members[idx].deceasedDate = todayStr();
+        }
+      } else {
+        state.draft.members.splice(idx,1);
       }
-    } else {
-      state.draft.members.splice(idx,1);
-    }
-    renderMembers(); return; 
+      renderMembers();
+    });
+    return;
   }
   if (act==='save-next'){
     const f = $('#famForm');
@@ -5834,8 +5664,8 @@ function exportExcel(){
     'Family ID':f.id,'Street':streetName(f),'House No':f.houseNo||'','House Type':labelOf(HOUSE_TYPES, houseTypeKey(f.houseType)),
     'Household':f.houseName||'','Phone':f.phone||'','Address':f.address||'',
     'Members':(f.members||[]).length,
-    'Men':(f.members||[]).filter(m=>m.gender==='Male').length,
-    'Women':(f.members||[]).filter(m=>m.gender==='Female').length,
+    'Men':(f.members||[]).filter(m=>m.gender==='Male' && !m.deceased).length,
+    'Women':(f.members||[]).filter(m=>m.gender==='Female' && !m.deceased).length,
     'Docs (Yes)':DOC_TYPES.filter(([k])=>f.docs&&f.docs[k]==='yes').map(([,l])=>l).join(', ')
   }));
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(famRows), 'Households');
@@ -6193,23 +6023,6 @@ function qrSvgTag(text){
   }catch(e){}
   return '';
 }
-function qrDataURL(text, px){
-  try{
-    const svg = qrSvgTag(text);
-    if (svg) return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
-    if (typeof QRCode === 'undefined') return '';
-    const holder = document.createElement('div');
-    holder.style.cssText = 'position:fixed;left:-9999px;top:0;width:1px;height:1px;overflow:hidden';
-    document.body.appendChild(holder);
-    new QRCode(holder, { text:String(text||''), width:px||600, height:px||600,
-      correctLevel:QRCode.CorrectLevel.M, colorDark:'#0d2b22', colorLight:'#ffffff' });
-    const cv = holder.querySelector('canvas');
-    let url = cv ? cv.toDataURL('image/png') : '';
-    if (!url){ const im = holder.querySelector('img'); url = im ? im.src : ''; }
-    holder.remove();
-    return url;
-  }catch(e){ return ''; }
-}
 function idCardFront(fam, c, base){
   const mem = fam.members || [];
   const head = mem.find(m=>/(head|self)/i.test(m.relation||'')) || mem[0] || {};
@@ -6217,7 +6030,7 @@ function idCardFront(fam, c, base){
   const a = ageFromDob(head.dob);
   const dobText = head.dob ? (fmtDate(head.dob) || head.dob) : '—';
   const issued = new Date().toLocaleDateString('en-GB').split('/').join('-');
-  const footL = String(c.footLeft||'').trim() || (tStr('Members')+' '+mem.length+' · '+tStr('Issued')+' '+issued);
+  const footL = String(c.footLeft||'').trim() || (tStr('Members')+' '+mem.filter(m=>!m.deceased).length+' · '+tStr('Issued')+' '+issued);
   const footR = String(c.footRight||'').trim() || (c.org+' · '+c.sub);
   const qrText = location.origin + location.pathname + '#qedit=' + encodeURIComponent(fam.id);
   const qrMarkup = qrSvgTag(qrText);
@@ -6334,16 +6147,16 @@ function printFamilies(fams, title){
     const mem = f.members || [];
     const famDocs = DOC_TYPES.filter(([k])=>f.docs&&f.docs[k]==='yes').map(([,l])=>l);
     const custom = (f.custom||[]).filter(c=>c.label);
-    const males = mem.filter(m=>/^m/i.test(String(m.gender||''))).length;
+    const males = mem.filter(m=>/^m/i.test(String(m.gender||'')) && !m.deceased).length;
     const totalKids = mem.reduce((n,m)=>n + (Number(m.children)||0), 0);
     const qrText = [f.id, f.houseName, streetName(f)].filter(Boolean).join(' | ');
     const docList = m => BASIC_DOCS.filter(([k])=>m.docs&&m.docs[k]==='yes').map(([,l])=>l);
 
     const rows = mem.map((m,i)=>{
       const a = ageFromDob(m.dob);
-      return `<tr><td>${i+1}</td><td>${esc(m.name||'')}</td><td>${esc(m.relation||'')}</td><td>${esc(m.gender||'')}</td>
+      return `<tr><td>${i+1}</td><td>${esc(m.name||'')}</td><td>${esc(m.relation||'')}</td><td>${esc(m.gender?tStr(m.gender):'')}</td>
         <td>${a===null?'':a}</td><td>${esc(EDU_LABEL[eduKey(m)]||m.education||'')}</td><td>${esc(occName(m))}</td>
-        <td>${esc(DEENI_LABEL[m.religious]||'')}</td><td>${esc(m.maritalStatus||'')}</td>
+        <td>${esc(DEENI_LABEL[m.religious]||'')}</td><td>${esc(m.maritalStatus?tStr(m.maritalStatus):'')}</td>
         <td>${docList(m).length}/${BASIC_DOCS.length}</td><td>${esc(memberSchemes(m).join(', '))}</td>
         <td>${m.disability==='yes'?'Yes':'No'}</td></tr>`;
     }).join('');
@@ -6352,7 +6165,7 @@ function printFamilies(fams, title){
       const a = ageFromDob(m.dob);
       const d = docList(m);
       const sch = memberSchemes(m);
-      return `<li><b>${i+1}. ${esc(m.name||'—')}</b>${m.relation?` (${esc(m.relation)})`:''} — DOB: ${esc(m.dob||'—')}${a!==null?` (${a} yrs)`:''} · Gender: ${esc(m.gender||'—')} · Marital: ${esc(m.maritalStatus||'—')}
+      return `<li><b>${i+1}. ${esc(m.name||'—')}</b>${m.relation?` (${esc(m.relation)})`:''} — DOB: ${esc(m.dob||'—')}${a!==null?` (${a} yrs)`:''} · Gender: ${esc(m.gender?tStr(m.gender):'—')} · Marital: ${esc(m.maritalStatus?tStr(m.maritalStatus):'—')}
         ${m.fatherName?` · Father: ${esc(m.fatherName)}`:''}${m.motherName?` · Mother: ${esc(m.motherName)}`:''}
         ${m.children && String(m.children)!=='0'?` · Children: ${esc(m.children)}`:''}
         ${m.disability==='yes'?` · Challenged: Yes${m.disabilityNote?' ('+esc(m.disabilityNote)+')':''}`:''}
@@ -6446,39 +6259,9 @@ function loadSample(){
 
 /* email link se wapas aaya? → session se admin login */
 async function cloudAutoLogin(){
-  // DISABLED: prevent auto-login on refresh
+  /* DISABLED (v108): auto-login on refresh password flow ke sath conflict karta tha.
+     Email-link login sirf forgot-password flow se aata hai. */
   return;
-  if (!CLOUD.enabled()) return;
-  try {
-    const c = await CLOUD.get(); if (!c) return;
-    const { data } = await c.auth.getSession();
-    const sess = data && data.session; if (!sess) return;
-    const email = (sess.user.email||'').toLowerCase();
-    if (/type=recovery/.test(location.hash)){ pending = { kind:'newpass', email }; openAuth('login'); return renderNewPassword(); }
-    if (isAdmin()) return;
-    const local = adminByEmail(email);
-    if (local && adminStatus(local) === 'pending'){
-      await c.auth.signOut(); openAuth('login');
-      setTimeout(()=>{ const b=$('#loginAlert'); if(b) b.innerHTML='<div class="alert err">Ye account abhi <b>approval pending</b> hai — owner approve karega tabhi login hoga.</div>'; }, 40);
-      return;
-    }
-    /* sirf approved admin hi andar aa sakta hai — koi bhi apna Supabase account bana ke nahi */
-    const known = !!local || await cloudIsListed(email);
-    if (!known){
-      await c.auth.signOut(); openAuth('login');
-      setTimeout(()=>{ const b=$('#loginAlert'); if(b) b.innerHTML='<div class="alert err">Ye email approved admin list me nahi hai. “Request access” se owner ko request bhejo.</div>'; }, 40);
-      return;
-    }
-    const md = sess.user.user_metadata || {};
-    await cloudClaimAdmin(email, md.name||'', md.phone||'');
-    if (!local){
-      const admins = DB.admins();
-      admins.push({ email, name:md.name||email.split('@')[0], phone:md.phone||'', createdAt:Date.now(), verified:true, cloud:true, status:'active' });
-      DB.setAdmins(admins);
-    }
-    startSession(email);
-    enterApp(); toast('Email verified — admin login');
-  } catch(e){}
 }
 
 /* purane admin records me userId/status bhar do (ek baar) */
@@ -6777,7 +6560,7 @@ function renderFindResult(res){
   const box = $('#findResult'); if(!box) return;
   const fam = res.family || {}, members = res.members || [];
   const rows = members.map((m,i)=>`<tr>
-    <td>${i+1}</td><td>${esc(m.name||'—')}</td><td>${esc(m.relation||'—')}</td><td>${esc(m.gender||'—')}</td>
+    <td>${i+1}</td><td>${esc(m.name||'—')}</td><td>${esc(m.relation||'—')}</td><td>${esc(m.gender?tStr(m.gender):'—')}</td>
     <td>${ageFromDob(m.dob)===null?'—':ageFromDob(m.dob)}</td><td>${esc(m.education_level||'—')}</td>
     <td>${esc(m.occupation||'—')}</td><td>${esc(m.religious||'—')}</td><td>${esc(m.marital_status||'—')}</td>
     <td>${m.disability && m.disability!=='no'?esc(m.disability):'—'}</td>

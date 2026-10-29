@@ -1,39 +1,36 @@
-# TASK — Masjid Survey v104
+# TASK — Masjid Survey v108 (audit-fix batch)
 
-GOAL: QR scan par admin ko edit option, poora language switch, website icon (uploaded logo), aur mobile text layout fix.
+GOAL: Post-audit fixes ek hi release me — dead code removal (DONE), guards removal (DONE),
+prompt→modal (DONE), deceased counts + gender/marital tStr (PENDING), load-sample confirm (PENDING),
+fonts self-host (PENDING), dict keys (PENDING), tests + deploy v108.
 
-Plan/notes: AGENTS.md (v103 tak), PROJECT_PLAN.md, PRD.md
+Plan/notes: AGENTS.md (v107 tak), PROJECT_PLAN.md, PRD.md
 
-## Steps
-- [ ] 1. `renderFindResult`: admin ko **Edit household** + **Full record** buttons; public read-only hi rahe
-- [ ] 2. i18n audit script: English mode me saare views render karke Hinglish text nodes dhoondo, dict me add karo
-- [ ] 3. Website icon: uploaded committee logo (`memc_logo`) → favicon (dynamic) + brand crest; static PNG fallback
-- [ ] 4. Mobile (360px) layout: overflow, font-size, table/card/text fixes
-- [ ] 5. Tests + `node -c` + deploy v104 + Pages verify
-- [ ] 6. AGENTS.md / vault / skill notes
+## v108 Steps
+- [x] Dead fns removed: sanitize, sanitizeInput, loginLocked, softWarn, docRow, viewUsers, viewSettings, qrDataURL; cloudAutoLogin = stub; magic-login dead handler removed — node -c OK, no dangling refs
+- [x] installGuards: contextmenu/F12/Ctrl+U/dragstart guards hata diye; session touch listeners CHALU (touchSession intact)
+- [x] add-member / remove-member ab askEventReason(cb) modal use karte hain (prompt('1,2,3') gaya); remove: death → mark deceased, birth → member rakhta hai, other → remove
+- [ ] 1. askEventReason() helper + baat-soch par close (yeh MISSING — abhi call crash karega!) + evr / evr-cancel click delegation + scrim click close
+- [ ] 2. load-sample confirm (deen par families empty ho) — 3 markup spots (2094/2287/4751 ke aaspaas) + delegation 4898
+- [ ] 3. Decesed counts: detail men/women/subtitle/Members row + export Men/Women + print males + ID card footL members = alive count
+- [ ] 4. Gender/Marital tStr: form options, detail table, print report, find result; dict keys en+ur (Male/Female/Other, Married/Unmarried/Widower/Divorced/Widow)
+- [ ] 5. Modal keys en+ur: Reason?/Birth/Death/Other/Cancel/members added/member removed…/normal remove/add/Sample data loaded/sample-confirm-string
+- [ ] 6. Fonts self-host: styles.css mein 2 @font-face (tools/_fonts.css tin hai), index.html 22-24 strip, CSP line 5 se fonts.googleapis/gstatic hatao, sw.js SHELL mein fonts add
+- [ ] 7. APP_VER='v108', CACHE='memc-app-v108'
+- [ ] 8. node -c + npm test (174+new) + ur-audit + i18n-verify
+- [ ] 9. Commit + push + curl-verify 2x (Pages CDN ~1 min lag)
+- [ ] 10. AGENTS.md / hot memory / SKILL.md / vault notes
 
 ## Decisions
-- QR result edit sirf admin ke liye (privacy rule: public ko sirf anonymous view)
-- Favicon upload se banti hai (data URL), static icons fallback
+-_rights: deterrent (F12/right-click) REMOVE — Shan approved waste list; asli security = Supabase RLS
+- modal: birth reason = isliye naam rakhta hai, death par deceased mark, other = normal remove
+- Excel raw values (no tStr); enum translate only UI
+- ID card members count = live (non-deceased)
 
 ## NOW:
-Step 1 — QR scan edit option
+Step 1 — askEventReason helper add karo (remove-member/add-member iska intezaar kar rahe hain)
 
-## v104 — DONE (2026-10-28, commit 98176fe, cache memc-app-v104)
-- [x] QR find-result admin Edit + Full record buttons
-- [x] i18n audit tools + 0 leftovers (en/hi/ta)
-- [x] Uploaded logo → site favicon + auth crest (applyFavicon)
-- [x] Mobile 360/380px text + table layout pass
-- [x] Tests 164 green, deployed + verified live
-
-## v105 — DONE (2026-10-28, commit 7554593, cache memc-app-v105)
-- [x] Urdu dictionary (420 keys) + langSel option
-- [x] RTL layout (dir attr, sidebar mirror, LTR for IDs/inputs, eye button, mobile drawer)
-- [x] i18n verify 4 languages 0 leftover, tests 170 green, deployed + verified
-
-## v106 — DONE (2026-10-28, commit 2228e09, cache memc-app-v106)
-- [x] Mobile alignment regression revert (.kv text-align, table squeeze)
-- [x] Urdu 615 keys + dynamic strings split into nodes + ID card labels tStr
-- [x] ur-audit tool (208 -> 18, bache sirf data/brand words)
-- [x] Tests 170, deployed + verified live
-- [ ] Tamil full translation (186 leftovers) — pending
+## Previous releases (shaamil)
+v104 commit 98176fe (favicon+mobile), v105 7554593 (Urdu RTL), v106 2228e09 (mobile fix+ur poora),
+v107 86fee48 (carets+one-line) — sab live cache memc-app-v107 tak, tests 174 green.
+Audit findings detail: AGENTS.md "AUDIT 2026-10-28" section.

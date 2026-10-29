@@ -631,3 +631,26 @@ Open: wire Supabase keys; real OTP SMS later.
 - Tests 170 green. Cache `memc-app-v106`, commit `2228e09`, live verified.
 - ⚠️ Tamil ab 186 leftover dikhata hai (`tools/i18n-verify.js`) — ye naya tootna nahi, pehle bhi English
   tha; pehle check sirf en-keys par chalta tha isliye chhupa hua tha. Tamil poora karne ka kaam pending.
+
+## v107 (2026-10-28) — dashboard carets hataye, detail ek line me
+- **Dashboard group cards**: `grpHead()` ke do `.grp-caret` (▾ up/down) spans hata diye + unki CSS
+  (`.grp-caret`, `.grp.open .grp-caret`, `.grp-head{padding-right:34px}`). Card par click karke expand
+  pehle jaisa chalta hai (`data-act="grp-toggle"`), sirf arrow nahi dikhta.
+- **Family detail ek line**: `.kv .row` ab `align-items:baseline` + label `flex:none;white-space:nowrap`,
+  value `flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis`. Poora text
+  `go()` ke after-render pass me `title` attribute me daala jata hai (long-press par dikhta hai).
+  Detail ka sub-title (street · house · members) `class="one-line"` — ek line, ellipsis.
+- Tests **174**. Cache `memc-app-v107`, commit `86fee48`, live verified.
+
+## AUDIT 2026-10-28 (post-v107) — full scan, fixes pending
+`tools/scan-errors.js` (all 11 views, admin+public: zero JS errors, zero duplicate IDs). Dead-function sweep: 8/213 dead.
+Key findings (details + line numbers in TASK.md "AUDIT" section):
+1. `viewUsers()` empty stub (app.js:2650) + `cloudAutoLogin()` dead body (6448) + 6 more dead helpers
+   (loginLocked/sanitize/sanitizeInput/docRow/qrDataURL/softWarn/viewSettings) — cleanup pending.
+2. Deceased members counted in detail/export (app.js:2596, 5837) but excluded on dashboard — mismatch.
+3. Gender/Marital enum values ("Male"/"Married"/Widower/Divorced) untranslated everywhere — no tStr, missing dict keys.
+4. `prompt('Enter 1,2 or 3')` for birth/death reason on add/remove member (5321, 5329) — fragile UX.
+5. `Load sample data` adds fake families with NO confirm on empty device (5129) — sits next to Backup/Publish.
+6. Fonts via Google CDN (index.html:22-24) — offline fallback; photos eat localStorage quota (5MB).
+7. Three parallel auth paths (OTP code / magic link / URL link) — suggest making link primary.
+8. GOOD: escaping everywhere, auto-publish works, no dup IDs, no console.log, deceased excluded in main stats.

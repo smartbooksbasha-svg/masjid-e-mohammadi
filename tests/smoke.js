@@ -65,25 +65,16 @@ const wait = ms => new Promise(r => setTimeout(r, ms || 120));
   ok((P.doc.querySelector('#content').textContent || '').trim().length > 20, 'public dashboard renders');
   ok(!/memc_families/.test(JSON.stringify(Object.keys(P.win.localStorage))), 'no family cache written on public boot');
 
-  /* guards */
-  const evCtx = new P.win.MouseEvent('contextmenu', { bubbles: true, cancelable: true });
-  P.doc.querySelector('#content').dispatchEvent(evCtx);
-  ok(evCtx.defaultPrevented, 'right-click blocked on content');
-  const inp = P.win.document.createElement('input');
-  P.doc.body.appendChild(inp);
-  ok(!/Right-click band hai/.test(P.doc.querySelector('#toasts').textContent || ''), 'right-click blocked silently (no popup)');
-  const evCtx2 = new P.win.MouseEvent('contextmenu', { bubbles: true, cancelable: true });
-  inp.dispatchEvent(evCtx2);
-  ok(!evCtx2.defaultPrevented, 'right-click allowed inside inputs (paste)');
+  /* guards — v108 me REMOVED (deterrent tha); ab kuch bhi block nahi hota */
+  const guardsOff = ev => { const e = new P.win.MouseEvent(ev, { bubbles: true, cancelable: true });
+    P.doc.querySelector('#content').dispatchEvent(e); return !e.defaultPrevented; };
+  ok(guardsOff('contextmenu'), 'right-click allowed (guards removed)');
   const evF12 = new P.win.KeyboardEvent('keydown', { key: 'F12', bubbles: true, cancelable: true });
   P.doc.dispatchEvent(evF12);
-  ok(evF12.defaultPrevented, 'F12 blocked');
+  ok(!evF12.defaultPrevented, 'F12 allowed (guards removed)');
   const evCtrlU = new P.win.KeyboardEvent('keydown', { key: 'u', ctrlKey: true, bubbles: true, cancelable: true });
   P.doc.dispatchEvent(evCtrlU);
-  ok(evCtrlU.defaultPrevented, 'Ctrl+U blocked');
-  const evShiftI = new P.win.KeyboardEvent('keydown', { key: 'I', ctrlKey: true, shiftKey: true, bubbles: true, cancelable: true });
-  P.doc.dispatchEvent(evShiftI);
-  ok(evShiftI.defaultPrevented, 'Ctrl+Shift+I blocked');
+  ok(!evCtrlU.defaultPrevented, 'Ctrl+U allowed (guards removed)');
   const evType = new P.win.KeyboardEvent('keydown', { key: 'a', bubbles: true, cancelable: true });
   P.doc.dispatchEvent(evType);
   ok(!evType.defaultPrevented, 'normal typing not blocked');
@@ -496,7 +487,8 @@ const wait = ms => new Promise(r => setTimeout(r, ms || 120));
   ok(/[\u0600-\u06FF]/.test(UR.doc.querySelector('#content').textContent), 'Urdu mode me Urdu script text dikhta hai');
   ok(!/\b(hai|karo|nahi|aap|hain)\b/.test(UR.doc.querySelector('#content').textContent), 'Urdu mode me Hinglish mix nahi');
   ok(!!UR.doc.querySelector('#langSel option[value="ur"]'), 'language list me Urdu option hai');
-  ok(UR.win.eval("Object.keys(I18N.ur).length") === UR.win.eval("Object.keys(I18N.en).length"), 'Urdu dictionary English ke barabar hai (koi key chhooti nahi)');
+  ok(UR.win.eval("Object.keys(I18N.en).every(k => I18N.ur[k] !== undefined)"), 'Urdu dict me English ki saari keys hain (en subset ur)');
+  ok(UR.win.eval("['Male','Female','Other','Unmarried','Married','Widow','Widower','Divorced'].every(k => I18N.ur[k])"), 'gender/marital enum keys Urdu me translate hote hain');
   UR.win.eval("setLang('en')"); await wait(200);
   ok(UR.doc.documentElement.getAttribute('dir') === 'ltr', 'English par layout wapas LTR');
 
@@ -507,6 +499,54 @@ const wait = ms => new Promise(r => setTimeout(r, ms || 120));
   LG.win.eval("DB.setLogo(''); applyFavicon()");
   const iconBack = LG.doc.querySelector('link[rel="icon"]').getAttribute('href');
   ok(!/^data:image\/png/.test(String(iconBack)), 'logo hataane par default icon wapas');
+
+  /* ---------------- v108: event-reason modal (prompt ki jagah) ---------------- */
+  const MD = await boot({ admin: OWNER.email, admins: [OWNER] });
+  MD.win.eval("go('add')"); await wait(150);
+  MD.doc.querySelector('[data-act="add-member"]').click(); await wait(120);
+  const scrim = MD.doc.querySelector('.modal-scrim');
+  ok(!!scrim, 'add-member par reason modal khulta hai (prompt nahi)');
+  ok(!!scrim.querySelector('[data-act="evr"][data-ty="death"]'), 'modal me Birth/Death/Other buttons hain');
+  scrim.querySelector('[data-act="evr-cancel"]').click(); await wait(100);
+  ok(!MD.doc.querySelector('.modal-scrim'), 'Cancel modal band karta hai');
+  ok(MD.win.eval("state.draft.members.length") === 1, 'cancel par member add nahi hota (head seed ke barabar)');
+  MD.doc.querySelector('[data-act="add-member"]').click(); await wait(100);
+  MD.doc.querySelector('.modal-scrim [data-act="evr"][data-ty="birth"]').click(); await wait(150);
+  ok(MD.win.eval("state.draft.members.length") === 2, 'Birth choose karne par naya member juddta hai');
+
+  /* v108: deceased counts (detail + list) */
+  const DZ = await boot({ admin: OWNER.email, admins: [OWNER], families: [{
+    id: 'MEMC-DZ01', houseName: 'Deceased Test', street: 'Masjid Road', houseType: 'cement',
+    members: [
+      { name:'Head', gender:'Male', relation:'Head', dob:'1980-01-01', maritalStatus:'Married' },
+      { name:'Abba', gender:'Male', relation:'Father', dob:'1950-01-01', deceased:true, deceasedDate:'2026-10-01', maritalStatus:'Widower' }
+    ] }] });
+  DZ.win.eval("go('detail','MEMC-DZ01')"); await wait(200);
+  const dzTxt = DZ.doc.querySelector('#content').textContent || '';
+  ok(/·\s*1\s*member\(s\)/.test(dzTxt) && !/·\s*2\s*member\(s\)/.test(dzTxt), 'detail me deceased count nahi hota (live 1)');
+
+  /* v108: load-sample confirm — empty device par pehle poochhna */
+  const LS = await boot({ admin: OWNER.email, admins: [OWNER] });
+  LS.win.eval("window.confirm = () => false");
+  LS.doc.querySelector('[data-act="load-sample"]').click(); await wait(150);
+  ok(LS.win.eval("DB.families().length") === 0, 'confirm=false par sample data add nahi hua');
+  LS.win.eval("window.confirm = () => true");
+  LS.doc.querySelector('[data-act="load-sample"]').click(); await wait(150);
+  ok(LS.win.eval("DB.families().length > 0"), 'confirm=true par sample load hota hai');
+
+  /* v108: fonts self-hosted */
+  const fs2 = require('fs');
+  ok(fs2.readFileSync('sw.js','utf8').includes("fonts/manrope"), 'sw shell me fonts hain (offline chalenge)');
+  ok(fs2.readFileSync('styles.css','utf8').includes("@font-face{font-family:'Sora'"), 'styles.css me self-hosted @font-face hai');
+
+  /* v108: urdu mode me gender option urdu me */
+  const UR2 = await boot({ admin: OWNER.email, admins: [OWNER] });
+  UR2.win.eval("setLang('ur')"); await wait(100);
+  UR2.win.eval("go('add')"); await wait(200);
+  const gOpt = UR2.doc.querySelector('select[data-field="m.gender"] option[value="Male"]');
+  const gVal = UR2.doc.querySelector('select[data-field="m.gender"]').value;
+  ok(!!gOpt && /[\u0600-\u06FF]/.test(gOpt.textContent), 'urdu mode me gender label urdu script me hai');
+  ok(gVal === 'Male', 'option ki VALUE abhi bhi raw English hai (data safe)');
 
   /* ---------------- 9. backup round trip ---------------- */
   const backup = A.win.eval("JSON.stringify({ families:DB.families(), masjid:DB.masjid() })");
