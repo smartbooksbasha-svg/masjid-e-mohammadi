@@ -391,7 +391,7 @@ function auditAdminsDiff(before, after){
     const old = bm.get(k);
     const nm = a.name || a.email || a.userId || k;
     if (!old){
-      audit('admin_add', nm, [a.userId||'', a.role==='owner'?'owner':'admin', a.pending?'pending':''].filter(Boolean).join(' · '));
+      audit('admin_add', nm, [a.userId||'', a.role==='owner'?'owner':'user', a.pending?'pending':''].filter(Boolean).join(' · '));
       return;
     }
     if (JSON.stringify(adminVolatile(old)) !== JSON.stringify(adminVolatile(a))){
@@ -654,7 +654,7 @@ const IDSET_DEFAULT = {
   famPrefix:'MEMC', famRandom:true        /* family id = MEMC-<yy><4 random> */
 };
 /* app version — footer/settings me dikhta hai, update confirm karne ke liye */
-const APP_VER = 'v109';
+const APP_VER = 'v110';
 const APP_VER_AT = '2026-10-28';
 
 /* password input + show/hide eye button */
@@ -1516,7 +1516,7 @@ function renderShell(){
   const chip = $('#userChip');
   if (u){
     const initials = (u.name||u.email).split(/[ @.]/).filter(Boolean).map(w=>w[0]).slice(0,2).join('').toUpperCase();
-    const roleName = isOwner() ? 'Super Admin' : 'Admin';
+    const roleName = isOwner() ? 'Owner · Admin' : 'User';
     const admins = DB.admins();
     const me = admins.find(a=> (a.email===u.email) || (a.userId===u.userId)) || u;
     const ph = me.photo ? `<img src="${esc(me.photo)}" alt="Profile photo"/>` : initials;
@@ -2929,7 +2929,7 @@ const I18N = {
     'Ye login turant kaam karta hai. Admin pehli baar login karke My Profile se photo/naam badal sakta hai.':'This login works immediately. The admin can change photo/name from My Profile after the first login.',
     'Reset password':'Reset password',
     'Naya password ban gaya':'New password generated',
-    'Active admins (Super Admin + Admin)':'Active admins (Super Admin + Admin)',
+    'Active admins (Super Admin + Admin)':'Active admins (Owner + User)',
     'Pending requests (legacy)':'Pending requests (legacy)',
     'Change password':'Change password',
     'Current password':'Current password',
@@ -2979,7 +2979,9 @@ const I18N = {
     'Preview card':'Preview card',
     'Reset to default':'Reset to default',
     'Preview ke liye pehle ek family add karo.':'Add a family first to preview.',
-    'Super admin only':'Super admin only',
+    'Super admin only':'Only the Owner can open this.',
+    'Sirf Owner hi ye page khol sakta hai':'Only the Owner can open this page.',
+    'Aap sirf data add/edit kar sakte ho':'You can only add or edit data.',
     'Card design sirf super admin badal sakta hai.':'Only the super admin can change the card design.',
     'Card design save ho gaya':'Card design saved',
     'Card design reset ho gaya':'Card design reset',
@@ -3278,7 +3280,7 @@ const I18N = {
     "session start":"session start",
     "Smart card":"Smart card",
     "Street name *":"Street name *",
-    "Super Admin":"Super Admin",
+    "Super Admin":"Owner · Admin",
     "Total Aalim & Hafiz":"Total Aalim & Hafiz",
     "Total Aalim & Hafiz (men + women)":"Total Aalim & Hafiz (men + women)",
     "Total child / students":"Total child / students",
@@ -3893,7 +3895,7 @@ const I18N = {
     "Ye login turant kaam karta hai. Admin pehli baar login karke My Profile se photo/naam badal sakta hai.":"یہ لاگ ان فوراً کام کرتا ہے۔ ایڈمن پہلی بار لاگ ان کر کے «میری پروفائل» سے تصویر/نام بدل سکتا ہے۔",
     "Reset password":"پاس ورڈ ری سیٹ",
     "Naya password ban gaya":"نیا پاس ورڈ بن گیا",
-    "Active admins (Super Admin + Admin)":"فعال ایڈمن (سپر ایڈمن + ایڈمن)",
+    "Active admins (Super Admin + Admin)":"فعال ایڈمن (مالک + صارف)",
     "Pending requests (legacy)":"زیرِ التوا درخواستیں (پرانی)",
     "Change password":"پاس ورڈ بدلیں",
     "Current password":"موجودہ پاس ورڈ",
@@ -4226,7 +4228,7 @@ const I18N = {
     "session start":"سیشن شروع",
     "Smart card":"اسمارٹ کارڈ",
     "Street name *":"گلی کا نام *",
-    "Super Admin":"سپر ایڈمن",
+    "Super Admin":"مالک · ایڈمن",
     "Total Aalim & Hafiz":"کل عالم اور حافظ",
     "Total Aalim & Hafiz (men + women)":"کل عالم اور حافظ (مرد + خواتین)",
     "Total child / students":"کل بچے / طلبہ",
@@ -4278,7 +4280,10 @@ const I18N = {
     "Father":"والد",
     "Mother":"والدہ",
     "Brother":"بھائی",
-    "Sister":"بہن",
+        'Sirf Owner hi ye page khol sakta hai':'صرف مالک ہی یہ صفحہ کھول سکتا ہے',
+    'Aap sirf data add/edit kar sakte ho':'آپ صرف ڈیٹا شامل / تبدیل کر سکتے ہیں',
+    'Super admin only':'صرف مالک کے لیے',
+"Sister":"بہن",
     'Wajah kya hai?':'وجہ کیا ہے؟',
     'Janam hua hai':'ولادت ہوئی',
     'Inteqal ho gaya':'انتقال ہو گیا',
@@ -4783,7 +4788,7 @@ function viewUsersTable(){
     <div class="table-wrap" style="margin-top:14px"><table><thead><tr><th>User ID</th><th>Admin (Photo / Name / Email)</th><th>Phone</th><th>Age</th><th>Password</th><th>Role</th><th>Action</th></tr></thead><tbody>
     ${act.map(a=>{ const isO = String(a.email).toLowerCase()===owner || a.role==='owner'; const ini=(a.name||a.email).split(/[ @.]/).filter(Boolean).map(w=>w[0]).slice(0,2).join('').toUpperCase(); return `<tr><td class="mono">${esc(a.userId||'—')}</td><td><div style="display:flex;gap:10px;align-items:center"><span class="av" style="width:36px;height:36px;font-size:.8rem;overflow:hidden;border-radius:12px;border:1px solid var(--line)">${a.photo?`<img src='${esc(a.photo)}' style='width:100%;height:100%;object-fit:cover'/>`:esc(ini)}</span><div><div style="font-weight:600">${esc(a.name||'—')}</div><div class="muted small">${esc(a.email)}</div></div></div></td><td>${esc(a.phone||'—')}</td><td>${esc(a.age||'—')}</td><td>${isO?'<span class="muted small">—</span>':(a.tempPass
         ? `<div class="tp" data-pw="${esc(a.tempPass)}" data-shown="0"><code>••••••</code><button class="btn ghost sm" data-act="tp-show">Show</button><button class="btn ghost sm" data-act="tp-copy" title="Copy User ID + password">${ICON.clipboard}</button></div>`
-        : '<span class="muted small">Badla ja chuka hai</span>')}</td><td>${isO?'<span class="badge">Super Admin</span>':'<span class="badge gray">Admin</span>'}</td><td style="display:flex;gap:6px;flex-wrap:wrap">${isO?'<span class="muted small">Locked</span>':`<button class="btn sm" data-act="admin-edit" data-id="${esc(a.email)}">Edit</button><button class="btn sm ghost" data-act="reset-admin-pass" data-id="${esc(a.email)}">Reset password</button><button class="btn sm ghost" data-act="del-admin" data-id="${esc(a.email)}">Remove</button>`}</td></tr>`; }).join('')}
+        : '<span class="muted small">Badla ja chuka hai</span>')}</td><td>${isO?'<span class="badge">Owner · Admin</span>':'<span class="badge gray">User</span>'}</td><td style="display:flex;gap:6px;flex-wrap:wrap">${isO?'<span class="muted small">Locked</span>':`<button class="btn sm" data-act="admin-edit" data-id="${esc(a.email)}">Edit</button><button class="btn sm ghost" data-act="reset-admin-pass" data-id="${esc(a.email)}">Reset password</button><button class="btn sm ghost" data-act="del-admin" data-id="${esc(a.email)}">Remove</button>`}</td></tr>`; }).join('')}
     </tbody></table></div>`:''}
   `;
 }
@@ -4791,7 +4796,7 @@ function viewUsersReadonly(){
   const admins = DB.admins().filter(a=>a.status!=='pending');
   const owner = ownerEmail();
   return `<div class="table-wrap"><table><thead><tr><th>User ID</th><th>Name</th><th>Email</th><th>Role</th></tr></thead><tbody>
-  ${admins.map(a=>{ const isO = String(a.email).toLowerCase()===owner || a.role==='owner'; return `<tr><td class="mono">${esc(a.userId||'—')}</td><td>${esc(a.name||'—')}</td><td>${esc(a.email)}</td><td>${isO?'<span class="badge">Super Admin</span>':'<span class="badge gray">Admin</span>'}</td></tr>`; }).join('')}
+  ${admins.map(a=>{ const isO = String(a.email).toLowerCase()===owner || a.role==='owner'; return `<tr><td class="mono">${esc(a.userId||'—')}</td><td>${esc(a.name||'—')}</td><td>${esc(a.email)}</td><td>${isO?'<span class="badge">Owner · Admin</span>':'<span class="badge gray">User</span>'}</td></tr>`; }).join('')}
   </tbody></table></div>`;
 }
 function viewSettingsCard(ctx='adminpanel'){

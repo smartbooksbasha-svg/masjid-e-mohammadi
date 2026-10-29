@@ -654,3 +654,36 @@ Key findings (details + line numbers in TASK.md "AUDIT" section):
 6. Fonts via Google CDN (index.html:22-24) — offline fallback; photos eat localStorage quota (5MB).
 7. Three parallel auth paths (OTP code / magic link / URL link) — suggest making link primary.
 8. GOOD: escaping everywhere, auto-publish works, no dup IDs, no console.log, deceased excluded in main stats.
+
+## v108+v109 (2026-10-29, LIVE v109, tests 191 green)
+- **v108 (commit `c785843`)** poora audit-fix batch:
+  - Dead code removal: sanitize/sanitizeInput/loginLocked/softWarn/docRow/viewUsers/viewSettings/qrDataURL
+    delete; cloudAutoLogin sirf stub; magic-login dead handler remove; `loginFailed()` gaalti se ud gaya tha
+    (guards edit ke block me tha) — RESTORE kiya (login flow iska use karta hai, test ne pakda).
+  - Guards (right-click/F12/Ctrl+U/dragstart) REMOVED — deterrent tha; touch listeners chalu.
+  - **Event-reason modal** `askEventReason(cb)` + `.modal-scrim/.modal-card` CSS + evr/evr-cancel
+    delegation ne `prompt('Enter 1,2 or 3')` ki jagah le li. **ASLI BUG:** evr branch pehle
+    `closeEventReason()` chalata tha jo `_evReasonCB` null kar deta tha → callback kabhi nahi chalta tha;
+    cb capture karo PEHLE, close baad me. Birth = naya member, Death = member ko mark karo
+    (ka naam aur date), Other = render se hata do.
+  - Deceased = LIVE counts: detail (men/women/subtitle/Members row), print males, Excel Men/Women,
+    ID-card footer — sab me `!deceased`; dashboard pehle se excluded.
+  - Gender/Marital enums: form/find options par `value` attr MANDATORY (raw English value, sirf text ko
+    tStr karo — Urdu UI par bhi data clean), cells/list/print sab tStr. en+ur me keys (Male=mard,
+    Female=aurat, Unmarried, Married, Widow, Widower, Divorced, Other).
+  - load-sample par khali data ke sath bhi confirm; toast/confirm keys en+ur.
+  - fonts self-hosted `fonts/` (sora + manrope variable woff2, latin) — @font-face styles.css,
+    CSP me se Google fonts domain block, sw SHELL me fonts. `tools/_fonts.css` scopes hoύν.
+- **v109 (commit `cb3535e`)** ROLE MODEL Shan's order:
+  - 2 tier: **owner** (FIXED_OWNER_EMAIL smartbooksbasha@gmail.com, locked) vs **user** (data entry).
+    currentUser.role = owner?'owner':'user'; userRole() helper.
+  - migrateAdmins() par role default: owner→'owner', baaki sab→'user' (legacy 'admin' role migrate hota hai).
+  - OWNER_ONLY routes = adminpanel/users/settings/audit/idcard (go() + popstate DONO me guard hai);
+    user inhe kholne par dashboard + par toast nahi (no error toasts).
+  - USER_DENIED acts (export/print/publish/backup/restore/drive/sample/clear/admin-mgmt) + buttons
+    sirf owner ke liye render hote hai (dashboard header, families header Excel/PDF, detail PDF/ID cards,
+    sample-data button, backup banner). User ko: dashboard/add/edit/detail/families/masjid save/find
+    (v104 Edit + Full record)/my-profile.
+  - Badge: user = "User · data entry", owner ke liye full buttons, public = "Public view · read only".
+- Tests 191/191; audits: en/hi/ur 0 leftovers, ta = 186 (pehle se pending). Page CDN ~1 min — curl verify
+  karo (app.js APP_VER 'v109', sw CACHE 'memc-app-v109').
