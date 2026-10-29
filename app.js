@@ -7,7 +7,7 @@
 /* ---------------- config / constants ---------------- */
 const CFG = window.APP_CONFIG || {};
 const PREFIX = CFG.FAMILY_ID_PREFIX || 'MEMC';
-const LS = { admins:'memc_admins', families:'memc_families', seq:'memc_seq', session:'memc_session', theme:'memc_theme', seeded:'memc_seeded', masjid:'memc_masjid', events:'memc_events', logo:'memc_logo', formDraft:'memc_form_draft', idcard:'memc_idcard', idset:'memc_idset', audit:'memc_audit' };
+const LS = { admins:'memc_admins', families:'memc_families', seq:'memc_seq', session:'memc_session', theme:'memc_theme', seeded:'memc_seeded', masjid:'memc_masjid', events:'memc_events', logo:'memc_logo', formDraft:'memc_form_draft', idcard:'memc_idcard', idset:'memc_idset', audit:'memc_audit', deviceId:'memc_device_id' };
 
 const DOC_TYPES = [
   ['aadhaar','Aadhaar Card'], ['pan','PAN Card'], ['passport','Passport'],
@@ -602,15 +602,17 @@ function purgeNonOwnerAdmins(){
         userId: 'ADM-OWNER-0001', createdAt: Date.now(), phone: '' });
       changed = true;
     }
-    admins.forEach(a=>{
-      const isOwnerRow = String(a.email||'').toLowerCase() === FIXED;
-      if (isOwnerRow){
-        if (a.role !== 'owner' || a.status !== 'active'){ a.role='owner'; a.status='active'; changed = true; }
-        if (!a.userId){ a.userId = 'ADM-OWNER-0001'; changed = true; }
-      } else if (a.role === 'owner'){       /* koi aur khud ko owner na bana sake */
-        a.role = 'admin'; changed = true;
-      }
-    });
+  admins.forEach(a=>{
+    const isOwnerRow = String(a.email||'').toLowerCase() === FIXED;
+    if (isOwnerRow){
+      if (a.role !== 'owner' || a.status !== 'active'){ a.role='owner'; a.status='active'; changed = true; }
+      if (!a.userId){ a.userId = 'ADM-OWNER-0001'; changed = true; }
+    } else if (a.role === 'owner'){       /* koi aur khud ko owner na bana sake */
+      a.role = 'admin'; changed = true;
+    }
+    if (!Array.isArray(a.devices)) { a.devices = []; changed = true; }
+    if (!Array.isArray(a.pendingDevices)) { a.pendingDevices = []; changed = true; }
+  });
     /* purge sirf tab jab data placeholders ho (demo/legacy) — asli admins safe */
     const keep = admins.filter(a=>{
       const e = String(a.email||'').toLowerCase();
@@ -654,7 +656,7 @@ const IDSET_DEFAULT = {
   famPrefix:'MEMC', famRandom:true        /* family id = MEMC-<yy><4 random> */
 };
 /* app version — footer/settings me dikhta hai, update confirm karne ke liye */
-const APP_VER = 'v111';
+const APP_VER = 'v112';
 const APP_VER_AT = '2026-10-29';
 
 /* password input + show/hide eye button */
@@ -747,6 +749,87 @@ function genTempPass(){
   /* beech ka 6 hamesha random — prefix/suffix fix ho to bhi password guess na ho */
   return (cfg.passPrefix||'') + pick(U,2) + pick(L,2) + pick(D,2) + (cfg.passSuffix||'');
 }
+function getDeviceId(){
+  try {
+    let id = localStorage.getItem(LS.deviceId) || '';
+    if (!id){
+      id = 'dev_' + uid() + '_' + Date.now().toString(36);
+      localStorage.setItem(LS.deviceId, id);
+    }
+    return id;
+  } catch(e){ return 'dev_' + uid(); }
+}
+function ensureAdminDevices(a){
+  if (!a) return a;
+  if (!Array.isArray(a.devices)) a.devices = [];
+  if (!Array.isArray(a.pendingDevices)) a.pendingDevices = [];
+  return a;
+}
+function adminHasDevice(a, did){
+  did = did || getDeviceId();
+  a = ensureAdminDevices(a);
+  return (a.devices||[]).some(d=> d && d.id === did);
+}
+function addAdminDevice(a, did, meta){
+  did = did || getDeviceId();
+  a = ensureAdminDevices(a);
+  if (adminHasDevice(a,did)) return a;
+  (a.devices||[]).push({ id: did, addedAt: Date.now(), ua: (meta&&meta.ua)||navigator.userAgent||'', lastSeen: Date.now() });
+  return a;
+}
+function requestAdminDevice(a, did, meta){
+  did = did || getDeviceId();
+  a = ensureAdminDevices(a);
+  if (adminHasDevice(a,did)) return { ok:true };
+  if ((a.pendingDevices||[]).some(d=> d && d.id === did)) return { pending:true };
+  (a.pendingDevices||[]).push({ id: did, requestedAt: Date.now(), ua: (meta&&meta.ua)||navigator.userAgent||'' });
+  return { pending:true };
+}
+function approveAdminDevice(email, did){
+  const admins = DB.admins();
+  const a = admins.find(x=> String(x.email||'').toLowerCase() === String(email||'').toLowerCase());
+  if (!a) return false;
+  ensureAdminDevices(a);
+  a.pendingDevices = (a.pendingDevices||[]).filter(d=> !(d && d.id === did));
+  if (!adminHasDevice(a,did)) (a.devices||[]).push({ id: did, addedAt: Date.now(), approvedBy: currentUser() && currentUser().email, approvedAt: Date.now() });
+  if ((a.devices||[]).length > 2) { /* allow owner? */ }
+  DB.setAdmins(admins);
+  return true;
+}
+function rejectAdminDevice(email, did){
+  const admins = DB.admins();
+  const a = admins.find(x=> String(x.email||'').toLowerCase() === String(email||'').toLowerCase());
+  if (!a) return false;
+  ensureAdminDevices(a);
+  a.pendingDevices = (a.pendingDevices||[]).filter(d=> !(d && d.id === did));
+  DB.setAdmins(admins);
+  return true;
+}
+function deviceGateLogin(a){
+  if (!a) return { ok:false, reason:'notfound' };
+  if (adminStatus(a) === 'pending') return { ok:false, reason:'pending' };
+  const e = String(a.email||'').toLowerCase();
+  if (e === FIXED_OWNER_EMAIL) return { ok:true };
+  const did = getDeviceId();
+  ensureAdminDevices(a);
+  if (adminHasDevice(a,did)) {
+    // update lastSeen
+    const ds = a.devices||[];
+    const di = ds.findIndex(d=> d && d.id === did);
+    if (di>=0) ds[di].lastSeen = Date.now();
+    return { ok:true };
+  }
+  // device not registered
+  if ((a.devices||[]).length >= 2){
+    const req = requestAdminDevice(a,did);
+    if (req.pending) return { ok:false, reason:'device_limit', email:a.email };
+  } else {
+    // allow first device auto-register? but rule says "1 device he kaam kare" per user id? user says "ek user id mein 1 device he kaam kare" - strict 1
+    const req = requestAdminDevice(a,did);
+    if (req.pending) return { ok:false, reason:'device_limit', email:a.email };
+  }
+  return { ok:false, reason:'device_limit', email:a.email };
+}
 function findAdminByIdentifier(v){
   const s = String(v||'').trim(); if (!s) return null;
   if (s.includes('@')) return adminByEmail(s);
@@ -781,7 +864,7 @@ function openAuth(tab){
   if (guardHidden()){
     try { clearInterval(_lockTimer); } catch(e){}
     const box = $('#authScreen'); if (box){ box.classList.add('hidden'); box.innerHTML = ''; }
-    try { toast('Admin panel security lock me hai — ' + mmss(guardLeftMs(guardGet().hiddenUntil)/1000) + ' baad try karo', 'err'); } catch(e){}
+    try { toast(tF('Admin panel security lock me hai — {0} baad try karo', mmss(guardLeftMs(guardGet().hiddenUntil)/1000)), 'err'); } catch(e){}
     return;
   }
   renderAuth(tab || 'login');
@@ -864,7 +947,7 @@ async function loginSubmit(e){
   e.preventDefault();
   const E = e.target.elements, alertBox = $('#loginAlert');
   if (guardHidden()){
-    alertBox.innerHTML='<div class="alert err">Admin panel abhi band hai (security lock) — <b>'+mmss(guardLeftMs(guardGet().hiddenUntil)/1000)+'</b> baad try karo.</div>';
+    alertBox.innerHTML='<div class="alert err">'+tF('Admin panel abhi band hai (security lock) — {0} baad try karo.', '<b>'+mmss(guardLeftMs(guardGet().hiddenUntil)/1000)+'</b>')+'</div>';
     return;
   }
   if (guardLocked()){
@@ -876,17 +959,17 @@ async function loginSubmit(e){
   const found = findAdminByIdentifier(ident);
   if (!found && !isEmail(ident)){ alertBox.innerHTML='<div class="alert err">User ID / email galat lag raha hai.</div>'; return; }
   if (found && adminStatus(found) === 'pending'){
-    alertBox.innerHTML='<div class="alert err">This account is pending approval. Wait for approval.</div>'; return;
+    alertBox.innerHTML='<div class="alert err">'+tF('Ye account approval ka intezar kar raha hai. Owner se approval mangwa lo.')+'</div>'; return;
   }
   const email = found ? String(found.email).toLowerCase() : ident.toLowerCase();
   const btn = e.target.querySelector('button[type="submit"]');
-  if (btn){ btn.disabled = true; btn.textContent = 'Logging in…'; }
+  if (btn){ btn.disabled = true; btn.textContent = tF('Logging in…'); }
 
   if (mailMode() === 'cloud'){
     const c = await CLOUD.get();
-    if (!c){ if (btn){ btn.disabled=false; btn.textContent='Login'; } alertBox.innerHTML='<div class="alert err">Cloud connect nahi hua — internet check karo.</div>'; return; }
+    if (!c){ if (btn){ btn.disabled=false; btn.textContent='Login'; } alertBox.innerHTML='<div class="alert err">'+tF('Cloud connect nahi hua — internet check karo.')+'</div>'; return; }
     const { error } = await c.auth.signInWithPassword({ email, password: pass });
-    if (error){ loginFailed(); audit('login_fail', email, String(error.message||'cloud login failed'), { by:email, id:'', email }); if (btn){ btn.disabled=false; btn.textContent='Login'; } alertBox.innerHTML='<div class="alert err">'+esc(error.message)+'</div>'; applyLoginGuard(); return; }
+    if (error){ loginFailed(); audit('login_fail', email, String(error.message||'cloud login failed'), { by:email, id:'', email }); if (btn){ btn.disabled=false; btn.textContent='Login'; } alertBox.innerHTML='<div class="alert err">'+tF('Login fail hua — User ID/Email ya password galat hai.')+'</div>'; applyLoginGuard(); return; }
     loginOk();
     await cloudClaimAdmin(email, '', '');
     if (!adminByEmail(email)){
@@ -894,24 +977,35 @@ async function loginSubmit(e){
       admins.push({ email, name:email.split('@')[0], phone:'', createdAt:Date.now(), verified:true, cloud:true });
       DB.setAdmins(admins);
     }
+    const adm = adminByEmail(email);
+    const dg = deviceGateLogin(adm);
+    if (!dg.ok){
+      if (dg.reason === 'device_limit'){ alertBox.innerHTML='<div class="alert err">'+tF('Is device par login allowed nahi hai. Device limit (1 device per User ID) hai — owner se permission mangwa lo.')+'</div>'; if (btn){ btn.disabled=false; btn.textContent='Login'; } loginFailed(); return; }
+      if (btn){ btn.disabled=false; btn.textContent='Login'; } alertBox.innerHTML='<div class="alert err">'+tF('Login nahi ho saka. Dubara try karo ya owner se contact karo.')+'</div>'; return;
+    }
     startSession(email);
     closeAuth(); enterApp(); toast('Welcome back'); return;
   }
 
   const admin = adminByEmail(email);
-  if (!admin){ if (btn){ btn.disabled=false; btn.textContent='Login'; } alertBox.innerHTML='<div class="alert err">Is email se koi admin nahi hai.</div>'; return; }
+  if (!admin){ if (btn){ btn.disabled=false; btn.textContent='Login'; } alertBox.innerHTML='<div class="alert err">'+tF('Is email/User ID se koi admin nahi mila.')+'</div>'; return; }
   if (!(await checkPass(pass, admin))){
     loginFailed();
     audit('login_fail', admin.name || email, 'wrong password', { by:admin.name || email, id:admin.userId || '', email });
     if (btn){ btn.disabled=false; btn.textContent='Login'; }
     const gg = guardGet();
     let m;
-    if (guardHidden()) m = 'Incorrect password. <b>6 galat try</b> — admin panel <b>' + mmss(guardLeftMs(gg.hiddenUntil)/1000) + '</b> ke liye band.';
-    else if (guardLocked()) m = 'Incorrect password. <b>3 galat try</b> — <b>' + mmss(guardLeftMs(gg.lockUntil)/1000) + '</b> baad try karo.';
-    else m = 'Incorrect password. <b>' + Math.max(0, GUARD_TRIES - gg.fails) + ' try</b> bache.';
+    if (guardHidden()) m = tF('Galat password. {0} galat try ke baad admin panel {1} ke liye band hai.', '<b>'+GUARD_HIDE_AFTER+' galat try</b>', '<b>'+mmss(guardLeftMs(gg.hiddenUntil)/1000)+'</b>');
+    else if (guardLocked()) m = tF('Galat password. {0} galat try — {1} baad dobara try karo.', '<b>'+GUARD_TRIES+' galat try</b>', '<b>'+mmss(guardLeftMs(gg.lockUntil)/1000)+'</b>');
+    else m = tF('Galat password. Abhi {0} try bache hain.', '<b>'+Math.max(0, GUARD_TRIES - gg.fails)+'</b>');
     alertBox.innerHTML='<div class="alert err">' + m + '</div>';
     applyLoginGuard();
     return;
+  }
+  const dg2 = deviceGateLogin(admin);
+  if (!dg2.ok){
+    if (dg2.reason === 'device_limit'){ alertBox.innerHTML='<div class="alert err">'+tF('Ye device allow nahi hai (1 device per User ID). Owner se permission le ke login karo.')+'</div>'; if (btn){ btn.disabled=false; btn.textContent='Login'; } loginFailed(); return; }
+    if (btn){ btn.disabled=false; btn.textContent='Login'; } alertBox.innerHTML='<div class="alert err">'+tF('Login blocked — owner se contact karo.')+'</div>'; return;
   }
   loginOk();
   startSession(email);
@@ -4340,6 +4434,12 @@ function tStr(s){
   const hit = trLookup(_norm(s));
   return hit || s;
 }
+/* {0}/{1} placeholders ke saath translate (counts/times HTML ke saath aa sakte hain) */
+function tF(key){
+  let out = tStr(String(key));
+  for (let i=1; i<arguments.length; i++) out = out.split('{'+(i-1)+'}').join(String(arguments[i]));
+  return out;
+}
 
 function langLabel(code){ const l = LANGS.find(x=>x[0]===code); return l ? l[1] : 'Hinglish'; }
 
@@ -4601,22 +4701,24 @@ function signatureImage(src){
 }
 function saveIdsetForm(form){
   if (!isOwner()){ toast('Sirf super admin','err'); return; }
-  const E = form.elements;
-  DB.setIdsSet({
-    idStyle: String(E.idStyle ? E.idStyle.value : 'random') === 'seq' ? 'seq' : 'random',
-    ownerPrefix: String(E.ownerPrefix ? E.ownerPrefix.value : '').trim(),
-    ownerStart:  1,
-    adminStart:  Number(E.adminStart ? E.adminStart.value : 101) || 101,
-    adminPrefix: String(E.adminPrefix.value||'').trim(),
-    adminSuffix: String(E.adminSuffix.value||'').trim(),
-    passPrefix:  String(E.passPrefix.value||'').trim(),
-    passSuffix:  String(E.passSuffix.value||'').trim(),
-    famPrefix:   String(E.famPrefix.value||'').trim(),
-    famRandom:   String(E.famRandom.value)!=='0'
-  });
-  migrateAdmins();   /* naye format par IDs turant ban jayen */
-  toast('ID format save ho gaya','ok');
-  go('adminpanel');
+  try {
+    const E = form.elements || {};
+    DB.setIdsSet({
+      idStyle: String(E.idStyle ? E.idStyle.value : 'random') === 'seq' ? 'seq' : 'random',
+      ownerPrefix: String(E.ownerPrefix ? E.ownerPrefix.value : '').trim(),
+      ownerStart:  1,
+      adminStart:  Number(E.adminStart ? E.adminStart.value : 101) || 101,
+      adminPrefix: String(E.adminPrefix ? E.adminPrefix.value : '').trim(),
+      adminSuffix: String(E.adminSuffix ? E.adminSuffix.value : '').trim(),
+      passPrefix:  String(E.passPrefix ? E.passPrefix.value : '').trim(),
+      passSuffix:  String(E.passSuffix ? E.passSuffix.value : '').trim(),
+      famPrefix:   String(E.famPrefix ? E.famPrefix.value : '').trim(),
+      famRandom:   String(E.famRandom ? E.famRandom.value : '1')!=='0'
+    });
+    migrateAdmins();   /* naye format par IDs turant ban jayen */
+    toast('ID format save ho gaya','ok');
+    go('adminpanel');
+  } catch(e){ toast('Save nahi hua','err'); }
 }
 function saveIdcardForm(form){
   if (!isOwner()){ toast('Sirf super admin','err'); return; }
@@ -4789,11 +4891,27 @@ function viewUsersTable(){
     <td style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn sm" data-act="approve-admin" data-id="${esc(a.email)}">Approve</button><button class="btn sm ghost" data-act="reject-admin" data-id="${esc(a.email)}">Reject</button></td></tr>`).join('')}
     </tbody></table></div>`:''}
 
+    ${(function(){
+      const devs = [];
+      (isOwner()?admins:[]).forEach(a=>{
+        ensureAdminDevices(a);
+        (a.pendingDevices||[]).forEach(d=>{
+          devs.push({ email:a.email, name:a.name||a.email, userId:a.userId, did:d.id, ua:d.ua||'', requestedAt:d.requestedAt });
+        });
+      });
+      if (!devs.length) return '';
+      return `<div class="sec-title">Device approval (1 device per User ID)</div>
+      <div class="table-wrap"><table><thead><tr><th>Admin</th><th>User ID</th><th>Device</th><th>Requested</th><th>Action</th></tr></thead><tbody>
+      ${devs.map(x=>`<tr><td>${esc(x.name)}</td><td class="mono">${esc(x.userId||'—')}</td><td class="small muted" title="${esc(x.ua)}">${esc((x.did||'').slice(0,18))}…</td><td class="small">${x.requestedAt?fmtDate(x.requestedAt):'—'}</td>
+      <td style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn sm" data-act="approve-device" data-email="${esc(x.email)}" data-did="${esc(x.did)}">Approve</button><button class="btn sm ghost" data-act="reject-device" data-email="${esc(x.email)}" data-did="${esc(x.did)}">Reject</button></td></tr>`).join('')}
+      </tbody></table></div>`;
+    })()}
+
     ${showList?`
-    <div class="table-wrap" style="margin-top:14px"><table><thead><tr><th>User ID</th><th>Admin (Photo / Name / Email)</th><th>Phone</th><th>Age</th><th>Password</th><th>Role</th><th>Action</th></tr></thead><tbody>
-    ${act.map(a=>{ const isO = String(a.email).toLowerCase()===owner || a.role==='owner'; const ini=(a.name||a.email).split(/[ @.]/).filter(Boolean).map(w=>w[0]).slice(0,2).join('').toUpperCase(); return `<tr><td class="mono">${esc(a.userId||'—')}</td><td><div style="display:flex;gap:10px;align-items:center"><span class="av" style="width:36px;height:36px;font-size:.8rem;overflow:hidden;border-radius:12px;border:1px solid var(--line)">${a.photo?`<img src='${esc(a.photo)}' style='width:100%;height:100%;object-fit:cover'/>`:esc(ini)}</span><div><div style="font-weight:600">${esc(a.name||'—')}</div><div class="muted small">${esc(a.email)}</div></div></div></td><td>${esc(a.phone||'—')}</td><td>${esc(a.age||'—')}</td><td>${isO?'<span class="muted small">—</span>':(a.tempPass
+    <div class="table-wrap" style="margin-top:14px"><table><thead><tr><th>User ID</th><th>Admin (Photo / Name / Email)</th><th>Phone</th><th>Age</th><th>Password</th><th>Devices</th><th>Role</th><th>Action</th></tr></thead><tbody>
+    ${act.map(a=>{ const isO = String(a.email).toLowerCase()===owner || a.role==='owner'; const ini=(a.name||a.email).split(/[ @.]/).filter(Boolean).map(w=>w[0]).slice(0,2).join('').toUpperCase(); ensureAdminDevices(a); const devCount = (a.devices||[]).length; const pendCount = (a.pendingDevices||[]).length; return `<tr><td class="mono">${esc(a.userId||'—')}</td><td><div style="display:flex;gap:10px;align-items:center"><span class="av" style="width:36px;height:36px;font-size:.8rem;overflow:hidden;border-radius:12px;border:1px solid var(--line)">${a.photo?`<img src='${esc(a.photo)}' style='width:100%;height:100%;object-fit:cover'/>`:esc(ini)}</span><div><div style="font-weight:600">${esc(a.name||'—')}</div><div class="muted small">${esc(a.email)}</div></div></div></td><td>${esc(a.phone||'—')}</td><td>${esc(a.age||'—')}</td><td>${isO?'<span class="muted small">—</span>':(a.tempPass
         ? `<div class="tp" data-pw="${esc(a.tempPass)}" data-shown="0"><code>••••••</code><button class="btn ghost sm" data-act="tp-show">Show</button><button class="btn ghost sm" data-act="tp-copy" title="Copy User ID + password">${ICON.clipboard}</button></div>`
-        : '<span class="muted small">Badla ja chuka hai</span>')}</td><td>${isO?'<span class="badge">Owner · Admin</span>':'<span class="badge gray">User</span>'}</td><td style="display:flex;gap:6px;flex-wrap:wrap">${isO?'<span class="muted small">Locked</span>':`<button class="btn sm" data-act="admin-edit" data-id="${esc(a.email)}">Edit</button><button class="btn sm ghost" data-act="reset-admin-pass" data-id="${esc(a.email)}">Reset password</button><button class="btn sm ghost" data-act="del-admin" data-id="${esc(a.email)}">Remove</button>`}</td></tr>`; }).join('')}
+        : '<span class="muted small">Badla ja chuka hai</span>')}</td><td>${isO?'<span class="muted small">Owner (exempt)</span>':`<span class="badge ${devCount>=1?'':'gray'}">${devCount}/1</span> ${pendCount?'<span class="badge gray">'+pendCount+' pending</span>':''}`}</td><td>${isO?'<span class="badge">Owner · Admin</span>':'<span class="badge gray">User</span>'}</td><td style="display:flex;gap:6px;flex-wrap:wrap">${isO?'<span class="muted small">Locked</span>':`<button class="btn sm" data-act="admin-edit" data-id="${esc(a.email)}">Edit</button><button class="btn sm ghost" data-act="reset-admin-pass" data-id="${esc(a.email)}">Reset password</button><button class="btn sm ghost" data-act="del-admin" data-id="${esc(a.email)}">Remove</button>`}</td></tr>`; }).join('')}
     </tbody></table></div>`:''}
   `;
 }
@@ -4839,20 +4957,19 @@ function viewSettingsCard(ctx='adminpanel'){
             <option value="random" ${IS.idStyle!=='seq'?'selected':''}>Random (recommended) — ${esc(IS.adminPrefix)}102026#21200</option>
             <option value="seq" ${IS.idStyle==='seq'?'selected':''}>Number series — ${esc(IS.adminPrefix)}-2026-0101</option>
           </select></div>
-        <div class="field"><label>Super admin ID prefix</label><input class="inp" name="ownerPrefix" value="${esc(IS.ownerPrefix)}" placeholder="OW" maxlength="10" /><span class="hint"><span>Separate series:</span> ${esc(IS.ownerPrefix)}102026#48391</span></div>
-        <div class="field"><label>Admin ID prefix</label><input class="inp" name="adminPrefix" value="${esc(IS.adminPrefix)}" placeholder="AD" maxlength="10" /><span class="hint">Har naye admin ko alag random ID</span></div>
-        <div class="field"><label>Admin ID start number (series style)</label><input class="inp" name="adminStart" type="number" min="1" max="9999" value="${esc(IS.adminStart)}" /><span class="hint">Sirf number-series style me — default 101</span></div>
-        <div class="field"><label>Admin ID suffix</label><input class="inp" name="adminSuffix" value="${esc(IS.adminSuffix)}" placeholder="khaali" maxlength="10" /><span class="hint">ID ke aakhir me — khaali bhi chhod sakte ho</span></div>
-        <div class="field"><label>Password prefix</label><input class="inp" name="passPrefix" value="${esc(IS.passPrefix)}" placeholder="khaali" maxlength="10" /><span class="hint">Beech ke 6 characters hamesha random rehte hain</span></div>
-        <div class="field"><label>Password suffix</label><input class="inp" name="passSuffix" value="${esc(IS.passSuffix)}" placeholder="khaali" maxlength="10" /></div>
-        <div class="field"><label>Family ID prefix</label><input class="inp" name="famPrefix" value="${esc(IS.famPrefix)}" placeholder="MEMC" maxlength="10" /></div>
+        <div class="card" style="background:linear-gradient(180deg, rgba(52,211,153,.08), transparent)">
+        <div style="font-weight:600">ID aur password auto-generate hote hain</div>
+        <div class="muted small" style="margin-top:4px">Ab prefix/suffix mannual add karne ki zaroorat nahi. Jab bhi naya admin add hoga, User ID aur temp password app khud bana degi. Sirf 1 device per User ID allowed hai.</div>
+      </div>
+      <div class="grid g3" style="margin-top:10px">
+        <div class="field"><label>Family ID prefix</label><input class="inp" id="famPref" value="${esc(IS.famPrefix)}" placeholder="MEMC" maxlength="10" /></div>
         <div class="field"><label>Family ID style</label>
-          <select class="inp" name="famRandom">
+          <select class="inp" id="famStyle">
             <option value="1" ${IS.famRandom?'selected':''}>Random (tough) — ${esc(IS.famPrefix)}-26K7Q2</option>
             <option value="0" ${!IS.famRandom?'selected':''}>Simple — 2026001FM04</option>
           </select></div>
-        <div class="field" style="justify-content:flex-end"><button class="btn" type="submit">Save ID format</button></div>
-      </form>`:''}
+        <div class="field" style="justify-content:flex-end"><button class="btn sm" data-act="save-fam-id">Save family ID</button></div>
+      </div>`:''}
       <div class="sec-title" style="font-size:.9rem">Owner (Fixed)</div>
       <div class="kv">
         <div class="row"><span>Name</span><span><b>${esc(ownerName())}</b></span></div>
@@ -5105,6 +5222,30 @@ document.addEventListener('click', (e)=>{
       u.searchParams.set('v', String(Date.now()));
       location.replace(u.toString());
     })();
+    return;
+  }
+  if (act==='save-fam-id'){
+    if (!isOwner()){ toast('Sirf owner','err'); return; }
+    const famPrefix = ($('#famPref')?.value||'MEMC').trim().toUpperCase().replace(/[^A-Z0-9\-]/g,'') || 'MEMC';
+    const famRandom = $('#famStyle')?.value === '1';
+    const c = Object.assign({}, idset(), { famPrefix, famRandom });
+    DB.setIdset(c);
+    toast('Family ID settings save ho gayi','ok');
+    go('settings');
+    return;
+  }
+  if (act==='approve-device'){
+    if (!isOwner()){ toast('Sirf owner','err'); return; }
+    const email = el.dataset.email; const did = el.dataset.did;
+    if (approveAdminDevice(email,did)){ toast('Device approve ho gaya','ok'); go('users'); }
+    else toast('Approve nahi hua','err');
+    return;
+  }
+  if (act==='reject-device'){
+    if (!isOwner()){ toast('Sirf owner','err'); return; }
+    const email = el.dataset.email; const did = el.dataset.did;
+    if (rejectAdminDevice(email,did)){ toast('Device reject ho gaya','ok'); go('users'); }
+    else toast('Reject nahi hua','err');
     return;
   }
   if (act==='tp-show'){
