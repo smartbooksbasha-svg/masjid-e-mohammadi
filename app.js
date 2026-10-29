@@ -672,7 +672,7 @@ const IDSET_DEFAULT = {
   famPrefix:'MEMC', famRandom:true        /* family id = MEMC-<yy><4 random> */
 };
 /* app version — footer/settings me dikhta hai, update confirm karne ke liye */
-const APP_VER = 'v115';
+const APP_VER = 'v116';
 const APP_VER_AT = '2026-10-29';
 
 /* password input + show/hide eye button */
@@ -1581,11 +1581,13 @@ function applyFavicon(){
   const links = Array.from(document.querySelectorAll('link[rel="icon"], link[rel="shortcut icon"], link[rel="apple-touch-icon"]'));
   links.forEach(l=>{
     if (!l.dataset.def) l.dataset.def = l.getAttribute('href') || '';
-    l.setAttribute('href', logo || l.dataset.def);
+    if (logo) l.setAttribute('href', logo);
+    else if (l.dataset.def) l.setAttribute('href', l.dataset.def);
   });
   try {
     const meta = document.querySelector('meta[name="theme-color"]');
     if (meta && !logo) meta.setAttribute('content', '#0e7c66');
+    else if (meta && logo) meta.setAttribute('content', '#0e7c66');
   } catch(e){}
 }
 
