@@ -7,28 +7,31 @@ fonts self-host (PENDING), dict keys (PENDING), tests + deploy v108.
 Plan/notes: AGENTS.md (v107 tak), PROJECT_PLAN.md, PRD.md
 
 ## v108 Steps
-- [x] Dead fns removed: sanitize, sanitizeInput, loginLocked, softWarn, docRow, viewUsers, viewSettings, qrDataURL; cloudAutoLogin = stub; magic-login dead handler removed — node -c OK, no dangling refs
-- [x] installGuards: contextmenu/F12/Ctrl+U/dragstart guards hata diye; session touch listeners CHALU (touchSession intact)
-- [x] add-member / remove-member ab askEventReason(cb) modal use karte hain (prompt('1,2,3') gaya); remove: death → mark deceased, birth → member rakhta hai, other → remove
-- [ ] 1. askEventReason() helper + baat-soch par close (yeh MISSING — abhi call crash karega!) + evr / evr-cancel click delegation + scrim click close
-- [ ] 2. load-sample confirm (deen par families empty ho) — 3 markup spots (2094/2287/4751 ke aaspaas) + delegation 4898
-- [ ] 3. Decesed counts: detail men/women/subtitle/Members row + export Men/Women + print males + ID card footL members = alive count
-- [ ] 4. Gender/Marital tStr: form options, detail table, print report, find result; dict keys en+ur (Male/Female/Other, Married/Unmarried/Widower/Divorced/Widow)
-- [ ] 5. Modal keys en+ur: Reason?/Birth/Death/Other/Cancel/members added/member removed…/normal remove/add/Sample data loaded/sample-confirm-string
-- [ ] 6. Fonts self-host: styles.css mein 2 @font-face (tools/_fonts.css tin hai), index.html 22-24 strip, CSP line 5 se fonts.googleapis/gstatic hatao, sw.js SHELL mein fonts add
-- [ ] 7. APP_VER='v108', CACHE='memc-app-v108'
-- [ ] 8. node -c + npm test (174+new) + ur-audit + i18n-verify
-- [ ] 9. Commit + push + curl-verify 2x (Pages CDN ~1 min lag)
-- [ ] 10. AGENTS.md / hot memory / SKILL.md / vault notes
+- [x] Dead fns + guards + magic-login removed; askEventReason modal + evr/evr-cancel delegation (cb-order BUG FIX)
+- [x] Deceased live counts (detail/subtitle/members row/print males/export Men/Women/ID-card foot)
+- [x] Gender/Marital tStr (filters value-attr sahi + form + lists + detail + print) + dict keys en+ur
+- [x] load-sample confirm + modal/sample dict keys
+- [x] Fonts self-hosted (fontface css + CSP strip + sw shell + woff2 files)
+- [x] APP_VER v108 + CACHE v108, tests 184 green, audits en/hi/ur 0 (ta 186 = pehle se pending)
+- [x] Deploy v108 (commit c785843 pushed; curl verify baad me ek baar)
+- [ ] 9. v109 ROLE MODEL (Shan ka order): owner + user tiers
+      1. migrateAdmins: role default = 'user' (owner Email = 'owner' locked; purana 'admin' role hata)
+      2. userRole() helper (isOwner ke paas)
+      3. Route guards: user ko adminpanel/users/settings/audit/idcard BAND
+      4. navItems: user ke liye Administration/Settings/Audit/Backup-publish chhupe
+      5. USER_DENIED acts list (export-excel/print-all/backup/publish/print-family/print-idcards/sample/clear/admin-mgmt)
+      6. User allowed: dashboard/add/edit/detail/families/masjid save/find-edit/my-profile/password
+      7. Tests: user session add family ok, settings route blocked, export denied, sidebar clean
+      8. Deploy v109 + memory
 
 ## Decisions
--_rights: deterrent (F12/right-click) REMOVE — Shan approved waste list; asli security = Supabase RLS
-- modal: birth reason = isliye naam rakhta hai, death par deceased mark, other = normal remove
-- Excel raw values (no tStr); enum translate only UI
-- ID card members count = live (non-deceased)
+- F12/right-click deterrent REMOVE (Shan approved); asli security = Supabase RLS
+- Modal: birth = naam rakhta hai + event, death = deceased mark, other = normal remove
+- Excel raw values (no tStr); enum translate sirf UI; ID card members = live count
+- Role tiers: owner (locked) + user (data entry) — purana 'admin' tiers dissolve hokar user me merge hoga
 
 ## NOW:
-Step 1 — askEventReason helper add karo (remove-member/add-member iska intezaar kar rahe hain)
+v109 role model — step 3-5 pe hoon (route guards + USER_DENIED + sidebar)
 
 ## Previous releases (shaamil)
 v104 commit 98176fe (favicon+mobile), v105 7554593 (Urdu RTL), v106 2228e09 (mobile fix+ur poora),

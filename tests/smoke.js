@@ -214,7 +214,7 @@ const wait = ms => new Promise(r => setTimeout(r, ms || 120));
   ok(B.win.eval('isOwner()') === false, 'plain admin is not owner');
   ok(B.win.eval('isAdmin()') === true, 'plain admin can edit data');
   B.win.eval("go('idcard')"); await wait(150);
-  ok(/Super admin only/.test(B.text()), 'plain admin cannot open designer');
+  ok(B.win.eval("state.view") === 'dashboard', 'plain admin cannot open designer (route Owner-only hai)');
   B.win.eval("go('adminpanel')"); await wait(150);
   ok(!B.$('[data-act="admin-add"]'), 'plain admin has no add button');
 
@@ -309,7 +309,7 @@ const wait = ms => new Promise(r => setTimeout(r, ms || 120));
   ok(!AD.doc.querySelector('#nav').textContent.includes('Audit log'), 'plain admin does not see the audit menu');
   AD.win.eval("go('audit')");
   await wait(120);
-  ok(/Super admin only/.test(AD.text()), 'plain admin cannot open the audit screen');
+  ok(AD.win.eval("state.view") === 'dashboard', 'plain admin cannot open the audit screen (route Owner-only hai)');
 
   /* clear keeps one honest entry */
   AU.win.eval("auditSave([]); audit('audit_clear','Audit log','x')");
@@ -491,6 +491,19 @@ const wait = ms => new Promise(r => setTimeout(r, ms || 120));
   ok(UR.win.eval("['Male','Female','Other','Unmarried','Married','Widow','Widower','Divorced'].every(k => I18N.ur[k])"), 'gender/marital enum keys Urdu me translate hote hain');
   UR.win.eval("setLang('en')"); await wait(200);
   ok(UR.doc.documentElement.getAttribute('dir') === 'ltr', 'English par layout wapas LTR');
+
+  /* v109: roles — user tier (owner + user) */
+  const RU = await boot({ admin: ADMIN.email, admins: [ADMIN] });   /* legacy record, no role */
+  ok(RU.win.eval("userRole()") === 'user', 'purana admin ab USER role me migrate hua');
+  RU.win.eval("go('settings')"); await wait(200);
+  ok(RU.win.eval("state.view") === 'dashboard', 'user route guard: settings dashboard par le gaya');
+  ok(RU.win.eval("navItems().some(x=>x[0]==='adminpanel')") === false, 'user sidebar me Administration nahi');
+  const tadv = RU.win.eval("(function(){ const b=document.createElement('button'); b.dataset.act='export-excel'; document.body.appendChild(b); b.click(); b.remove(); return (document.querySelector('#toasts')||{textContent:''}).textContent; })()");
+  ok(/add\/edit/.test(tadv || ''), 'user export act denied (sirf data add/edit toast)');
+  const RO = await boot({ admin: OWNER.email, admins: [OWNER] });
+  ok(RO.win.eval("userRole()") === 'owner', 'owner email wala account owner role hai');
+  ok(RO.win.eval("navItems().some(x=>x[0]==='adminpanel')") === true, 'owner ko Administration dikhta hai');
+  ok(/data entry/.test((RO.doc.querySelector('#content').textContent||'')) === false && !!RO.doc.querySelector('#content'), 'owner dashboard par data-entry badge nahi');
 
   /* favicon uploaded logo se banti hai */
   LG.win.eval("DB.setLogo('data:image/png;base64,iVBORw0KGgo=') ; applyFavicon()");

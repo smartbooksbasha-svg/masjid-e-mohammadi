@@ -496,7 +496,8 @@ function currentUser(){
   /* token verify — bina token ke session ghusa dena kaam nahi karega */
   if (!s.token || !a.sess || a.sess.h !== fnv(s.token)) return null;
   if (!(Number(a.sess.exp) > Date.now()) || !(Number(s.exp) > Date.now())) return null;
-  return { id:a.email, email:a.email, name:a.name||a.email, role:'admin', userId:a.userId||'', owner:String(a.email).toLowerCase()===ownerEmail() };
+  const own = String(a.email).toLowerCase() === ownerEmail();
+  return { id:a.email, email:a.email, name:a.name||a.email, role:(own?'owner':'user'), userId:a.userId||'', owner:own };
 }
 function isAdmin(){ migrateAdmins(); return !!currentUser(); }
 
@@ -638,6 +639,12 @@ function isOwner(){
   if (rec && rec.role === 'owner' && String(rec.email||'').toLowerCase() === FIXED_OWNER_EMAIL) return true;
   return false;
 }
+function userRole(){
+  const u = currentUser();
+  return u ? u.role : '';
+}
+/* user tier (v109): owner = sab kuch; user = sirf data add/edit/remove + find-by-ID edit.
+   user ke liye BAND: settings/admins/audit/ID designer/export/print/backup/publish/sample/clear. */
 /* ---------------- ID / password format (super admin settings) ---------------- */
 const IDSET_DEFAULT = {
   idStyle:'random',                       /* random = AD102026#21200 jaisa, seq = ADM-2026-0101 */
@@ -647,7 +654,7 @@ const IDSET_DEFAULT = {
   famPrefix:'MEMC', famRandom:true        /* family id = MEMC-<yy><4 random> */
 };
 /* app version — footer/settings me dikhta hai, update confirm karne ke liye */
-const APP_VER = 'v108';
+const APP_VER = 'v109';
 const APP_VER_AT = '2026-10-28';
 
 /* password input + show/hide eye button */
@@ -1446,10 +1453,11 @@ function exportAuditCSV(){
 
 function navItems(){
   if (!isAdmin()) return [ ['dashboard','Dashboard',ICON.dash], ['find','Find family',ICON.search] ];
-  return [ ['dashboard','Dashboard',ICON.dash], ['families','Households',ICON.list],
-           ['add','Add Household',ICON.plus], ['find','Find family',ICON.search], ['masjid','Masjid Profile',ICON.mosque],
-           ['adminpanel','Administration',ICON.gear] ]
-         .concat(isOwner() ? [['audit','Audit log',ICON.list]] : []);
+  const it = [ ['dashboard','Dashboard',ICON.dash], ['families','Households',ICON.list],
+           ['add','Add Household',ICON.plus], ['find','Find family',ICON.search], ['masjid','Masjid Profile',ICON.mosque] ];
+  if (userRole() !== 'user') it.push(['adminpanel','Administration',ICON.gear]);
+  if (isOwner()) it.push(['audit','Audit log',ICON.list]);
+  return it;
 }
 
 /* website icon = jo logo owner ne upload kiya (browser tab + home screen) */
@@ -1542,6 +1550,8 @@ function go(view, param){
   } catch(e){}
   const ADMIN_ONLY = ['add','users','settings','families','detail','masjid','adminpanel','idcard','audit'];
   if (ADMIN_ONLY.includes(view) && !isAdmin()){ toast('Ye page sirf admin ke liye hai','err'); view='dashboard'; }
+  const OWNER_ONLY = ['adminpanel','users','settings','audit','idcard'];
+  if (OWNER_ONLY.includes(view) && userRole()==='user'){ toast('Sirf Owner hi ye page khol sakta hai','err'); view='dashboard'; }
   // Push history state for back button
   try {
     if (state.view !== view || state.param !== (param||null)){
@@ -2124,7 +2134,7 @@ function viewDashboard(){
   const empty = s.houses ? '' : `<div class="empty" style="margin-top:18px"><div class="big">${ICON.mosque}</div><h3>No households surveyed yet</h3><p>Add the first household to get started.</p>
      <div style="margin-top:16px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
      ${isAdmin() ? '<button class="btn" data-act="goto" data-view="add">Add first household</button>' : ''}
-     ${isAdmin() ? '<button class="btn ghost" data-act="load-sample">Load sample data</button>' : ''}</div></div>`;
+     ${userRole()==='owner' ? '<button class="btn ghost" data-act="load-sample">Load sample data</button>' : ''}</div></div>`;
 
   const backupBanner = (isAdmin() && needsBackup()) ? `
     <div class="alert warn" style="margin:0 0 14px;display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap">
@@ -2135,10 +2145,10 @@ function viewDashboard(){
     <div class="page-head"><div><h1>Survey Dashboard</h1><p>Complete survey of households, streets and members — live totals.</p>
       ${!isAdmin() && PUBDATA && PUBDATA.at ? `<p class="muted small"><span>Data updated:</span> <span>${esc(fmtDateTime(PUBDATA.at))}</span></p>` : ''}</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        ${isAdmin()
+        ${userRole()==='owner'
           ? `<button class="btn ghost sm" data-act="export-excel">${ICON.dl} Excel</button>
              <button class="btn ghost sm" data-act="print-all">${ICON.print} PDF / Print</button>`
-          : `<span class="badge gray">Public view · read only</span>`}
+          : isAdmin() ? `<span class="badge gray">User · data entry</span>` : `<span class="badge gray">Public view · read only</span>`}
       </div></div>
     ${heroBlock}
 
@@ -2303,7 +2313,7 @@ function viewFamilies(){
   const pre = state.param ? esc(state.param) : '';
   return `
     <div class="page-head"><div><h1>Households</h1><p>${fams.length} <span>households on record.</span></p></div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">${isAdmin()?`<button class="btn ghost sm" data-act="export-excel">${ICON.dl} Excel</button><button class="btn ghost sm" data-act="print-all">${ICON.print} PDF</button><button class="btn sm" data-act="goto" data-view="add">+ Add Household</button>`:''}</div></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">${userRole()==='owner'?`<button class="btn ghost sm" data-act="export-excel">${ICON.dl} Excel</button><button class="btn ghost sm" data-act="print-all">${ICON.print} PDF</button>`:''}${isAdmin()?`<button class="btn sm" data-act="goto" data-view="add">+ Add Household</button>`:''}</div></div>
     <div class="toolbar">
       <input class="inp grow" id="famSearch" placeholder="Search household, Family ID, phone, street…" />
       <select class="inp" id="famStreetF" style="max-width:200px"><option value="">All streets</option>${streets.map(st=>`<option ${pre===st?'selected':''}>${esc(st)}</option>`).join('')}</select>
@@ -2581,8 +2591,8 @@ function viewFamilyDetail(id){
   return `
     <div class="page-head"><div><h1>${esc(f.houseName||'Household')}</h1><p class="one-line">${esc(streetName(f))}${f.houseNo?' · <span>House</span> '+esc(f.houseNo):''} · ${alive.length} <span>member(s)</span>${canEdit?'':' · <span>public view (phone hidden)</span>'}</p></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        ${canEdit?`<button class="btn ghost sm" data-act="print-family" data-id="${esc(f.id)}">${ICON.print} PDF</button>`:''}
-        ${canEdit?`<button class="btn ghost sm" data-act="print-idcards" data-id="${esc(f.id)}">${ICON.id||ICON.print} ID Cards</button>`:''}
+        ${userRole()==='owner'?`<button class="btn ghost sm" data-act="print-family" data-id="${esc(f.id)}">${ICON.print} PDF</button>`:''}
+        ${userRole()==='owner'?`<button class="btn ghost sm" data-act="print-idcards" data-id="${esc(f.id)}">${ICON.id||ICON.print} ID Cards</button>`:''}
         <button class="btn ghost sm" data-act="goto" data-view="families">← Back</button>
         ${canEdit?`<button class="btn sm" data-act="edit-family" data-id="${esc(f.id)}">Edit</button>`:''}
       </div></div>
@@ -4880,6 +4890,8 @@ document.addEventListener('click', (e)=>{
   const id = el.dataset.id;
   const ADMIN_ACTS = ['load-sample','clear-data','export-excel','print-all','backup-json','restore-json','drive-connect','drive-backup','edit-family','del-family','del-admin','saveMasjid','delPhoto','print-family','approve-admin','reject-admin','close-creds','copy-creds','publish-public'];
   if (ADMIN_ACTS.includes(act) && !isAdmin()){ toast('Ye sirf admin kar sakta hai','err'); return; }
+  const USER_DENIED = ['export-excel','print-all','backup-json','restore-json','drive-connect','drive-backup','publish-public','clear-data','load-sample','print-family','print-idcards','del-admin','approve-admin','reject-admin','reset-admin-pass'];
+  if (userRole()==='user' && USER_DENIED.includes(act)){ toast('Aap sirf data add/edit kar sakte ho','err'); return; }
 
   if (act==='pw-eye'){
     const wrap = el.closest('.pw-wrap'); const inp = wrap && wrap.querySelector('input');
@@ -6290,6 +6302,8 @@ function migrateAdmins(){
         a.userId = genUserId(); ch = true;
       }
       if (!a.status){ a.status = 'active'; ch = true; }
+      const wantRole = isOwn ? 'owner' : 'user';   /* v109: purana 'admin' role ab 'user' */
+      if (a.role !== wantRole){ a.role = wantRole; ch = true; }
     });
     /* owner sirf config OWNER_EMAIL ya manually set memc_owner se decide hota hai */
     if (ch) DB.setAdmins(admins, { silent:true });
@@ -6364,6 +6378,8 @@ window.addEventListener('popstate', (e)=>{
       const view = state.view;
       const ADMIN_ONLY = ['add','users','settings','families','detail','masjid','adminpanel','idcard','audit'];
       if (ADMIN_ONLY.includes(view) && !isAdmin()){ toast('Ye page sirf admin ke liye hai','err'); state.view='dashboard'; state.param=null; }
+      const OWNER_ONLY = ['adminpanel','users','settings','audit','idcard'];
+      if (OWNER_ONLY.includes(view) && userRole()==='user'){ toast('Sirf Owner hi ye page khol sakta hai','err'); state.view='dashboard'; state.param=null; }
       const titles = { dashboard:'Survey Dashboard', families:'Households', add:(state.param?'Edit Household':'Add Household'), detail:'Household Record', find:'Find family', adminpanel:'Administration', users:'Admins', settings:'Settings', masjid:'Masjid Profile', cat:'Survey Category', myprofile:'My Profile', 'admin-edit':'Edit Admin', idcard:'ID Card Design', memberlist:'Members', familylist:'Households list', streetlist:'Streets', audit:'Audit log' };
       $('#pageTitle').textContent = titles[state.view] || 'Survey Dashboard';
       let html='';
