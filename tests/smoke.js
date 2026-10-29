@@ -561,6 +561,29 @@ const wait = ms => new Promise(r => setTimeout(r, ms || 120));
   ok(!!gOpt && /[\u0600-\u06FF]/.test(gOpt.textContent), 'urdu mode me gender label urdu script me hai');
   ok(gVal === 'Male', 'option ki VALUE abhi bhi raw English hai (data safe)');
 
+  /* v111: QR camera stop — background camera leak band */
+  const CAM = await boot({ admin: OWNER.email, admins: [OWNER] });
+  CAM.win.eval(`
+    Object.defineProperty(navigator, 'mediaDevices', { value: { getUserMedia: async () => ({
+      getTracks: () => [{ stop: () => { window.__camStop = (window.__camStop || 0) + 1; } }]
+    }) } });
+    HTMLMediaElement.prototype.play = async () => {};
+  `);
+  CAM.win.eval("go('find')"); await wait(150);
+  CAM.doc.querySelector('[data-act="scan-qr"]').click(); await wait(120);
+  ok(CAM.win.eval("window.__camStop || 0") === 0, 'scan start par camera abhi on hai');
+  ok(!!CAM.win.eval("qrStream"), 'openQR live qrStream set hota hai');
+  CAM.doc.querySelector('[data-act="stop-qr"]').click(); await wait(80);
+  ok(CAM.win.eval("window.__camStop || 0") === 1, 'Stop button se camera track band hota hai');
+  ok(CAM.win.eval("qrStream === null"), 'stop ke baad qrStream null');
+  CAM.doc.querySelector('[data-act="scan-qr"]').click(); await wait(120);
+  CAM.win.eval("go('families')"); await wait(200);
+  ok(CAM.win.eval("window.__camStop || 0") === 2, 'view change se camera apne aap band');
+  CAM.win.eval("go('find')"); await wait(100);
+  CAM.doc.querySelector('[data-act="scan-qr"]').click(); await wait(120);
+  CAM.win.eval("window.dispatchEvent(new PopStateEvent('popstate',{state:{view:'dashboard',param:null}}))"); await wait(150);
+  ok(CAM.win.eval("window.__camStop || 0") === 3, 'back button (popstate) se camera band');
+
   /* ---------------- 9. backup round trip ---------------- */
   const backup = A.win.eval("JSON.stringify({ families:DB.families(), masjid:DB.masjid() })");
   ok(JSON.parse(backup).families.length === 1, 'backup payload contains households');

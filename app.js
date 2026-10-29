@@ -654,8 +654,8 @@ const IDSET_DEFAULT = {
   famPrefix:'MEMC', famRandom:true        /* family id = MEMC-<yy><4 random> */
 };
 /* app version — footer/settings me dikhta hai, update confirm karne ke liye */
-const APP_VER = 'v110';
-const APP_VER_AT = '2026-10-28';
+const APP_VER = 'v111';
+const APP_VER_AT = '2026-10-29';
 
 /* password input + show/hide eye button */
 function pwBox(inputHtml){
@@ -1542,6 +1542,7 @@ function renderShell(){
 }
 
 function go(view, param){
+  if (view!=='find'){ try{ stopQrScan(); }catch(_e){} }
   // Save draft if leaving add form
   try {
     if (state.view === 'add' && view !== 'add' && isAdmin() && state.draft && !state.draft.id){
@@ -2877,6 +2878,8 @@ const I18N = {
     'QR image scan ho raha hai...':'Scanning the QR image...',
     'QR mila':'QR found',
     'QR mila: ':'QR found: ',
+    'Camera band karo':'Stop camera',
+    'Camera band':'Camera stopped',
     'QR scan ho raha hai...':'Scanning QR...',
     'QR scanner load nahi hua.':'QR scanner did not load.',
     'Refresh fail — schema v4 run hua hai?':'Refresh failed — has schema v4 been run?',
@@ -3845,6 +3848,8 @@ const I18N = {
     "Public totals refresh ho gaye":"عوامی اعداد تازہ ہو گئے",
     "QR image scan ho raha hai...":"QR تصویر اسکین ہو رہی ہے...",
     "QR mila":"QR مل گیا",
+    "Camera band karo":"کیمرہ بند کریں",
+    "Camera band":"کیمرہ بند",
     "QR mila: ":"QR ملا: ",
     "QR scan ho raha hai...":"QR اسکین ہو رہا ہے...",
     "QR scanner load nahi hua.":"QR اسکینر لوڈ نہیں ہوا۔",
@@ -4910,6 +4915,7 @@ document.addEventListener('click', (e)=>{
     return;
   }
   if (act==='scan-qr'){ startQrScan(); return; }
+  if (act==='stop-qr'){ stopQrScan(); const _m=$('#qrScanMsg'); if(_m) _m.textContent=tStr('Camera band'); return; }
 
   if (act==='toggle-theme') { toggleTheme(); const b=$('#themeBtn2'); if(b){ const t=document.documentElement.getAttribute('data-theme'); b.innerHTML = themeIcon(t) + (t==='night'?' Night':' Day'); } return; }
   if (act==='goto'){ if (el.dataset.view==='add'){ state.draft=blankDraft(); go(el.dataset.view); } else go(el.dataset.view, el.dataset.param || el.dataset.street || null); return; }
@@ -6374,10 +6380,12 @@ function init(){
   translateSoon();
 }
 // Handle browser back button
+document.addEventListener('visibilitychange', ()=>{ try{ if (document.hidden) stopQrScan(); }catch(_e){} });
 window.addEventListener('popstate', (e)=>{
   try {
     if (e.state && e.state.view){
       state.view = e.state.view;
+      if (state.view!=='find'){ try{ stopQrScan(); }catch(_e){} }
       state.param = e.state.param||null;
       // Re-render without pushing history
       const view = state.view;
@@ -6446,6 +6454,7 @@ function viewFind(){
         <div class="sec-title" style="margin-top:0">By QR scan</div>
         <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
           <button class="btn ghost" type="button" data-act="scan-qr">${ICON.camera} Scan from camera</button>
+          <button class="btn ghost" type="button" data-act="stop-qr">${ICON.x||ICON.close} ${tStr('Camera band karo')}</button>
           <label class="btn ghost" style="cursor:pointer">${ICON.image||ICON.camera} Upload QR image
             <input type="file" id="qrFile" accept="image/*" hidden />
           </label>
@@ -6498,6 +6507,7 @@ async function startQrScan(){
   try {
     if (qrStream){ qrStream.getTracks().forEach(t=>t.stop()); qrStream=null; }
     qrStream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:'environment' } });
+    if (typeof state==='object' && state.view!=='find'){ qrStream.getTracks().forEach(t=>t.stop()); qrStream=null; return; }
     video.srcObject = qrStream; await video.play();
     if(msg) msg.textContent='QR scan ho raha hai...';
     scanLoop();
