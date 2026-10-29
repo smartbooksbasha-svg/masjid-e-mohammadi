@@ -656,7 +656,7 @@ const IDSET_DEFAULT = {
   famPrefix:'MEMC', famRandom:true        /* family id = MEMC-<yy><4 random> */
 };
 /* app version — footer/settings me dikhta hai, update confirm karne ke liye */
-const APP_VER = 'v112';
+const APP_VER = 'v113';
 const APP_VER_AT = '2026-10-29';
 
 /* password input + show/hide eye button */
@@ -1791,14 +1791,22 @@ function computeStats(){
 
       const edu = eduKey(m);
       // "student" = still of school/college age (26 se kam) aur padhai set hai
-      const isStudent = !!edu && edu!=='none' && (age===null || age<26);
+      // self-employed/employed log students list mein nahi aane chahiye
+      const emp = String(m.employment||'').toLowerCase();
+      const isWorking = emp === 'employed' || emp === 'self_employed' || emp === 'selfemployed';
+      const isStudent = !!edu && edu!=='none' && !isWorking && (age===null || age<26);
       if (isStudent){
         s.students.total++;
         if (s.students[edu]!==undefined) s.students[edu]++;
       }
 
       // occupation (free text) — grouped case-insensitively, first spelling wins
-      const occ = occName(m);
+      // housewife / homemaker / grihini ko occupation count mein nahi gin'enge
+      const occRaw = occName(m);
+      const occLow = String(occRaw||'').toLowerCase().replace(/\s+/g,'');
+      const isHousewife = /housewife|homemaker|grihini|gharin|home|household|householdwork/.test(occLow) && (g==='female' || (m.relation||'').toLowerCase().includes('wife'));
+      const isHousewifeLoose = /housewife|homemaker|grihini|household/.test(occLow);
+      const occ = (isHousewife || isHousewifeLoose) ? '' : occRaw;
       if (occ){
         const key = occ.toLowerCase();
         if (!occMap.has(key)) occMap.set(key, { name:occ, men:0, women:0, total:0 });
@@ -1808,6 +1816,7 @@ function computeStats(){
       }
       // employment tracking
       if (m.employment === 'employed') s.employed++;
+      else if (m.employment === 'self_employed') s.employed++;
       else s.unemployed = (s.unemployed||0) + 1;
 
       // basic government documents held by this member
@@ -1895,13 +1904,28 @@ function groupDetail(no){
     return `<div class="grp-more"><div class="gm-head">Har fard — umar, marital status, bachche, disability</div><div class="table-wrap">${rowsHTML(['Name','Family','Relation','Gender','Age','Marital','Children','Disabled'], rows)}</div></div>`;
   }
   if (no === 3){
-    const arr = allMembers().filter(({m})=>{ const a = ageFromDob(m.dob); return (m.educationLevel && m.educationLevel!=='none') || (a!==null && a<26 && m.educationLevel); });
+    const arr = allMembers().filter(({m})=>{
+      const a = ageFromDob(m.dob);
+      const edu = eduKey(m);
+      const emp = String(m.employment||'').toLowerCase();
+      const isWorking = emp === 'employed' || emp === 'self_employed' || emp === 'selfemployed';
+      if (isWorking) return false;
+      if (edu && edu!=='none' && (a===null || a<26)) return true;
+      if (m.student === true && (a===null || a<30)) return true;
+      return false;
+    });
     if (!arr.length) return empty;
     const rows = arr.map(({m,f})=>`<tr class="clickable" data-act="detail" data-id="${esc(f.id)}"><td>${esc(m.name)}</td><td>${esc(f.id)}</td><td>${esc(EDU_LABEL[eduKey(m)]||m.education||'')}</td><td>${ageFromDob(m.dob)===null?'':ageFromDob(m.dob)}</td></tr>`);
     return `<div class="grp-more"><div class="gm-head">Padhne wale bachche / students</div><div class="table-wrap">${rowsHTML(['Name','Family','Education','Age'], rows)}</div></div>`;
   }
   if (no === 4){
-    const arr = allMembers().filter(({m})=>String(occName(m)||'').trim());
+    const arr = allMembers().filter(({m})=>{
+      const occRaw = occName(m);
+      const occLow = String(occRaw||'').toLowerCase().replace(/\s+/g,'');
+      if (!occRaw) return false;
+      if (/housewife|homemaker|grihini|gharin|home|household/.test(occLow)) return false;
+      return true;
+    });
     if (!arr.length) return empty;
     const rows = arr.map(({m,f})=>`<tr class="clickable" data-act="detail" data-id="${esc(f.id)}"><td>${esc(m.name)}</td><td>${esc(f.id)}</td><td>${esc(m.gender?tStr(m.gender):'—')}</td><td>${esc(occName(m))}</td></tr>`);
     return `<div class="grp-more"><div class="gm-head">Kaam karne wale log</div><div class="table-wrap">${rowsHTML(['Name','Family','Gender','Occupation'], rows)}</div></div>`;
@@ -2010,11 +2034,11 @@ function viewCat(param){
     metrics = [['Total families',s.families],['Total population',s.pop],['Men',s.men.total],['Women',s.women.total],['Children (under 18)',s.children],['Married (men+women)',s.men.married+s.women.married],['Unmarried (men+women)',s.men.unmarried+s.women.unmarried],['Widow',s.women.widow],['Physically challenged',s.men.disabled+s.women.disabled]].map(([l,v])=>metric(l,v)).join('');
   }
   if (n===3){
-    metrics = [['Total students',s.students.total],['Primary',s.students.primary],['Higher secondary',s.students.higher_secondary],['College',s.students.college],['Madarsa',s.students.madarsa]].map(([l,v])=>metric(l,v)).join('');
+    metrics = [['Total students',s.students.total],['Primary',s.students.primary],['Higher secondary',s.students.higher_secondary],['College',s.students.college],['Madarsa',s.students.madarsa]].map(([l,v])=>metric(l,v,{f:'student'})).join('');
   }
   if (n===4){
-    metrics = [['Members with a job',s.employed],['Different occupations',s.occupationNames]].map(([l,v])=>metric(l,v)).join('');
-    extra = tbl(['Occupation','Men','Women','Total'], s.occupations.map(o=>`<tr><td><b>${esc(o.name)}</b></td><td>${o.men}</td><td>${o.women}</td><td><b>${o.total}</b></td></tr>`));
+    metrics = [['Members with a job',s.employed],['Different occupations',s.occupationNames]].map(([l,v])=>metric(l,v,{f:'hasOccupation'})).join('');
+    extra = tbl(['Occupation','Men','Women','Total'], s.occupations.map(o=>`<tr class="clickable" data-act="mlist" data-f="occupation:${esc(o.name)}" data-title="${esc(o.name)} — members"><td><b>${esc(o.name)}</b></td><td>${o.men}</td><td>${o.women}</td><td><b>${o.total}</b></td></tr>`));
   }
   if (n===5){
     metrics = [['Nazira (men)',s.deeni.menNazira||0],['Nazira (women)',s.deeni.womenNazira||0],['Hafiz (men)',s.deeni.menHafiz],['Hafiz (women)',s.deeni.womenHafiz],['Aalim (men)',s.deeni.menAalim],['Aalim (women)',s.deeni.womenAalim],['Aalima (women)',s.deeni.womenAalima||0],['Mufti (men)',s.deeni.menMufti||0]].map(([l,v])=>metric(l,v)).join('');
@@ -2058,14 +2082,29 @@ window.MF = {
   womenDisabled:   mf(m=>gOf(m)==='female' && m.disability==='yes'),
   widow:           mf(m=>gOf(m)==='female' && msOf(m)==='widow'),
   students:        mf(m=>isStudentM(m)),
-  allStudents:     mf(m=>isStudentM(m)),
-  primary:         mf(m=>isStudentM(m) && eduKey(m)==='primary'),
-  higherSecondary: mf(m=>isStudentM(m) && eduKey(m)==='higher_secondary'),
-  college:         mf(m=>isStudentM(m) && eduKey(m)==='college'),
-  madarsa:         mf(m=>isStudentM(m) && eduKey(m)==='madarsa'),
-  employed:        mf(m=>m.employment==='employed'),
-  unemployed:      mf(m=>m.employment!=='employed'),
-  hasOccupation:   mf(m=>!!occName(m)),
+  allStudents:     mf(m=>{
+    const a = ageFromDob(m.dob);
+    const edu = eduKey(m);
+    const emp = String(m.employment||'').toLowerCase();
+    const isWorking = emp === 'employed' || emp === 'self_employed' || emp === 'selfemployed';
+    if (isWorking) return false;
+    if (m.student === true && (a===null || a<30)) return true;
+    if (edu && edu!=='none' && (a===null || a<26)) return true;
+    return false;
+  }),
+  primary:         mf(m=>{ const a = ageFromDob(m.dob); const edu = eduKey(m); const emp = String(m.employment||'').toLowerCase(); const isWorking = emp === 'employed' || emp === 'self_employed'; if (isWorking) return false; return edu==='primary' && (a===null || a<26); }),
+  higherSecondary: mf(m=>{ const a = ageFromDob(m.dob); const edu = eduKey(m); const emp = String(m.employment||'').toLowerCase(); const isWorking = emp === 'employed' || emp === 'self_employed'; if (isWorking) return false; return edu==='higher_secondary' && (a===null || a<26); }),
+  college:         mf(m=>{ const a = ageFromDob(m.dob); const edu = eduKey(m); const emp = String(m.employment||'').toLowerCase(); const isWorking = emp === 'employed' || emp === 'self_employed'; if (isWorking) return false; return edu==='college' && (a===null || a<26); }),
+  madarsa:         mf(m=>{ const a = ageFromDob(m.dob); const edu = eduKey(m); const emp = String(m.employment||'').toLowerCase(); const isWorking = emp === 'employed' || emp === 'self_employed'; if (isWorking) return false; return edu==='madarsa' && (a===null || a<26); }),
+  employed:        mf(m=>m.employment==='employed' || m.employment==='self_employed'),
+  unemployed:      mf(m=>m.employment!=='employed' && m.employment!=='self_employed'),
+  hasOccupation:   mf(m=>{
+    const occRaw = occName(m);
+    const occLow = String(occRaw||'').toLowerCase().replace(/\s+/g,'');
+    if (!occRaw) return false;
+    if (/housewife|homemaker|grihini|gharin|home|household/.test(occLow)) return false;
+    return true;
+  }),
   aalimMen:        mf(m=>gOf(m)!=='female' && (relOf(m)==='aalim' || relOf(m)==='both')),
   hafizMen:        mf(m=>gOf(m)!=='female' && (relOf(m)==='hafiz' || relOf(m)==='both')),
   aalimWomen:      mf(m=>gOf(m)==='female' && (relOf(m)==='aalim' || relOf(m)==='both')),
@@ -2093,7 +2132,25 @@ window.MFD = {
     if (nm && nm === want) return true;
     return memberSchemes(m).some(x=> String(x).trim().toLowerCase() === want);
   }),
-  occupation: n => mf(m=> occName(m).toLowerCase() === String(n).toLowerCase()),
+  occupation: n => {
+    const target = String(n||'').toLowerCase();
+    return mf(m=>{
+      const occRaw = occName(m);
+      const occLow = String(occRaw||'').toLowerCase().replace(/\s+/g,'');
+      if (/housewife|homemaker|grihini|gharin|home|household/.test(occLow)) return false;
+      return occRaw.toLowerCase() === target;
+    });
+  },
+  student: ()=> mf(m=>{
+    const a = ageFromDob(m.dob);
+    const edu = eduKey(m);
+    const emp = String(m.employment||'').toLowerCase();
+    const isWorking = emp === 'employed' || emp === 'self_employed' || emp === 'selfemployed';
+    if (isWorking) return false;
+    if (m.student === true && (a===null || a<30)) return true;
+    if (edu && edu!=='none' && (a===null || a<26)) return true;
+    return false;
+  }),
   house:      t => (m,f)=> !isDead(m) && houseTypeKey(f && f.houseType)===t,
   street:     n => (m,f)=> !isDead(m) && streetName(f||{})===n
 };
