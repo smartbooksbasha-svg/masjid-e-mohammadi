@@ -672,7 +672,7 @@ const IDSET_DEFAULT = {
   famPrefix:'MEMC', famRandom:true        /* family id = MEMC-<yy><4 random> */
 };
 /* app version — footer/settings me dikhta hai, update confirm karne ke liye */
-const APP_VER = 'v114';
+const APP_VER = 'v115';
 const APP_VER_AT = '2026-10-29';
 
 /* password input + show/hide eye button */
@@ -2217,10 +2217,12 @@ window.filterRows = function(q, tableSel){
 };
 
 function viewFamilyList(filterFn, title){
-  const fams = DB.families().filter(filterFn);
-  const rows = fams.map(f=>{
+  const famsAll = DB.families().filter(filterFn);
+  const streets = Array.from(new Set(DB.families().map(f=> streetName(f)).filter(Boolean))).sort((a,b)=>a.localeCompare(b));
+  const rows = famsAll.map(f=>{
     const n = (f.members||[]).filter(m=>String(m.name||'').trim() && !m.deceased).length;
-    return `<tr>
+    return `<tr data-fid="${esc(f.id)}">
+      <td><input type="checkbox" class="flist-cb" data-id="${esc(f.id)}" /></td>
       <td><b>${esc(f.id)}</b></td>
       <td>${esc(f.houseName||'—')}</td>
       <td>${esc(streetName(f))}</td>
@@ -2230,13 +2232,28 @@ function viewFamilyList(filterFn, title){
       <td><button class="btn ghost sm" data-act="detail" data-id="${esc(f.id)}">View</button></td></tr>`;
   }).join('');
   return `
-    <div class="page-head"><div><h1>${esc(title)}</h1><p>${fams.length} household(s) found</p></div>
-      <button class="btn ghost sm" data-act="goto" data-view="dashboard">← Back to Dashboard</button></div>
+    <div class="page-head"><div><h1>${esc(title)}</h1><p><span id="flistCount">${famsAll.length}</span> household(s) found</p></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn ghost sm" data-act="goto" data-view="dashboard">← Back to Dashboard</button>
+        <button class="btn sm" data-act="print-selected-ids">Print selected ID cards</button>
+      </div></div>
     <div class="card">
-      ${fams.length ? `<div class="field" style="max-width:340px;margin-bottom:12px"><input class="inp" type="search" placeholder="Family ID / ghar / street se dhoondo…" oninput="filterRows(this.value,'#flistTable')" /></div>
-      <div class="table-wrap"><table id="flistTable"><thead><tr><th>Family ID</th><th>House</th><th>Street</th><th>House No</th><th>House type</th><th>Members</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`
+      ${famsAll.length ? `<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
+        <div class="field" style="max-width:340px;margin:0"><input class="inp" type="search" placeholder="Family ID / ghar / street se dhoondo…" oninput="filterRows(this.value,'#flistTable'); updateFlistCount();" /></div>
+        <select class="inp" id="flistStreet" style="max-width:220px" onchange="filterFlistByStreet(this.value)">
+          <option value="all">Sab streets</option>
+          ${streets.map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join('')}
+        </select>
+        <button class="btn ghost sm" type="button" onclick="toggleFlistAll(this)">Select all</button>
+      </div>
+      <div class="table-wrap"><table id="flistTable"><thead><tr><th style="width:40px"></th><th>Family ID</th><th>House</th><th>Street</th><th>House No</th><th>House type</th><th>Members</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`
                    : '<div class="empty"><h3>No households found</h3></div>'}
-    </div>`;
+    </div>
+    <script>
+      window.updateFlistCount = function(){ const t=document.querySelector('#flistTable'); if(!t)return; let c=0; t.querySelectorAll('tbody tr').forEach(tr=>{ if(tr.style.display!=='none') c++; }); const el=document.querySelector('#flistCount'); if(el) el.textContent=c; };
+      window.filterFlistByStreet = function(v){ const t=document.querySelector('#flistTable'); if(!t)return; t.querySelectorAll('tbody tr').forEach(tr=>{ const st=tr.children[3]?tr.children[3].textContent:''; if(v==='all'){ tr.style.display=''; } else { tr.style.display = st===v?'':'none'; } }); updateFlistCount(); };
+      window.toggleFlistAll = function(btn){ const t=document.querySelector('#flistTable'); if(!t)return; const cbs=t.querySelectorAll('.flist-cb'); const all=Array.from(cbs).every(cb=>cb.checked); cbs.forEach(cb=>{ cb.checked=!all; }); btn.textContent = all?'Select all':'Unselect all'; };
+    </script>`;
 }
 
 function viewMembersList(filterFn, title){
@@ -5185,6 +5202,16 @@ document.addEventListener('click', (e)=>{
   if (act==='print-all'){ printFamilies(DB.families(), 'All Households'); return; }
   if (act==='print-family'){ const f=DB.families().find(x=>x.id===id); if(f) printFamilies([f], f.houseName||f.id); return; }
   if (act==='print-idcards'){ const f=DB.families().find(x=>x.id===id); if(f) printIdCards(f); return; }
+  if (act==='print-selected-ids'){
+    if (!isAdmin()){ toast('Sirf admin','err'); return; }
+    const cbs = Array.from(document.querySelectorAll('.flist-cb:checked'));
+    if (!cbs.length){ toast('Pehle checkboxes se families select karo','err'); return; }
+    const ids = cbs.map(cb=> cb.dataset.id).filter(Boolean);
+    const fams = ids.map(x=> DB.families().find(f=>f.id===x)).filter(Boolean);
+    if (!fams.length){ toast('Selected families nahi mili','err'); return; }
+    try { printIdCards(fams); } catch(e){ toast('Print nahi hua','err'); }
+    return;
+  }
   if (act==='admin-add'){ state.showAddAdmin = true; go(state.view||'adminpanel'); return; }
   if (act==='admin-add-cancel'){ state.showAddAdmin = false; go(state.view||'adminpanel'); return; }
   if (act==='admin-list'){ state.showAdmins = !state.showAdmins; go(state.view||'adminpanel'); return; }
@@ -5725,6 +5752,27 @@ function saveFamily(){
   const members = d.members.filter(m=> (m.name||'').trim());
   if (!members.length) return fail('Add at least one member with a name.');
   if (d.phone && !/^[0-9+\-\s]{6,15}$/.test(d.phone)) return fail('Phone number looks invalid.');
+
+  /* duplicate warn: same head/father+d.o.b */
+  try {
+    const famsNow = DB.families();
+    const headName = String(d.houseName||'').trim().toLowerCase();
+    const headDob = String((d.head&&d.head.dob)|| (members[0]&&members[0].dob)||'').trim();
+    const headFather = String((d.head&&d.head.fatherName)|| (members[0]&&members[0].fatherName)||'').trim().toLowerCase();
+    const dup = famsNow.find(f=>{
+      if (d.id && f.id === d.id) return false;
+      const hn = String(f.houseName||'').trim().toLowerCase();
+      const hm = (f.members||[])[0] || {};
+      const hdob = String(hm.dob||'').trim();
+      const hf = String(hm.fatherName||'').trim().toLowerCase();
+      if (hn && headName && hn === headName && headDob && hdob && headDob === hdob) return true;
+      if (hn && headName && hn === headName && headFather && hf && headFather === hf && headDob && hdob && headDob === hdob) return true;
+      return false;
+    });
+    if (dup){
+      if (!confirm('Same house/head lag raha hai (duplicate ho sakta hai).\n\nFamily ID: ' + dup.id + '\nContinue karna hai?')) return fail('Duplicate warn ki wajah se save rok diya gaya.');
+    }
+  } catch(e){}
 
   d.street = d.street.trim();
   d.houseType = d.houseType || 'moulding';
@@ -6333,28 +6381,34 @@ function idCardBack(c){
 }
 function printIdCards(fam){
   if(!fam) return;
-  const mem = fam.members || [];
-  if(!mem.length){ toast(tStr('No members to print'),'err'); return; }
+  const all = Array.isArray(fam) ? fam : [fam];
+  if(!all.length) return;
   const c = idcardCfg();
   const base = location.href.replace(/[^/]*$/,'');
-  const qrText = location.origin + location.pathname + '#qedit=' + encodeURIComponent(fam.id);
-  const html = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ID Card - ${esc(fam.id)}</title>
+  const fronts = all.map(f=>{
+    const mem = f.members || [];
+    if(!mem.length) return '';
+    const qrText = location.origin + location.pathname + '#qedit=' + encodeURIComponent(f.id);
+    return idCardFront(f, c, base, qrText);
+  }).filter(Boolean).join('\n');
+  const backs = all.map(()=> idCardBack(c)).join('\n');
+  const html = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ID Cards</title>
 <style>${idCardCSS(c)}</style>
 </head><body>
 <div class="bar">
   <button onclick="window.print()">Print / Save as PDF</button>
   <button class="ghost" onclick="window.close()">Close</button>
 </div>
-${idCardFront(fam, c, base)}
-${idCardBack(c)}
+${fronts}
+${backs}
 <script>
 (function(){
   var imgs = [].slice.call(document.images), left = imgs.length;
   function go(){ try{ window.print(); }catch(e){} }
-  if (!left){ setTimeout(go, 350); return; }
+  if (!left){ setTimeout(go, 400); return; }
   imgs.forEach(function(im){
-    if (im.complete){ if (--left === 0) setTimeout(go, 250); return; }
-    im.onload = im.onerror = function(){ if (--left === 0) setTimeout(go, 250); };
+    if (im.complete){ if (--left === 0) setTimeout(go, 350); return; }
+    im.onload = im.onerror = function(){ if (--left === 0) setTimeout(go, 350); };
   });
 })();
 </script>
