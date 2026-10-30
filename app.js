@@ -6966,7 +6966,7 @@ async function lookupById(id){
 }
 async function lookupByPhone(id){
   const box = $('#findResult'); if(!box) return;
-  const pid = String(id||'').trim().toUpperCase();
+  const pid = String(id||'').trim();
   if (!pid){ box.innerHTML='<div class="card"><div class="alert err">Family ID daalo.</div></div>'; return; }
   box.innerHTML = '<div class="card"><p class="muted">Searching...</p></div>';
   try {
@@ -6974,37 +6974,35 @@ async function lookupByPhone(id){
       try {
         const c = await CLOUD.get();
         if (c && typeof c.rpc === 'function'){
-          const { data, error } = await c.rpc('get_family_by_id_public', { p_id: pid });
+          const { data, error } = await c.rpc('get_family_by_id_public', { p_id: pid.trim() });
           if (error){
-            box.innerHTML = '<div class="card"><div class="alert err">RPC error: ' + esc(error.message || error) + '</div></div>';
-            // fall through to local only if not found style? but show error
+            box.innerHTML = '<div class="card"><div class="alert err">' + esc(error.message || String(error)) + '</div></div>';
           } else if (data && data.found){
             renderFindResult(data);
             return;
-          } else if (data && !data.found){
-            // continue to local cache maybe empty
           }
+          // else RPC ok but not found -> fall back to local
         }
       } catch(e){
-        box.innerHTML = '<div class="card"><div class="alert err">Lookup error: ' + esc(e.message || e) + '</div></div>';
-        // still try local
+        box.innerHTML = '<div class="card"><div class="alert err">' + esc(e.message || String(e)) + '</div></div>';
       }
     }
-    let f = DB.families().find(x=>String(x.id||'').toUpperCase()===pid);
+    const p = pid.toUpperCase();
+    let f = DB.families().find(x=>String(x.id||'').toUpperCase()===p);
     if (f){ renderFindResult(famToPub(f)); return; }
-    f = getPublicFamilyById(pid);
+    f = getPublicFamilyById(p);
     if (f){ renderFindResult(famToPub(f)); return; }
     if (typeof CLOUD !== 'undefined' && CLOUD.enabled()){
       try {
         if (typeof SYNC.pullPublic === 'function') await SYNC.pullPublic();
         try { PUBDATA = JSON.parse(localStorage.getItem('memc_pub') || 'null'); } catch(e){}
-        f = getPublicFamilyById(pid);
+        f = getPublicFamilyById(p);
         if (f){ renderFindResult(famToPub(f)); return; }
       } catch(e){}
     }
     box.innerHTML = '<div class="card"><div class="alert err">Is Family ID se koi ghar nahi mila.</div></div>';
   } catch(e){
-    box.innerHTML = '<div class="card"><div class="alert err">Lookup nahi hua. ' + esc(e.message||'') + '</div></div>';
+    box.innerHTML = '<div class="card"><div class="alert err">' + esc(e.message || String(e)) + '</div></div>';
   }
 }
 function renderFindResult(res){
