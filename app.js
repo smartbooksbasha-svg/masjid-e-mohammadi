@@ -672,7 +672,7 @@ const IDSET_DEFAULT = {
   famPrefix:'MEMC', famRandom:true        /* family id = MEMC-<yy><4 random> */
 };
 /* app version — footer/settings me dikhta hai, update confirm karne ke liye */
-const APP_VER = 'v123';
+const APP_VER = 'v124';
 const APP_VER_AT = '2026-10-29';
 
 /* password input + show/hide eye button */
@@ -5222,17 +5222,7 @@ document.addEventListener('click', (e)=>{
   if (act==='print-selected-ids'){
     if (!isAdmin()){ toast('Sirf admin','err'); return; }
     const cbs = Array.from(document.querySelectorAll('.flist-cb:checked'));
-    if (!cbs.length){ toast('Pehle checkboxes se families select karo','err'); return; }
-    const ids = cbs.map(cb=> cb.dataset.id).filter(Boolean);
-    const fams = ids.map(x=> DB.families().find(f=>f.id===x)).filter(Boolean);
-    if (!fams.length){ toast('Selected families nahi mili','err'); return; }
-    try { printIdCards(fams); } catch(e){ toast('Print nahi hua','err'); }
-    return;
-  }
-  if (act==='print-selected-ids'){
-    if (!isAdmin()){ toast('Sirf admin','err'); return; }
-    const cbs = Array.from(document.querySelectorAll('.flist-cb:checked'));
-    if (!cbs.length){ toast('Pehle checkboxes se families select karo','err'); return; }
+    if (!cbs.length){ toast('Pehle household select karo','err'); return; }
     const ids = cbs.map(cb=> cb.dataset.id).filter(Boolean);
     const fams = ids.map(x=> DB.families().find(f=>f.id===x)).filter(Boolean);
     if (!fams.length){ toast('Selected families nahi mili','err'); return; }
@@ -6983,8 +6973,12 @@ function renderFindResult(res){
         ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
              <button class="btn sm" data-act="find-edit" data-id="${esc(fam.id||'')}">Edit household</button>
              <button class="btn ghost sm" data-act="find-open" data-id="${esc(fam.id||'')}">Full record</button>
+             <button class="btn ghost sm" type="button" onclick="try{navigator.clipboard.writeText('${esc(fam.id||'')}');toast('Family ID copy hua');}catch(e){}">Copy Family ID</button>
            </div>`
-        : `<div class="alert info small" style="margin-top:12px">Phone number aur address nahi dikhaya gaya (privacy). Ye view sirf dikhata hai, edit nahi kar sakte.</div>`}
+        : `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;align-items:center">
+             <button class="btn ghost sm" type="button" onclick="try{navigator.clipboard.writeText('${esc(fam.id||'')}');toast('Family ID copy hua');}catch(e){}">Copy Family ID</button>
+             <span class="alert info small" style="margin:0">Phone number aur address nahi dikhaya gaya (privacy). Ye view sirf dikhata hai, edit nahi kar sakte.</span>
+           </div>`}
       <div class="sec-title" style="margin-top:16px">Members</div>
       <div class="table-wrap"><table><thead><tr><th>#</th><th>Name</th><th>Relation</th><th>Gender</th><th>Age</th><th>Education</th><th>Occupation</th><th>Deeni</th><th>Marital</th><th>Challenged</th></tr></thead><tbody>${rows||'<tr><td colspan="10" class="muted">No members</td></tr>'}</tbody></table></div>
     </div>
