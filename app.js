@@ -672,7 +672,7 @@ const IDSET_DEFAULT = {
   famPrefix:'MEMC', famRandom:true        /* family id = MEMC-<yy><4 random> */
 };
 /* app version — footer/settings me dikhta hai, update confirm karne ke liye */
-const APP_VER = 'v117';
+const APP_VER = 'v118';
 const APP_VER_AT = '2026-10-29';
 
 /* password input + show/hide eye button */
@@ -1575,19 +1575,17 @@ function navItems(){
 /* website icon = jo logo owner ne upload kiya (browser tab + home screen) */
 function applyFavicon(){
   let logo = '';
-  try { logo = DB.logo() || ''; } catch(e){}
+  try { logo = DB.logo() || localStorage.getItem(LS.logo) || ''; } catch(e){}
   const defIcon = document.querySelector('link[rel="icon"]');
   if (defIcon && !defIcon.dataset.def) defIcon.dataset.def = defIcon.getAttribute('href') || '';
   const links = Array.from(document.querySelectorAll('link[rel="icon"], link[rel="shortcut icon"], link[rel="apple-touch-icon"]'));
   links.forEach(l=>{
     if (!l.dataset.def) l.dataset.def = l.getAttribute('href') || '';
-    if (logo) l.setAttribute('href', logo);
-    else if (l.dataset.def) l.setAttribute('href', l.dataset.def);
+    l.setAttribute('href', logo || l.dataset.def || 'icons/favicon-32.png');
   });
   try {
     const meta = document.querySelector('meta[name="theme-color"]');
-    if (meta && !logo) meta.setAttribute('content', '#0e7c66');
-    else if (meta && logo) meta.setAttribute('content', '#0e7c66');
+    if (meta) meta.setAttribute('content', '#0e7c66');
   } catch(e){}
 }
 
@@ -6842,49 +6840,79 @@ function scanLoop(){
     }
   }, 250);
 }
+function getPublicFamilyById(id){
+  try {
+    const pid = String(id||'').trim().toUpperCase();
+    if (!pid) return null;
+    let list = [];
+    if (PUBDATA && Array.isArray(PUBDATA.families)) list = PUBDATA.families;
+    else list = DB.families();
+    return list.find(x=> String(x.id||'').toUpperCase() === pid) || null;
+  } catch(e){ return null; }
+}
+function famToPub(f){
+  if (!f) return null;
+  return { found:true, family:{ id:f.id, houseName:f.houseName||'', houseNo:f.houseNo||'', street:streetName(f), houseType:f.houseType||'' }, members:(f.members||[]).map(m=>({ name:m.name||'', relation:m.relation||'', gender:m.gender||'', dob:m.dob||null, education_level:m.education_level||m.education||'', education:m.education||'', occupation:m.occupation||'', religious:m.religious||'', marital_status:m.maritalStatus||m.marital_status||'', disability:m.disability||'no' })) };
+}
 function handleQrFind(txt){
   const t = String(txt||'').trim();
-  // support full link #qedit=ID or plain FAMILY-ID
   let id = t;
-  const m = t.match(/qedit=([^&\s]+)/i);
+  const m = t.match(/qedit=([^&#\s]+)/i);
   if (m) id = decodeURIComponent(m[1]);
-  id = id.split(/\s*\|\s*/)[0].trim();
+  id = id.replace(/^#qedit=/i,'').replace(/^#/, '').split(/\s*\|\s*/)[0].trim();
   lookupById(id);
 }
 async function lookupById(id){
   const box = $('#findResult'); if(!box) return;
+  const pid = String(id||'').trim();
+  if (!pid){ box.innerHTML='<div class="card"><div class="alert err">Family ID daalo.</div></div>'; return; }
   box.innerHTML = '<div class="card"><p class="muted">Searching...</p></div>';
   try {
-    // try local first (admin logged in) else RPC
+    // try local/admin first
+    let f = DB.families().find(x=> String(x.id).toUpperCase() === pid.toUpperCase());
+    if (f){ renderFindResult(famToPub(f)); return; }
+    // try public snapshot
+    f = getPublicFamilyById(pid);
+    if (f){ renderFindResult(famToPub(f)); return; }
+    // try to pull public data on demand
     if (CLOUD.enabled()){
-      const c = await CLOUD.get();
-      if (c){
-        // try get_family_by_phone not directly; fallback: fetch families by id? anon blocked
-        const { data, error } = await c.rpc('get_family_by_id_public', { p_id: id });
-        if (data && data.found){ renderFindResult(data); return; }
-      }
+      try {
+        if (typeof SYNC.pullPublic === 'function') await SYNC.pullPublic();
+        try { PUBDATA = JSON.parse(localStorage.getItem('memc_pub') || 'null'); } catch(e){}
+        f = getPublicFamilyById(pid);
+        if (f){ renderFindResult(famToPub(f)); return; }
+      } catch(e){}
+      // try RPC if exists
+      try {
+        const c = await CLOUD.get();
+        if (c && typeof c.rpc === 'function'){
+          const { data } = await c.rpc('get_family_by_id_public', { p_id: pid });
+          if (data && data.found){ renderFindResult(data); return; }
+        }
+      } catch(e){}
     }
-    // local lookup
-    const f = DB.families().find(x=>x.id===id);
-    if (f){
-      const pub = { found:true, family:{ id:f.id, houseName:f.houseName||'', houseNo:f.houseNo||'', street:streetName(f), houseType:f.houseType||'' }, members:(f.members||[]).map(m=>({ name:m.name||'', relation:m.relation||'', gender:m.gender||'', dob:m.dob||null, education_level:m.education_level||m.education||'', occupation:m.occupation||'', religious:m.religious||'', marital_status:m.marital_status||'', disability:m.disability||'no' })) };
-      renderFindResult(pub); return;
-    }
-    box.innerHTML = '<div class="card"><div class="alert err">Koi record nahi mila. Family ID ya phone number check karo.</div></div>';
+    box.innerHTML = '<div class="card"><div class="alert err">Koi record nahi mila. Family ID check karo ya dobara try karo.</div></div>';
   } catch(e){
     box.innerHTML = '<div class="card"><div class="alert err">Lookup nahi hua. Thodi der baad try karo.</div></div>';
   }
 }
 async function lookupByPhone(id){
   const box = $('#findResult'); if(!box) return;
-  const p = String(id||'').trim().toUpperCase();
-  if (!p){ box.innerHTML='<div class="card"><div class="alert err">Family ID daalo.</div></div>'; return; }
+  const pid = String(id||'').trim().toUpperCase();
+  if (!pid){ box.innerHTML='<div class="card"><div class="alert err">Family ID daalo.</div></div>'; return; }
   box.innerHTML = '<div class="card"><p class="muted">Searching...</p></div>';
   try {
-    const f = DB.families().find(x=>String(x.id||'').toUpperCase()===p);
-    if (f){
-      const pub = { found:true, family:{ id:f.id, houseName:f.houseName||'', houseNo:f.houseNo||'', street:streetName(f), houseType:f.houseType||'' }, members:(f.members||[]).map(m=>({ name:m.name||'', relation:m.relation||'', gender:m.gender||'', dob:m.dob||null, education_level:m.education_level||m.education||'', occupation:m.occupation||'', religious:m.religious||'', marital_status:m.marital_status||'', disability:m.disability||'no' })) };
-      renderFindResult(pub); return;
+    let f = DB.families().find(x=>String(x.id||'').toUpperCase()===pid);
+    if (f){ renderFindResult(famToPub(f)); return; }
+    f = getPublicFamilyById(pid);
+    if (f){ renderFindResult(famToPub(f)); return; }
+    if (CLOUD.enabled()){
+      try {
+        if (typeof SYNC.pullPublic === 'function') await SYNC.pullPublic();
+        try { PUBDATA = JSON.parse(localStorage.getItem('memc_pub') || 'null'); } catch(e){}
+        f = getPublicFamilyById(pid);
+        if (f){ renderFindResult(famToPub(f)); return; }
+      } catch(e){}
     }
     box.innerHTML = '<div class="card"><div class="alert err">Is Family ID se koi ghar nahi mila.</div></div>';
   } catch(e){
