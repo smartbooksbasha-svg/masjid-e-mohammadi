@@ -698,5 +698,8 @@ Key findings (details + line numbers in TASK.md "AUDIT" section):
 ## v121 (2026-10-29, LIVE)
 - Dashboard group headers (Location & Housing, Education, Occupations etc.) se click-to-toggle button hata diya — ab headers sirf title dikhate hain.
 
+## v122 (2026-10-29, LIVE)
+- QR full-screen overlay par back button dabane se camera band hota hai (popstate handle) aur history clean rehta hai.
+
 ## Audit (2026-10-29)
 - QR overlay needs history/back handling (close on back instead of navigate). Native confirm/prompt used in places. Public find depends on published snapshot. Recommend: back-button close for QR, head-name search in public find, PWA install prompt.
