@@ -656,6 +656,7 @@ Key findings (details + line numbers in TASK.md "AUDIT" section):
 8. GOOD: escaping everywhere, auto-publish works, no dup IDs, no console.log, deceased excluded in main stats.
 
 ## v108+v109 (2026-10-29, LIVE v109, tests 191 green)
+- **v118 (2026-10-29)**: Public QR/Family ID lookup uses public snapshot + auto-pull + RPC fallback; `#qedit=` parsing hardened; favicon/logo sync cross-device (applyFavicon + index.html links); sw cache v118.
 - **v108 (commit `c785843`)** poora audit-fix batch:
   - Dead code removal: sanitize/sanitizeInput/loginLocked/softWarn/docRow/viewUsers/viewSettings/qrDataURL
     delete; cloudAutoLogin sirf stub; magic-login dead handler remove; `loginFailed()` gaalti se ud gaya tha

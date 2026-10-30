@@ -672,7 +672,7 @@ const IDSET_DEFAULT = {
   famPrefix:'MEMC', famRandom:true        /* family id = MEMC-<yy><4 random> */
 };
 /* app version — footer/settings me dikhta hai, update confirm karne ke liye */
-const APP_VER = 'v118';
+const APP_VER = 'v119';
 const APP_VER_AT = '2026-10-29';
 
 /* password input + show/hide eye button */
@@ -6769,6 +6769,13 @@ function viewFind(){
     </div>
 
     <div id="findResult"></div>
+    <div id="qrOverlay" class="qr-overlay hidden">
+      <video id="qrVideoFull" class="qr-full" playsinline muted autoplay></video>
+      <canvas id="qrCanvas" hidden></canvas>
+      <div class="qr-overlay-guide"><div class="qr-overlay-frame"></div></div>
+      <button class="btn ghost qr-overlay-close" data-act="stop-qr">✕ ${tStr('Band karo')}</button>
+      <div id="qrScanMsg" class="qr-overlay-msg"></div>
+    </div>
   `;
 }
 
@@ -6803,28 +6810,38 @@ async function scanQrImage(file){
 }
 
 async function startQrScan(){
-  const video = $('#qrVideo'), msg = $('#qrScanMsg');
+  const video = $('#qrVideoFull') || $('#qrVideo'), msg = $('#qrScanMsg'), ov = $('#qrOverlay');
   if (!video) return;
   if (!('mediaDevices' in navigator)) { if(msg) msg.textContent='Is browser me camera support nahi.'; return; }
   try {
-    if (qrStream){ qrStream.getTracks().forEach(t=>t.stop()); qrStream=null; }
-    qrStream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:'environment' } });
+    stopQrScan();
+    qrStream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:{ideal:'environment'}, width:{ideal:1280}, height:{ideal:720} } });
     if (typeof state==='object' && state.view!=='find'){ qrStream.getTracks().forEach(t=>t.stop()); qrStream=null; return; }
-    video.srcObject = qrStream; await video.play();
+    video.srcObject = qrStream; video.setAttribute('playsinline','true'); video.muted = true;
+    await video.play();
+    if (ov) ov.classList.remove('hidden');
     if(msg) msg.textContent='QR scan ho raha hai...';
     scanLoop();
   } catch(e){ if(msg) msg.textContent='Camera access nahi mila. Settings se allow karo.'; }
 }
-function stopQrScan(){ if(qrTimer){ clearInterval(qrTimer); qrTimer=null; } if(qrStream){ qrStream.getTracks().forEach(t=>t.stop()); qrStream=null; } const video=$('#qrVideo'); if(video){ video.srcObject=null; } }
+function stopQrScan(){
+  if(qrTimer){ clearInterval(qrTimer); qrTimer=null; }
+  if(qrStream){ qrStream.getTracks().forEach(t=>t.stop()); qrStream=null; }
+  const v1=$('#qrVideo'), v2=$('#qrVideoFull');
+  if(v1){ v1.srcObject=null; }
+  if(v2){ v2.srcObject=null; }
+  const ov=$('#qrOverlay'); if(ov) ov.classList.add('hidden');
+  const msg=$('#qrScanMsg'); if(msg && !msg.textContent.includes('QR mila')) msg.textContent='';
+}
 function scanLoop(){
-  const video=$('#qrVideo'), canvas=$('#qrCanvas'), msg=$('#qrScanMsg');
+  const video = $('#qrVideoFull') || $('#qrVideo'), canvas=$('#qrCanvas'), msg=$('#qrScanMsg');
   if(!video||!canvas) return;
   const ctx = canvas.getContext('2d');
   qrTimer = setInterval(()=>{
-    if(video.readyState===video.HAVE_ENOUGH_DATA){
-      canvas.width = video.videoWidth; canvas.height = video.videoHeight;
-      ctx.drawImage(video,0,0,canvas.width,canvas.height);
+    if(video.readyState>=video.HAVE_CURRENT_DATA){
+      canvas.width = video.videoWidth || 640; canvas.height = video.videoHeight || 480;
       try {
+        ctx.drawImage(video,0,0,canvas.width,canvas.height);
         const img = ctx.getImageData(0,0,canvas.width,canvas.height);
         if (typeof jsQR === 'function'){
           const res = jsQR(img.data, img.width, img.height);
@@ -6838,7 +6855,7 @@ function scanLoop(){
         }
       } catch(e){}
     }
-  }, 250);
+  }, 200);
 }
 function getPublicFamilyById(id){
   try {

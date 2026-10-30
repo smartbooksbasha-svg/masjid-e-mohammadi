@@ -608,6 +608,13 @@ a:focus-visible,summary:focus-visible,[tabindex]:focus-visible{outline:2px solid
 
 /* find family */
 .qr-video{width:100%;max-width:320px;border-radius:14px;border:1px solid var(--line);margin-top:12px;background:#000}
+.qr-overlay{position:fixed;inset:0;z-index:200;background:#000;display:flex;align-items:center;justify-content:center}
+.qr-overlay.hidden{display:none}
+.qr-full{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.qr-overlay-guide{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none}
+.qr-overlay-frame{width:70vmin;height:70vmin;max-width:320px;max-height:320px;border:2px solid rgba(255,255,255,.9);border-radius:16px;box-shadow:0 0 0 2000px rgba(0,0,0,.4)}
+.qr-overlay-close{position:absolute;top:16px;right:16px;background:rgba(0,0,0,.5);color:#fff;border-color:rgba(255,255,255,.4)}
+.qr-overlay-msg{position:absolute;bottom:24px;left:50%;transform:translateX(-50%);color:#fff;background:rgba(0,0,0,.5);padding:6px 12px;border-radius:999px;font-size:.9rem;white-space:nowrap}
 #findResult .table-wrap{overflow:auto}
 
 /* chip logout */
