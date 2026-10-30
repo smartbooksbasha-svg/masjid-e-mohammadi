@@ -870,7 +870,7 @@ function isEmail(v){ return /^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(String(v||'').t
 function authCard(inner){
   return `<div class="auth-wrap"><div class="auth-card" role="dialog" aria-modal="true">
     <button class="auth-x" type="button" data-act="close-auth" aria-label="Close">×</button>
-    <div class="auth-brand"><span class="crest">${DB.logo() ? `<img src="${esc(DB.logo())}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:12px;display:block"/>` : 'M'}</span><div><div class="t">${esc(CFG.ORG_NAME||'Masjid e Mohammadi')}</div><div class="s">${esc(CFG.ORG_SUB||'Khidmath Committee')}</div></div></div>
+      <div class="auth-brand"><span class="crest"><img src="${esc(DB.logo() || './icon.png')}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:12px;display:block"/></span><div><div class="t">${esc(CFG.ORG_NAME||'Masjid e Mohammadi')}</div><div class="s">${esc(CFG.ORG_SUB||'Khidmath Committee')}</div></div></div>
     ${inner}
     <div class="auth-ver">${APP_VER}</div>
   </div></div>`;
@@ -1573,21 +1573,33 @@ function navItems(){
 }
 
 /* website icon = jo logo owner ne upload kiya (browser tab + home screen) */
-function applyFavicon(){
-  let logo = '';
-  try { logo = DB.logo() || localStorage.getItem(LS.logo) || ''; } catch(e){}
-  const defIcon = document.querySelector('link[rel="icon"]');
-  if (defIcon && !defIcon.dataset.def) defIcon.dataset.def = defIcon.getAttribute('href') || '';
-  const links = Array.from(document.querySelectorAll('link[rel="icon"], link[rel="shortcut icon"], link[rel="apple-touch-icon"]'));
-  links.forEach(l=>{
-    if (!l.dataset.def) l.dataset.def = l.getAttribute('href') || '';
-    l.setAttribute('href', logo || l.dataset.def || 'icons/favicon-32.png');
-  });
-  try {
-    const meta = document.querySelector('meta[name="theme-color"]');
-    if (meta) meta.setAttribute('content', '#0e7c66');
-  } catch(e){}
-}
+  function applyFavicon(){
+    let logo = '';
+    try { logo = DB.logo() || localStorage.getItem(LS.logo) || ''; } catch(e){}
+    if (!logo){
+      try {
+        const img = document.querySelector('.sb-brand .crest img');
+        if (img && img.getAttribute('src')) logo = img.getAttribute('src');
+      } catch(e){}
+    }
+    const defIcon = document.querySelector('link[rel="icon"]');
+    if (defIcon && !defIcon.dataset.def) defIcon.dataset.def = defIcon.getAttribute('href') || './icon.png';
+    const links = Array.from(document.querySelectorAll('link[rel="icon"], link[rel="shortcut icon"], link[rel="apple-touch-icon"]'));
+    links.forEach(l=>{
+      if (!l.dataset.def) l.dataset.def = l.getAttribute('href') || './icon.png';
+      l.setAttribute('href', logo || l.dataset.def || './icon.png');
+    });
+    try {
+      const og = document.querySelector('meta[property="og:image"]');
+      if (og) og.setAttribute('content', logo || './icon.png');
+      const tw = document.querySelector('meta[name="twitter:image"]');
+      if (tw) tw.setAttribute('content', logo || './icon.png');
+    } catch(e){}
+    try {
+      const meta = document.querySelector('meta[name="theme-color"]');
+      if (meta) meta.setAttribute('content', '#0e7c66');
+    } catch(e){}
+  }
 
 function renderShell(){
   const u = currentUser();
@@ -5048,12 +5060,13 @@ function viewSettingsCard(ctx='adminpanel'){
         <button class="btn ghost sm" data-act="export-excel">${ICON.dl} Export Excel (.xlsx)</button>
         <button class="btn ghost sm" data-act="print-all">${ICON.print} Export PDF / Print</button>
         <button class="btn ghost sm" data-act="backup-json">${ICON.dl} Backup (JSON)</button>
+        <button class="btn ghost sm" data-act="backup-full">${ICON.dl} Download full backup (Excel/JSON)</button>
         <button class="btn ghost sm" data-act="publish-public">${ICON.refresh} Public totals refresh</button>
         <button class="btn ghost sm" data-act="load-sample">Load sample data</button>
       </div>
       <div class="sec-title" style="font-size:.9rem">Restore &amp; Google Drive</div>
       <div style="display:flex;gap:10px;flex-wrap:wrap">
-        <button class="btn ghost sm" data-act="restore-json">Restore from backup file</button>
+        <button class="btn ghost sm" data-act="restore-json">Restore backup</button>
         <button class="btn ghost sm" data-act="drive-connect">${ICON.cloud} ${driveConnected()?'Drive connected':'Connect Google Drive'}</button>
         <button class="btn ghost sm" data-act="drive-backup">${ICON.cloud} Backup to Drive</button>
       </div>
@@ -5280,7 +5293,9 @@ document.addEventListener('click', (e)=>{
     const cur = Object.assign({}, DB.idcard()||{}); delete cur[which]; DB.setIdcard(cur);
     toast('Hata diya','ok'); go('idcard'); return;
   }
-  if (act==='backup-json'){ backupJSON(); return; }
+  if (act==='backup-json'){ try{ backupJSON(); }catch(e){ toast('Backup nahi hua','err'); } return; }
+  if (act==='backup-excel'){ try{ exportExcel(); }catch(e){ toast('Excel export nahi hua','err'); } return; }
+  if (act==='backup-full'){ try{ backupJSON(); setTimeout(()=>{ try{ exportExcel(); }catch(e){} }, 400); toast('Full backup start kiya gaya (JSON + Excel)','ok'); }catch(e){ toast('Backup nahi hua','err'); } return; }
   if (act==='restore-json'){ const inp=$('#restoreFile'); if(inp){ inp.value=''; inp.click(); } return; }
   if (act==='approve-admin'){
     if (!isOwner()){ toast('Sirf owner approve kar sakta hai','err'); return; }
@@ -6630,6 +6645,25 @@ function migrateAdmins(){
   } catch(e){}
 }
 
+function updateCloudFooter(){
+  try {
+    const el = document.getElementById('syncStatus');
+    if (!el) return;
+    if (typeof FIREBASE !== 'undefined' && FIREBASE){
+      if (FIREBASE.user) el.textContent = 'Cloud sync: Synced';
+      else if (FIREBASE.ready) el.textContent = 'Cloud sync: Not logged in';
+      else el.textContent = 'Cloud sync: Offline';
+      return;
+    }
+    if (typeof CLOUD !== 'undefined' && CLOUD.enabled()){
+      if (CLOUD.ready && CLOUD.user) el.textContent = 'Cloud sync: Synced';
+      else if (CLOUD.ready && !CLOUD.user) el.textContent = 'Cloud sync: Not logged in';
+      else el.textContent = 'Cloud sync: Offline';
+      return;
+    }
+    el.textContent = 'Cloud sync: Offline';
+  } catch(e){}
+}
 function init(){
   /* boot hash yaad rakho — enterApp() baad me hash badal deta hai (#dashboard) */
   let _bootHash = '';
@@ -6660,7 +6694,7 @@ function init(){
   } catch(e){}
   /* recovery link se aaya user: naya password set kare */
   try {
-    if (/type=recovery/.test(location.hash) && CLOUD.enabled()){
+      if (/type=recovery/.test(location.hash) && typeof CLOUD !== 'undefined' && CLOUD.enabled()){
       pending = { kind:'newpass', email:'', code:'' };
       renderAuth('login');
       renderNewPassword();
@@ -6676,6 +6710,7 @@ function init(){
     if (b){ b.onclick = ()=>{ const s=$('#sidebar'); const sc=$('#scrimNav'); if(s) s.classList.add('open'); if(sc) sc.classList.add('show'); }; }
   } catch(e){}
   try { applyFavicon(); } catch(e){}
+  try { updateCloudFooter(); } catch(e){}
   enterApp();   // public dashboard pehle — login optional
   /* direct admin link: #login (ya #admin) → seedha login box khulta hai */
   try {
@@ -6687,6 +6722,7 @@ function init(){
   // cloudAutoLogin() disabled - prevents auto-login on refresh
   try { new MutationObserver(()=>translateSoon()).observe(document.body, { childList:true, subtree:true }); } catch(e){}
   translateSoon();
+  try { setInterval(updateCloudFooter, 2000); } catch(e){}
 }
 // Handle browser back button
 document.addEventListener('visibilitychange', ()=>{ try{ if (document.hidden) stopQrScan(); }catch(_e){} });
@@ -6934,11 +6970,31 @@ async function lookupByPhone(id){
   if (!pid){ box.innerHTML='<div class="card"><div class="alert err">Family ID daalo.</div></div>'; return; }
   box.innerHTML = '<div class="card"><p class="muted">Searching...</p></div>';
   try {
+    if (typeof CLOUD !== 'undefined' && CLOUD.enabled()){
+      try {
+        const c = await CLOUD.get();
+        if (c && typeof c.rpc === 'function'){
+          const { data, error } = await c.rpc('get_family_by_id_public', { p_id: pid });
+          if (error){
+            box.innerHTML = '<div class="card"><div class="alert err">RPC error: ' + esc(error.message || error) + '</div></div>';
+            // fall through to local only if not found style? but show error
+          } else if (data && data.found){
+            renderFindResult(data);
+            return;
+          } else if (data && !data.found){
+            // continue to local cache maybe empty
+          }
+        }
+      } catch(e){
+        box.innerHTML = '<div class="card"><div class="alert err">Lookup error: ' + esc(e.message || e) + '</div></div>';
+        // still try local
+      }
+    }
     let f = DB.families().find(x=>String(x.id||'').toUpperCase()===pid);
     if (f){ renderFindResult(famToPub(f)); return; }
     f = getPublicFamilyById(pid);
     if (f){ renderFindResult(famToPub(f)); return; }
-    if (CLOUD.enabled()){
+    if (typeof CLOUD !== 'undefined' && CLOUD.enabled()){
       try {
         if (typeof SYNC.pullPublic === 'function') await SYNC.pullPublic();
         try { PUBDATA = JSON.parse(localStorage.getItem('memc_pub') || 'null'); } catch(e){}
@@ -6948,7 +7004,7 @@ async function lookupByPhone(id){
     }
     box.innerHTML = '<div class="card"><div class="alert err">Is Family ID se koi ghar nahi mila.</div></div>';
   } catch(e){
-    box.innerHTML = '<div class="card"><div class="alert err">Lookup nahi hua.</div></div>';
+    box.innerHTML = '<div class="card"><div class="alert err">Lookup nahi hua. ' + esc(e.message||'') + '</div></div>';
   }
 }
 function renderFindResult(res){
