@@ -870,7 +870,7 @@ function isEmail(v){ return /^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(String(v||'').t
 function authCard(inner){
   return `<div class="auth-wrap"><div class="auth-card" role="dialog" aria-modal="true">
     <button class="auth-x" type="button" data-act="close-auth" aria-label="Close">×</button>
-      <div class="auth-brand"><span class="crest"><img src="${esc(DB.logo() || './icon.png')}" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:12px;display:block"/></span><div><div class="t">${esc(CFG.ORG_NAME||'Masjid e Mohammadi')}</div><div class="s">${esc(CFG.ORG_SUB||'Khidmath Committee')}</div></div></div>
+      <div class="auth-brand"><span class="crest"><img src="./icons/logo.png" alt="Logo" style="width:100%;height:100%;object-fit:cover;border-radius:12px;display:block"/></span><div><div class="t">${esc(CFG.ORG_NAME||'Masjid e Mohammadi')}</div><div class="s">${esc(CFG.ORG_SUB||'Khidmath Committee')}</div></div></div>
     ${inner}
     <div class="auth-ver">${APP_VER}</div>
   </div></div>`;
@@ -1574,26 +1574,22 @@ function navItems(){
 
 /* website icon = jo logo owner ne upload kiya (browser tab + home screen) */
   function applyFavicon(){
-    let logo = '';
-    try { logo = DB.logo() || localStorage.getItem(LS.logo) || ''; } catch(e){}
-    if (!logo){
-      try {
-        const img = document.querySelector('.sb-brand .crest img');
-        if (img && img.getAttribute('src')) logo = img.getAttribute('src');
-      } catch(e){}
-    }
+    const logo = './icons/logo.png';
     const defIcon = document.querySelector('link[rel="icon"]');
-    if (defIcon && !defIcon.dataset.def) defIcon.dataset.def = defIcon.getAttribute('href') || './icon.png';
+    if (defIcon && !defIcon.dataset.def) defIcon.dataset.def = defIcon.getAttribute('href') || logo;
     const links = Array.from(document.querySelectorAll('link[rel="icon"], link[rel="shortcut icon"], link[rel="apple-touch-icon"]'));
     links.forEach(l=>{
-      if (!l.dataset.def) l.dataset.def = l.getAttribute('href') || './icon.png';
-      l.setAttribute('href', logo || l.dataset.def || './icon.png');
+      if (!l.dataset.def) l.dataset.def = l.getAttribute('href') || logo;
+      l.setAttribute('href', logo);
     });
     try {
+      document.querySelectorAll('.sb-brand .crest img, .auth-brand .crest img').forEach(img=>{ img.setAttribute('src', logo); });
+    } catch(e){}
+    try {
       const og = document.querySelector('meta[property="og:image"]');
-      if (og) og.setAttribute('content', logo || './icon.png');
+      if (og) og.setAttribute('content', 'https://smartbooksbasha-svg.github.io/masjid-e-mohammadi/icons/logo.png');
       const tw = document.querySelector('meta[name="twitter:image"]');
-      if (tw) tw.setAttribute('content', logo || './icon.png');
+      if (tw) tw.setAttribute('content', 'https://smartbooksbasha-svg.github.io/masjid-e-mohammadi/icons/logo.png');
     } catch(e){}
     try {
       const meta = document.querySelector('meta[name="theme-color"]');
