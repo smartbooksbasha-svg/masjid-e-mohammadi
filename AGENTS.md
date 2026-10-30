@@ -707,5 +707,15 @@ Key findings (details + line numbers in TASK.md "AUDIT" section):
 ## v124 (2026-10-29, LIVE)
 - Bulk ID print par agar kuch select na ho to toast dikhata hai. Public find result par "Copy Family ID" button add hua.
 
+## Session notes (2026-10-29)
+- QR full-screen + back close; dashboard group headers simplified; students filter tightened (age<23 + working/married/housewife excluded); households bulk select polished; public find QR/public-snapshot fixed; Copy Family ID added; v119-v124 live, tests 191/191 green.
+- Storage permission granted via termux-setup-storage (access to ~/storage/shared/ -> /storage/emulated/0/) for vault/backups.
+- User wants Firebase Firestore + Auth migration, icon.png, noindex, backup/restore, sync status. Keep design/features/languages (en/hi/ta/ur). Setup in progress.
+
+## Firebase migration plan (2026-10-29)
+- Replace local-only storage with Firestore collections: families, admins, masjid, idcard, idset, audit, settings. Auth = Firebase Email/Password.
+- Keep localStorage as offline cache + migration button to upload local data.
+- Sync status UI, security rules for logged-in users, robots noindex, icon.png + og:image, Excel/JSON backup/restore. Single index.html preferred if possible.
+
 ## Audit (2026-10-29)
 - QR overlay needs history/back handling (close on back instead of navigate). Native confirm/prompt used in places. Public find depends on published snapshot. Recommend: back-button close for QR, head-name search in public find, PWA install prompt.
