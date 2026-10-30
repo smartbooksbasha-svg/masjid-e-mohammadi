@@ -687,4 +687,7 @@ Key findings (details + line numbers in TASK.md "AUDIT" section):
     (v104 Edit + Full record)/my-profile.
   - Badge: user = "User · data entry", owner ke liye full buttons, public = "Public view · read only".
 - Tests 191/191; audits: en/hi/ur 0 leftovers, ta = 186 (pehle se pending). Page CDN ~1 min — curl verify
-  karo (app.js APP_VER 'v109', sw CACHE 'memc-app-v109').
+  karo (app.js APP_VER 'v119', sw CACHE 'memc-app-v119').
+
+## v119 (2026-10-29, LIVE)
+- Full-screen camera QR scanner (Google Lens style) on Find family page — uses environment camera, guide frame, auto-detects QR, opens household on any device. Public lookup uses public snapshot fallback.

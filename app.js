@@ -672,7 +672,7 @@ const IDSET_DEFAULT = {
   famPrefix:'MEMC', famRandom:true        /* family id = MEMC-<yy><4 random> */
 };
 /* app version — footer/settings me dikhta hai, update confirm karne ke liye */
-const APP_VER = 'v119';
+const APP_VER = 'v120';
 const APP_VER_AT = '2026-10-29';
 
 /* password input + show/hide eye button */
@@ -1808,12 +1808,16 @@ function computeStats(){
       if (g==='female' && ms==='widow') s.women.widow++;
 
       const edu = eduKey(m);
-      // "student" = still of school/college age (26 se kam) aur padhai set hai
-      // self-employed/employed log students list mein nahi aane chahiye
-      const emp = String(m.employment||'').toLowerCase();
-      const isWorking = emp === 'employed' || emp === 'self_employed' || emp === 'selfemployed';
-      const isStudent = !!edu && edu!=='none' && !isWorking && (age===null || age<26);
-      if (isStudent){
+      // "student" = still of school/college age (22 se kam) aur padhai set hai
+      // self-employed/employed/homemaker/wife log students list mein nahi aane chahiye
+      const emp2 = String(m.employment||'').toLowerCase();
+      const isWorking2 = emp2 === 'employed' || emp2 === 'self_employed' || emp2 === 'selfemployed' || emp2 === 'private' || emp2 === 'government' || emp2 === 'govt' || emp2 === 'business';
+      const occLow2 = String(occName(m)||'').toLowerCase().replace(/\s+/g,'');
+      const isHousewife2 = /housewife|homemaker|grihini|gharin|household|home/.test(occLow2);
+      const rel2 = (m.relation||'').toLowerCase();
+      const ms22 = (m.maritalStatus||'').toLowerCase();
+      const isStudentCalc2 = !!edu && edu!=='none' && !isWorking2 && !isHousewife2 && !(rel2.includes('wife')||rel2.includes('biwi')||rel2.includes('bahu')) && ms22!=='married' && (age===null || age<23);
+      if (isStudentCalc2){
         s.students.total++;
         if (s.students[edu]!==undefined) s.students[edu]++;
       }
@@ -2081,7 +2085,21 @@ const isDead   = m => !!m.deceased;
 const gOf      = m => String(m.gender||'').toLowerCase();
 const msOf     = m => String(m.maritalStatus||'').toLowerCase();
 const relOf    = m => String(m.religious||'').toLowerCase();
-const isStudentM = m => { const e = eduKey(m), a = ageFromDob(m.dob); return !!e && e!=='none' && (a===null || a<26); };
+const isStudentM = m => {
+  if (!m || m.deceased) return false;
+  const a = ageFromDob(m.dob);
+  if (a===null || a>22) return false;
+  if (m.religious === 'aalima' || m.religious === 'mufti') return false;
+  const rel = (m.relation||'').toLowerCase();
+  if (rel.includes('wife')||rel.includes('biwi')||rel.includes('bahu')) return false;
+  const occ = String(m.occupation||'').toLowerCase().replace(/\s+/g,'');
+  if (/housewife|homemaker|grihini|household/.test(occ)) return false;
+  if (occ.includes('private')||occ.includes('government')||occ.includes('govt')||occ.includes('business')||occ.includes('employ')) return false;
+  const emp = String(m.employment||'').toLowerCase();
+  if (emp === 'employed' || emp === 'self_employed' || emp === 'selfemployed') return false;
+  if ((m.maritalStatus||m.marital_status||'').toLowerCase() === 'married') return false;
+  const e = eduKey(m); return !!e && e!=='none';
+};
 const docsHave = m => BASIC_DOCS.filter(([k])=> (m.docs||{})[k]==='yes').length;
 const mf = fn => (m) => !isDead(m) && fn(m);
 
@@ -2099,7 +2117,7 @@ window.MF = {
   womenUnmarried:  mf(m=>gOf(m)==='female' && msOf(m)!=='married'),
   womenDisabled:   mf(m=>gOf(m)==='female' && m.disability==='yes'),
   widow:           mf(m=>gOf(m)==='female' && msOf(m)==='widow'),
-  students:        mf(m=>isStudentM(m)),
+    students:        mf(m=>isStudentM(m)),
   allStudents:     mf(m=>{
     const a = ageFromDob(m.dob);
     const edu = eduKey(m);
@@ -2332,10 +2350,7 @@ function viewDashboard(){
     <div class="page-head"><div><h1>Survey Dashboard</h1><p>Complete survey of households, streets and members — live totals.</p>
       ${!isAdmin() && PUBDATA && PUBDATA.at ? `<p class="muted small"><span>Data updated:</span> <span>${esc(fmtDateTime(PUBDATA.at))}</span></p>` : ''}</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        ${userRole()==='owner'
-          ? `<button class="btn ghost sm" data-act="export-excel">${ICON.dl} Excel</button>
-             <button class="btn ghost sm" data-act="print-all">${ICON.print} PDF / Print</button>`
-          : isAdmin() ? `<span class="badge gray">User · data entry</span>` : `<span class="badge gray">Public view · read only</span>`}
+        ${isAdmin() ? `<span class="badge gray">${userRole()==='owner'?'Owner · Admin':'User · data entry'}</span>` : `<span class="badge gray">Public view · read only</span>`}
       </div></div>
     ${heroBlock}
 
