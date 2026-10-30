@@ -672,7 +672,7 @@ const IDSET_DEFAULT = {
   famPrefix:'MEMC', famRandom:true        /* family id = MEMC-<yy><4 random> */
 };
 /* app version — footer/settings me dikhta hai, update confirm karne ke liye */
-const APP_VER = 'v122';
+const APP_VER = 'v123';
 const APP_VER_AT = '2026-10-29';
 
 /* password input + show/hide eye button */
@@ -2240,7 +2240,7 @@ function viewFamilyList(filterFn, title){
   const rows = famsAll.map(f=>{
     const n = (f.members||[]).filter(m=>String(m.name||'').trim() && !m.deceased).length;
     return `<tr data-fid="${esc(f.id)}">
-      <td><input type="checkbox" class="flist-cb" data-id="${esc(f.id)}" /></td>
+      <td><input type="checkbox" class="flist-cb" data-id="${esc(f.id)}" onchange="if(typeof window.updateFlistSel==='function')window.updateFlistSel()" /></td>
       <td><b>${esc(f.id)}</b></td>
       <td>${esc(f.houseName||'—')}</td>
       <td>${esc(streetName(f))}</td>
@@ -2250,9 +2250,10 @@ function viewFamilyList(filterFn, title){
       <td><button class="btn ghost sm" data-act="detail" data-id="${esc(f.id)}">View</button></td></tr>`;
   }).join('');
   return `
-    <div class="page-head"><div><h1>${esc(title)}</h1><p><span id="flistCount">${famsAll.length}</span> household(s) found</p></div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <div class="page-head"><div><h1>${esc(title)}</h1><p><span id="flistCount">${famsAll.length}</span> household(s) found · <span class="muted"><span id="flistSelCount">0</span> selected</span></p></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
         <button class="btn ghost sm" data-act="goto" data-view="dashboard">← Back to Dashboard</button>
+        <button class="btn ghost sm" type="button" onclick="toggleFlistAll(this)">Select all</button>
         <button class="btn sm" data-act="print-selected-ids">Print selected ID cards</button>
       </div></div>
     <div class="card">
@@ -2262,15 +2263,16 @@ function viewFamilyList(filterFn, title){
           <option value="all">Sab streets</option>
           ${streets.map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join('')}
         </select>
-        <button class="btn ghost sm" type="button" onclick="toggleFlistAll(this)">Select all</button>
       </div>
       <div class="table-wrap"><table id="flistTable"><thead><tr><th style="width:40px"></th><th>Family ID</th><th>House</th><th>Street</th><th>House No</th><th>House type</th><th>Members</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`
                    : '<div class="empty"><h3>No households found</h3></div>'}
     </div>
     <script>
       window.updateFlistCount = function(){ const t=document.querySelector('#flistTable'); if(!t)return; let c=0; t.querySelectorAll('tbody tr').forEach(tr=>{ if(tr.style.display!=='none') c++; }); const el=document.querySelector('#flistCount'); if(el) el.textContent=c; };
-      window.filterFlistByStreet = function(v){ const t=document.querySelector('#flistTable'); if(!t)return; t.querySelectorAll('tbody tr').forEach(tr=>{ const st=tr.children[3]?tr.children[3].textContent:''; if(v==='all'){ tr.style.display=''; } else { tr.style.display = st===v?'':'none'; } }); updateFlistCount(); };
-      window.toggleFlistAll = function(btn){ const t=document.querySelector('#flistTable'); if(!t)return; const cbs=t.querySelectorAll('.flist-cb'); const all=Array.from(cbs).every(cb=>cb.checked); cbs.forEach(cb=>{ cb.checked=!all; }); btn.textContent = all?'Select all':'Unselect all'; };
+      window.filterFlistByStreet = function(v){ const t=document.querySelector('#flistTable'); if(!t)return; t.querySelectorAll('tbody tr').forEach(tr=>{ const st=tr.children[3]?tr.children[3].textContent:''; if(v==='all'){ tr.style.display=''; } else { tr.style.display = st===v?'':'none'; } }); updateFlistCount(); if(typeof window.updateFlistSel==='function') window.updateFlistSel(); };
+      window.updateFlistSel = function(){ try { const cbs=document.querySelectorAll('.flist-cb:checked'); const el=document.getElementById('flistSelCount'); if(el) el.textContent = String(cbs.length); } catch(e){} };
+      window.toggleFlistAll = function(btn){ const t=document.querySelector('#flistTable'); if(!t)return; const cbs=t.querySelectorAll('.flist-cb'); const all=Array.from(cbs).every(cb=>cb.checked); cbs.forEach(cb=>{ cb.checked=!all; }); btn.textContent = all?'Select all':'Unselect all'; if(typeof window.updateFlistSel==='function') window.updateFlistSel(); };
+      setTimeout(()=>{ if(typeof window.updateFlistSel==='function') window.updateFlistSel(); }, 0);
     </script>`;
 }
 
