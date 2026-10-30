@@ -691,3 +691,7 @@ Key findings (details + line numbers in TASK.md "AUDIT" section):
 
 ## v119 (2026-10-29, LIVE)
 - Full-screen camera QR scanner (Google Lens style) on Find family page — uses environment camera, guide frame, auto-detects QR, opens household on any device. Public lookup uses public snapshot fallback.
+
+## v120 (2026-10-29, LIVE)
+- Dashboard title buttons (Excel/PDF) removed — sirf role badge dikhata hai.
+- Students filter tightened: age < 23 required, exclude working (employed/self-employed/business/private/govt), housewife/homemaker/grihini, wife/daughter-in-law, married. Applies to dashboard + member lists.
