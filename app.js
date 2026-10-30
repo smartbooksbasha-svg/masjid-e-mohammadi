@@ -672,7 +672,7 @@ const IDSET_DEFAULT = {
   famPrefix:'MEMC', famRandom:true        /* family id = MEMC-<yy><4 random> */
 };
 /* app version — footer/settings me dikhta hai, update confirm karne ke liye */
-const APP_VER = 'v120';
+const APP_VER = 'v121';
 const APP_VER_AT = '2026-10-29';
 
 /* password input + show/hide eye button */
@@ -1972,7 +1972,7 @@ function groupDetail(no){
 function DOC_KEYS_HAS(m){ return BASIC_DOCS.some(([k])=>m.docs && m.docs[k]==='yes'); }
 
 function grpHead(no, title, sub){
-  return `<header class="grp-head" data-act="grp-toggle" data-g="${no}" title="Click to open full details"><span class="grp-no">${no}</span><div><h2>${esc(title)}</h2><p>${esc(sub)}</p></div></header>`;
+  return `<header class="grp-head"><span class="grp-no">${no}</span><div><h2>${esc(title)}</h2><p>${esc(sub)}</p></div></header>`;
 }
 
 function masjidHero(){
