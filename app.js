@@ -672,7 +672,7 @@ const IDSET_DEFAULT = {
   famPrefix:'MEMC', famRandom:true        /* family id = MEMC-<yy><4 random> */
 };
 /* app version — footer/settings me dikhta hai, update confirm karne ke liye */
-const APP_VER = 'v121';
+const APP_VER = 'v122';
 const APP_VER_AT = '2026-10-29';
 
 /* password input + show/hide eye button */
@@ -6700,6 +6700,13 @@ function init(){
 document.addEventListener('visibilitychange', ()=>{ try{ if (document.hidden) stopQrScan(); }catch(_e){} });
 window.addEventListener('popstate', (e)=>{
   try {
+    // If QR scanner overlay open, close it on back instead of navigating
+    const ov = $('#qrOverlay');
+    if (ov && !ov.classList.contains('hidden')){
+      stopQrScan();
+      try { history.pushState({view: state.view, param: state.param}, '', location.pathname + location.search + '#find'); } catch(_e){}
+      return;
+    }
     if (e.state && e.state.view){
       state.view = e.state.view;
       if (state.view!=='find'){ try{ stopQrScan(); }catch(_e){} }
@@ -6835,6 +6842,7 @@ async function startQrScan(){
     video.srcObject = qrStream; video.setAttribute('playsinline','true'); video.muted = true;
     await video.play();
     if (ov) ov.classList.remove('hidden');
+    try { history.pushState({view:'find', qr:true}, '', '#find'); } catch(_e){}
     if(msg) msg.textContent='QR scan ho raha hai...';
     scanLoop();
   } catch(e){ if(msg) msg.textContent='Camera access nahi mila. Settings se allow karo.'; }
