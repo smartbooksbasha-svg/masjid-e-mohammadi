@@ -716,6 +716,7 @@ Key findings (details + line numbers in TASK.md "AUDIT" section):
 - Replace local-only storage with Firestore collections: families, admins, masjid, idcard, idset, audit, settings. Auth = Firebase Email/Password.
 - Keep localStorage as offline cache + migration button to upload local data.
 - Sync status UI, security rules for logged-in users, robots noindex, icon.png + og:image, Excel/JSON backup/restore. Single index.html preferred if possible.
+- Header/sidebar/auth use icons/logo.png; favicon/apple-touch-icon/og use full URL to icons/logo.png; manifest uses icons/logo.png; SW cache v125. Tests 191/191 green.
 
 ## Audit (2026-10-29)
 - QR overlay needs history/back handling (close on back instead of navigate). Native confirm/prompt used in places. Public find depends on published snapshot. Recommend: back-button close for QR, head-name search in public find, PWA install prompt.
