@@ -672,7 +672,7 @@ const IDSET_DEFAULT = {
   famPrefix:'MEMC', famRandom:true        /* family id = MEMC-<yy><4 random> */
 };
 /* app version — footer/settings me dikhta hai, update confirm karne ke liye */
-const APP_VER = 'v124';
+const APP_VER = 'v128';
 const APP_VER_AT = '2026-10-29';
 
 /* password input + show/hide eye button */
@@ -1261,14 +1261,13 @@ function ageGroupFromDob(dob){
   return '60+';
 }
 /* public view ke liye ANONYMOUS copy — na naam, na phone, na pata, na notes */
-const ANON_MEMBER_FIELDS = ['gender','educationLevel','occupation','religious','maritalStatus','children','disability','schemes','docs'];
+const ANON_MEMBER_FIELDS = ['gender','educationLevel','occupation','religious','maritalStatus','children','disability','schemes'];
 function anonymizeFamily(f, i){
   return {
     id:'p' + (i + 1),
     street:f.street || '',
     houseType:f.houseType || 'moulding',
     createdAt:f.createdAt || 0,
-    docs:{}, custom:[],
     members:(f.members||[]).filter(m=>String(m.name||'').trim() || m.gender).map(m=>{
       const o = {};
       ANON_MEMBER_FIELDS.forEach(k=>{ o[k] = m[k]; });
@@ -1396,6 +1395,19 @@ const SYNC = {
         })
       }));
       if (fams.length) DB.setFamilies(fams, { silent:true });
+      try {
+        let pq = JSON.parse(localStorage.getItem('memc_pending')||'[]');
+        if (Array.isArray(pq) && pq.length){
+          const all = DB.families();
+          pq.forEach(pf=>{
+            const pid = String(pf&&pf.id||'');
+            if (!pid) return;
+            const idx = all.findIndex(x=> String(x.id||'') === pid);
+            if (idx >= 0) all[idx] = pf; else all.push(pf);
+          });
+          DB.setFamilies(all, { silent:true });
+        }
+      } catch(e){}
       const { data: mj } = await c.from('masjid').select('*').limit(1);
       if (mj && mj[0]) DB.setMasjid(mj[0]);
       /* public snapshot ko fresh rakho (anon sirf yahi padhta hai) */
@@ -1403,11 +1415,11 @@ const SYNC = {
       return true;
     } catch(e){ return false; }
   },
-  enqueuePending(f){ try { const q=JSON.parse(localStorage.getItem('memc_sync_pending')||'[]'); if(!Array.isArray(q)) q=[]; const id=String(f&&f.id||''); if(!q.find(x=>String(x&&x.id||'')===id)) q.push(f); localStorage.setItem('memc_sync_pending', JSON.stringify(q)); if(typeof updateCloudFooter==='function') updateCloudFooter(); }catch(e){} },
+  enqueuePending(f){ try { let q=JSON.parse(localStorage.getItem('memc_pending')||'[]'); if(!Array.isArray(q)) q=[]; const oldq=JSON.parse(localStorage.getItem('memc_sync_pending')||'[]'); if(Array.isArray(oldq)&&oldq.length){ oldq.forEach(x=>{ if(x) q.push(x); }); try { localStorage.removeItem('memc_sync_pending'); }catch(e){} } const id=String(f&&f.id||''); q = q.filter(x=> String(x&&x.id||'') !== id); q.push(JSON.parse(JSON.stringify(f))); localStorage.setItem('memc_pending', JSON.stringify(q)); if(typeof updateCloudFooter==='function') updateCloudFooter(); }catch(e){} },
   async flushPending(){
     try {
       if (!SYNC.on() || !isAdmin()) return;
-      const q=JSON.parse(localStorage.getItem('memc_sync_pending')||'[]');
+      const q=JSON.parse(localStorage.getItem('memc_pending')||'[]');
       if(!Array.isArray(q)||!q.length) return;
       const left=[];
       for (let i=0;i<q.length;i++){
@@ -1416,31 +1428,52 @@ const SYNC = {
           if (!ok) left.push(q[i]);
         } catch(e){ left.push(q[i]); }
       }
-      localStorage.setItem('memc_sync_pending', JSON.stringify(left));
+      localStorage.setItem('memc_pending', JSON.stringify(left));
       if(typeof updateCloudFooter==='function') updateCloudFooter();
     }catch(e){}
   },
   async saveFamily(f){
-    const c = await CLOUD.get(); if (!c) return false;
+    const c = await CLOUD.get(); if (!c){
+      try { this.enqueuePending(f); }catch(e){}
+      return false;
+    }
     try {
+      const famCopy = JSON.parse(JSON.stringify(f));
       const row = {
-        id:f.id, house_name:f.houseName||'', house_no:f.houseNo||'', street:f.street||'',
-        house_type:f.houseType||'moulding', address:f.address||'', phone:f.phone||'',
-        notes:f.notes||'', docs:f.docs||{}, custom:f.custom||[], updated_at:new Date().toISOString()
+        id:famCopy.id, house_name:famCopy.houseName||'', house_no:famCopy.houseNo||'', street:famCopy.street||'',
+        house_type:famCopy.houseType||'moulding', address:famCopy.address||'', phone:famCopy.phone||'',
+        notes:famCopy.notes||'', docs:famCopy.docs||{}, custom:famCopy.custom||[], updated_at:new Date().toISOString()
       };
-      const { error } = await c.from('families').upsert(row);
-      if (error) throw error;
-      await c.from('members').delete().eq('family_id', f.id);
-      const rows = (f.members||[]).filter(m=>String(m.name||'').trim()).map(m=>({
-        family_id:f.id, relation:m.relation||'', name:m.name||'', father_name:m.fatherName||'', mother_name:m.motherName||'',
+      const { error: famErr } = await c.from('families').upsert(row);
+      if (famErr) throw famErr;
+      const incoming = (famCopy.members||[]).filter(m=>String(m.name||'').trim());
+      let oldIds = [];
+      try {
+        const { data: existing } = await c.from('members').select('id').eq('family_id', famCopy.id);
+        if (Array.isArray(existing)) oldIds = existing.map(x=>x.id).filter(Boolean);
+      } catch(e){ oldIds = []; }
+      const memRows = incoming.map(m=>({
+        family_id:famCopy.id, relation:m.relation||'', name:m.name||'', father_name:m.fatherName||'', mother_name:m.motherName||'',
         gender:m.gender||'', dob:m.dob||null, education:m.education||'', education_level:m.educationLevel||'',
         occupation:m.occupation||'', sector:m.sector||'', religious:m.religious||'', marital_status:m.maritalStatus||'',
         children:String(m.children||''), disability:m.disability||'no', schemes:m.schemes||{}, scheme_name:m.schemeName||'', docs:m.docs||{}
       }));
-      if (rows.length){ const { error: e2 } = await c.from('members').insert(rows); if (e2) throw e2; }
+      if (memRows.length){
+        const { error: insErr } = await c.from('members').insert(memRows);
+        if (insErr){ throw insErr; }
+      }
+      if (oldIds.length){
+        try {
+          const { error: delErr } = await c.from('members').delete().in('id', oldIds);
+          if (delErr){ /* best effort */ }
+        } catch(e){}
+      }
       this.publishSnapshot();
       return true;
-    } catch(e){ return false; }
+    } catch(e){
+      try { this.enqueuePending(f); }catch(_e){}
+      return false;
+    }
   },
   async delFamily(id){
     const c = await CLOUD.get(); if (!c) return false;
@@ -5890,8 +5923,8 @@ function saveFamily(){
   try { clearFormDraft(); } catch(e){}
   if (SYNC.on() && isAdmin()){
     try {
-      SYNC.saveFamily(d).then(ok=>{ if (!ok){ try { enqueuePending(d); }catch(e){} toast('Cloud me save nahi hua — baad me retry karega','err'); updateCloudFooter(); } else { try{ updateCloudFooter(); }catch(e){} } });
-    } catch(e){ try { enqueuePending(d); updateCloudFooter(); }catch(_e){} }
+      SYNC.saveFamily(d).then(ok=>{ if (!ok){ try { SYNC.enqueuePending(d); }catch(e){} toast('Cloud me save nahi hua — baad me retry karega','err'); if(typeof updateCloudFooter==='function') updateCloudFooter(); } else { try{ if(typeof updateCloudFooter==='function') updateCloudFooter(); }catch(e){} } });
+    } catch(e){ try { SYNC.enqueuePending(d); if(typeof updateCloudFooter==='function') updateCloudFooter(); }catch(_e){} }
   }
   if (andNext){
     const nd = blankDraft();
@@ -6680,7 +6713,7 @@ function migrateAdmins(){
 
 function getPendingCount(){
   try {
-    const q = JSON.parse(localStorage.getItem('memc_sync_pending')||'[]');
+    const q = JSON.parse(localStorage.getItem('memc_pending')||localStorage.getItem('memc_sync_pending')||'[]');
     return Array.isArray(q) ? q.length : 0;
   } catch(e){ return 0; }
 }
@@ -6689,7 +6722,7 @@ function updateCloudFooter(){
     const el = document.getElementById('syncStatus');
     const pel = document.getElementById('pendingStatus');
     const pc = getPendingCount();
-    if (pel) pel.textContent = pc ? ('Pending: ' + pc) : '';
+    if (pel){ pel.textContent = pc ? (pc + ' pending') : ''; }
     if (!el) return;
     if (typeof FIREBASE !== 'undefined' && FIREBASE){
       if (FIREBASE.user){ el.textContent = pc ? 'Cloud sync: Syncing' : 'Cloud sync: Synced'; return; }
@@ -6707,6 +6740,7 @@ function updateCloudFooter(){
 function init(){
   try { if (typeof SYNC.flushPending === 'function') SYNC.flushPending(); } catch(e){}
   try { window.addEventListener('online', ()=>{ try{ if(typeof SYNC.flushPending==='function') SYNC.flushPending(); if(typeof updateCloudFooter==='function') updateCloudFooter(); }catch(e){} }); } catch(e){}
+  try { setInterval(()=>{ try{ if(typeof SYNC.flushPending==='function') SYNC.flushPending(); if(typeof updateCloudFooter==='function') updateCloudFooter(); }catch(e){} }, 120000); } catch(e){}
   /* boot hash yaad rakho — enterApp() baad me hash badal deta hai (#dashboard) */
   let _bootHash = '';
   try { _bootHash = String(typeof BOOT_HASH === 'string' ? BOOT_HASH : '').toLowerCase(); } catch(e){}
@@ -7019,6 +7053,7 @@ async function lookupByPhone(id){
           const { data, error } = await c.rpc('get_family_by_id_public', { p_id: pid.trim() });
           if (error){
             box.innerHTML = '<div class="card"><div class="alert err">' + esc(error.message || String(error)) + '</div></div>';
+            return;
           } else if (data && data.found){
             renderFindResult(data);
             return;
@@ -7027,6 +7062,7 @@ async function lookupByPhone(id){
         }
       } catch(e){
         box.innerHTML = '<div class="card"><div class="alert err">' + esc(e.message || String(e)) + '</div></div>';
+        return;
       }
     }
     const p = pid.toUpperCase();
