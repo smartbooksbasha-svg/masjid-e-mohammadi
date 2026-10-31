@@ -1245,8 +1245,23 @@ const ADMIN_FAM_COLS = PUB_FAM_COLS + ',address,phone';
 const MEMBER_COLS = ['relation','name','father_name','mother_name','gender','dob','education','education_level','occupation','sector','religious','marital_status','children','disability','schemes','scheme_name','docs'];
 const MEMBER_TO_JS = { father_name:'fatherName', mother_name:'motherName', education_level:'educationLevel', marital_status:'maritalStatus', scheme_name:'schemeName' };
 
+function ageGroupFromDob(dob){
+  if (!dob) return null;
+  const d = new Date(dob);
+  if (isNaN(d)) return null;
+  const now = new Date();
+  let age = now.getFullYear() - d.getFullYear();
+  const m = now.getMonth() - d.getMonth();
+  if (m < 0 || (m === 0 && now.getDate() < d.getDate())) age--;
+  if (age < 0) return null;
+  if (age <= 5) return '0-5';
+  if (age <= 17) return '6-17';
+  if (age <= 35) return '18-35';
+  if (age <= 59) return '36-59';
+  return '60+';
+}
 /* public view ke liye ANONYMOUS copy — na naam, na phone, na pata, na notes */
-const ANON_MEMBER_FIELDS = ['gender','dob','educationLevel','occupation','religious','maritalStatus','children','disability','schemes','docs'];
+const ANON_MEMBER_FIELDS = ['gender','educationLevel','occupation','religious','maritalStatus','children','disability','schemes','docs'];
 function anonymizeFamily(f, i){
   return {
     id:'p' + (i + 1),
@@ -1255,7 +1270,10 @@ function anonymizeFamily(f, i){
     createdAt:f.createdAt || 0,
     docs:{}, custom:[],
     members:(f.members||[]).filter(m=>String(m.name||'').trim() || m.gender).map(m=>{
-      const o = {}; ANON_MEMBER_FIELDS.forEach(k=>{ o[k] = m[k]; });
+      const o = {};
+      ANON_MEMBER_FIELDS.forEach(k=>{ o[k] = m[k]; });
+      const ag = ageGroupFromDob(m.dob);
+      if (ag) o.ageGroup = ag;
       return o;
     })
   };
@@ -1384,6 +1402,23 @@ const SYNC = {
       this.publishSnapshot();
       return true;
     } catch(e){ return false; }
+  },
+  enqueuePending(f){ try { const q=JSON.parse(localStorage.getItem('memc_sync_pending')||'[]'); if(!Array.isArray(q)) q=[]; const id=String(f&&f.id||''); if(!q.find(x=>String(x&&x.id||'')===id)) q.push(f); localStorage.setItem('memc_sync_pending', JSON.stringify(q)); if(typeof updateCloudFooter==='function') updateCloudFooter(); }catch(e){} },
+  async flushPending(){
+    try {
+      if (!SYNC.on() || !isAdmin()) return;
+      const q=JSON.parse(localStorage.getItem('memc_sync_pending')||'[]');
+      if(!Array.isArray(q)||!q.length) return;
+      const left=[];
+      for (let i=0;i<q.length;i++){
+        try {
+          const ok = await SYNC.saveFamily(q[i]);
+          if (!ok) left.push(q[i]);
+        } catch(e){ left.push(q[i]); }
+      }
+      localStorage.setItem('memc_sync_pending', JSON.stringify(left));
+      if(typeof updateCloudFooter==='function') updateCloudFooter();
+    }catch(e){}
   },
   async saveFamily(f){
     const c = await CLOUD.get(); if (!c) return false;
@@ -5854,7 +5889,9 @@ function saveFamily(){
   state.draft = null;
   try { clearFormDraft(); } catch(e){}
   if (SYNC.on() && isAdmin()){
-    SYNC.saveFamily(d).then(ok=>{ if (!ok) toast('Cloud me save nahi hua — baad me retry karega','err'); });
+    try {
+      SYNC.saveFamily(d).then(ok=>{ if (!ok){ try { enqueuePending(d); }catch(e){} toast('Cloud me save nahi hua — baad me retry karega','err'); updateCloudFooter(); } else { try{ updateCloudFooter(); }catch(e){} } });
+    } catch(e){ try { enqueuePending(d); updateCloudFooter(); }catch(_e){} }
   }
   if (andNext){
     const nd = blankDraft();
@@ -6641,26 +6678,35 @@ function migrateAdmins(){
   } catch(e){}
 }
 
+function getPendingCount(){
+  try {
+    const q = JSON.parse(localStorage.getItem('memc_sync_pending')||'[]');
+    return Array.isArray(q) ? q.length : 0;
+  } catch(e){ return 0; }
+}
 function updateCloudFooter(){
   try {
     const el = document.getElementById('syncStatus');
+    const pel = document.getElementById('pendingStatus');
+    const pc = getPendingCount();
+    if (pel) pel.textContent = pc ? ('Pending: ' + pc) : '';
     if (!el) return;
     if (typeof FIREBASE !== 'undefined' && FIREBASE){
-      if (FIREBASE.user) el.textContent = 'Cloud sync: Synced';
-      else if (FIREBASE.ready) el.textContent = 'Cloud sync: Not logged in';
-      else el.textContent = 'Cloud sync: Offline';
-      return;
+      if (FIREBASE.user){ el.textContent = pc ? 'Cloud sync: Syncing' : 'Cloud sync: Synced'; return; }
+      if (FIREBASE.ready){ el.textContent = 'Cloud sync: Not logged in'; return; }
+      el.textContent = 'Cloud sync: Offline'; return;
     }
     if (typeof CLOUD !== 'undefined' && CLOUD.enabled()){
-      if (CLOUD.ready && CLOUD.user) el.textContent = 'Cloud sync: Synced';
-      else if (CLOUD.ready && !CLOUD.user) el.textContent = 'Cloud sync: Not logged in';
-      else el.textContent = 'Cloud sync: Offline';
-      return;
+      if (CLOUD.ready && CLOUD.user){ el.textContent = pc ? 'Cloud sync: Syncing' : 'Cloud sync: Synced'; return; }
+      if (CLOUD.ready && !CLOUD.user){ el.textContent = 'Cloud sync: Not logged in'; return; }
+      el.textContent = 'Cloud sync: Offline'; return;
     }
     el.textContent = 'Cloud sync: Offline';
   } catch(e){}
 }
 function init(){
+  try { if (typeof SYNC.flushPending === 'function') SYNC.flushPending(); } catch(e){}
+  try { window.addEventListener('online', ()=>{ try{ if(typeof SYNC.flushPending==='function') SYNC.flushPending(); if(typeof updateCloudFooter==='function') updateCloudFooter(); }catch(e){} }); } catch(e){}
   /* boot hash yaad rakho — enterApp() baad me hash badal deta hai (#dashboard) */
   let _bootHash = '';
   try { _bootHash = String(typeof BOOT_HASH === 'string' ? BOOT_HASH : '').toLowerCase(); } catch(e){}

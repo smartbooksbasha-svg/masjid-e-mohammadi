@@ -48,6 +48,7 @@
     <div class="sb-spacer"></div>
     <div class="sb-foot">
       <div id="syncStatus">Cloud sync: initializing...</div>
+      <div id="pendingStatus" class="muted small" style="margin-top:4px"></div>
       <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap">
         <button class="btn ghost sm" type="button" onclick="if(typeof fbMigrateLocal==='function')fbMigrateLocal()">Upload old data from this device</button>
         <button class="btn ghost sm" type="button" onclick="if(typeof fbLogout==='function')fbLogout()">Logout</button>
