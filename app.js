@@ -449,7 +449,117 @@ function setSession(s){
     if (ch) DB.setAdmins(admins);
   } catch(x){}
 }
-function clearSession(){ try { localStorage.removeItem(LS.session); } catch(e){} try { cloudPulled = false; } catch(e){} try { if(window.CLOUD && CLOUD.client){ CLOUD.client.auth.signOut().catch(()=>{}); } } catch(e){} }
+let _idleTimer=null, _warnTimer=null, _hiddenTimer=null, _warnShown=false;
+function _hasUnsavedDraft(){
+  try {
+    if (state && state.view === 'add' && state.draft && !state.draft.id){
+      const m = (state.draft.members||[]).some(x=> String(x&&x.name||'').trim());
+      if (m) return true;
+      if (String(state.draft.houseName||'').trim()) return true;
+      if (String(state.draft.phone||'').trim()) return true;
+      if (String(state.draft.address||'').trim()) return true;
+      if (String(state.draft.street||'').trim()) return true;
+    }
+  }catch(e){}
+  try {
+    const raw = localStorage.getItem(LS.formDraft);
+    if (raw) return true;
+  }catch(e){}
+  return false;
+}
+function _clearIdleTimers(){
+  try{ if(_idleTimer){ clearTimeout(_idleTimer); _idleTimer=null; } }catch(e){}
+  try{ if(_warnTimer){ clearTimeout(_warnTimer); _warnTimer=null; } }catch(e){}
+  try{ if(_hiddenTimer){ clearTimeout(_hiddenTimer); _hiddenTimer=null; } }catch(e){}
+  _warnShown=false;
+}
+function _saveDraftNow(){
+  try {
+    if (isAdmin() && state.view === 'add' && state.draft){
+      saveFormDraft();
+      return true;
+    }
+  }catch(e){}
+  try {
+    if (isAdmin() && state.draft && !state.draft.id){
+      localStorage.setItem(LS.formDraft, JSON.stringify({ draft: state.draft, ts: Date.now(), view: state.view, param: state.param }));
+      return true;
+    }
+  }catch(e){}
+  return false;
+}
+function _doAutoLogout(reason){
+  try { if(!isAdmin()) return; }catch(e){ return; }
+  if (_hasUnsavedDraft()){
+    try { _saveDraftNow(); }catch(e){}
+  }
+  try { audit('logout', (currentUser()&&currentUser().email)||'', reason||'auto-logout'); }catch(e){}
+  clearSession();
+  try { state.draft=null; }catch(e){}
+  try { renderShell(); go('dashboard'); toast('Auto-logged out due to inactivity. Draft saved if any.'); }catch(e){}
+}
+function _startIdleTimers(){
+  try {
+    if(!isAdmin()){ _clearIdleTimers(); return; }
+    _clearIdleTimers();
+    _warnTimer = setTimeout(()=>{
+      if(!isAdmin() || document.hidden) return;
+      if (_hasUnsavedDraft()) return;
+      _warnShown=true;
+      const scr = document.createElement('div');
+      scr.className='modal-scrim no-i18n'; scr.id='autoLogoutWarn';
+      scr.innerHTML = `<div class="modal-card"><h3 class="modal-title">Session expiring</h3><p class="muted">You will be logged out in 30 seconds due to inactivity.</p><div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px"><button class="btn" type="button" id="stayIn">Stay logged in</button></div></div>`;
+      scr.addEventListener('click',e=>{ if(e.target===scr){ _resetIdle(); scr.remove(); }});
+      document.body.appendChild(scr);
+      document.getElementById('stayIn').onclick = ()=>{ _resetIdle(); scr.remove(); };
+      _idleTimer = setTimeout(()=>{ try{ const s=document.getElementById('autoLogoutWarn'); if(s) s.remove(); }catch(e){} _doAutoLogout('idle-5m'); }, 30000);
+    }, 4*60*1000);
+    _resetIdle(true);
+  }catch(e){}
+}
+function _resetIdle(skip){
+  try {
+    if(!isAdmin()){ _clearIdleTimers(); return; }
+    if (document.hidden) return;
+    if (_hasUnsavedDraft()) return;
+    try{ const s=document.getElementById('autoLogoutWarn'); if(s) s.remove(); }catch(e){}
+    _warnShown=false;
+    if(_idleTimer){ clearTimeout(_idleTimer); _idleTimer=null; }
+    if(_warnTimer){ clearTimeout(_warnTimer); _warnTimer=null; }
+    _warnTimer = setTimeout(()=>{
+      if(!isAdmin() || document.hidden) return;
+      if (_hasUnsavedDraft()) return;
+      _warnShown=true;
+      const scr = document.createElement('div');
+      scr.className='modal-scrim no-i18n'; scr.id='autoLogoutWarn';
+      scr.innerHTML = `<div class="modal-card"><h3 class="modal-title">Session expiring</h3><p class="muted">You will be logged out in 30 seconds due to inactivity.</p><div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px"><button class="btn" type="button" id="stayIn">Stay logged in</button></div></div>`;
+      scr.addEventListener('click',e=>{ if(e.target===scr){ _resetIdle(); scr.remove(); }});
+      document.body.appendChild(scr);
+      document.getElementById('stayIn').onclick = ()=>{ _resetIdle(); scr.remove(); };
+      _idleTimer = setTimeout(()=>{ try{ const s=document.getElementById('autoLogoutWarn'); if(s) s.remove(); }catch(e){} _doAutoLogout('idle-5m'); }, 30000);
+    }, 4*60*1000);
+  }catch(e){}
+}
+function _initAutoLogout(){
+  try {
+    const evs=['mousemove','keydown','click','scroll','touchstart'];
+    evs.forEach(e=>{ document.addEventListener(e, ()=>{ if(isAdmin()) _resetIdle(); }, { passive:true }); });
+    document.addEventListener('visibilitychange', ()=>{
+      try {
+        if(!isAdmin()) { _clearIdleTimers(); return; }
+        if (document.hidden){
+          _clearIdleTimers();
+          _hiddenTimer = setTimeout(()=>{ if(document.hidden && isAdmin() && !_hasUnsavedDraft()){ _doAutoLogout('hidden-2m'); } }, 120000);
+        } else {
+          try{ if(_hiddenTimer){ clearTimeout(_hiddenTimer); _hiddenTimer=null; } }catch(e){}
+          _startIdleTimers();
+        }
+      }catch(e){}
+    });
+    _startIdleTimers();
+  }catch(e){}
+}
+function clearSession(){ try { localStorage.removeItem(LS.session); } catch(e){} try { cloudPulled = false; } catch(e){} try { if(window.CLOUD && CLOUD.client){ CLOUD.client.auth.signOut().catch(()=>{}); } } catch(e){} try{ _clearIdleTimers(); }catch(e){} }
 
 /* ---------- optional cloud (Supabase) ---------- */
 const CLOUD = {
@@ -672,7 +782,7 @@ const IDSET_DEFAULT = {
   famPrefix:'MEMC', famRandom:true        /* family id = MEMC-<yy><4 random> */
 };
 /* app version — footer/settings me dikhta hai, update confirm karne ke liye */
-const APP_VER = 'v128';
+const APP_VER = 'v133';
 const APP_VER_AT = '2026-10-29';
 
 /* password input + show/hide eye button */
@@ -1241,7 +1351,7 @@ const state = { view:'dashboard', param:null, draft:null, showAddAdmin:false, sh
    CLOUD SYNC — public read, admin write (activates with keys)
    ============================================================ */
 const PUB_FAM_COLS = 'id,house_name,house_no,street,house_type,notes,docs,custom,created_at';
-const ADMIN_FAM_COLS = PUB_FAM_COLS + ',address,phone';
+const ADMIN_FAM_COLS = PUB_FAM_COLS + ',address,phone,consent_at';
 const MEMBER_COLS = ['relation','name','father_name','mother_name','gender','dob','education','education_level','occupation','sector','religious','marital_status','children','disability','schemes','scheme_name','docs'];
 const MEMBER_TO_JS = { father_name:'fatherName', mother_name:'motherName', education_level:'educationLevel', marital_status:'maritalStatus', scheme_name:'schemeName' };
 
@@ -1289,14 +1399,17 @@ function stripPersonal(obj){
 function publicPayload(){
   const fams = DB.families().map(anonymizeFamily).map(stripPersonal);
   const mj = DB.masjid() || {};
+  let logo = '';
+  try { logo = (typeof DB!=='undefined' && DB.logo ? DB.logo() : '') || ''; } catch(e){}
   return {
-    v:4,
+    v:5,
     at:new Date().toISOString(),
     families:fams,
     masjid:{ name:mj.name||'', established:mj.established||'', address:mj.address||'', phone:mj.phone||'',
              imam:mj.imam||'', muazzin:mj.muazzin||'', area:mj.area||'', capacity:mj.capacity||'',
              rooms:mj.rooms||'', madrasa:mj.madrasa||'', note:mj.note||'', photos:mj.photos||[],
-             email:mj.email||'' }
+             email:mj.email||'' },
+    logo: logo
   };
 }
 
@@ -1386,7 +1499,7 @@ const SYNC = {
       const fams = (data||[]).map(f=>({
         id:f.id, houseName:f.house_name||'', houseNo:f.house_no||'', street:f.street||'',
         houseType:f.house_type||'moulding', address:f.address||'', phone:f.phone||'',
-        notes:f.notes||'', docs:f.docs||{}, custom:f.custom||[], createdAt:f.created_at?Date.parse(f.created_at):Date.now(),
+        notes:f.notes||'', docs:f.docs||{}, custom:f.custom||[], consentAt:f.consent_at||f.consentAt||null, createdAt:f.created_at?Date.parse(f.created_at):Date.now(),
         members:(f.members||[]).map(m=>{
           const o = { id:m.id };
           MEMBER_COLS.forEach(k=>{ o[MEMBER_TO_JS[k]||k] = m[k]; });
@@ -1440,9 +1553,9 @@ const SYNC = {
     try {
       const famCopy = JSON.parse(JSON.stringify(f));
       const row = {
-        id:famCopy.id, house_name:famCopy.houseName||'', house_no:famCopy.houseNo||'', street:famCopy.street||'',
-        house_type:famCopy.houseType||'moulding', address:famCopy.address||'', phone:famCopy.phone||'',
-        notes:famCopy.notes||'', docs:famCopy.docs||{}, custom:famCopy.custom||[], updated_at:new Date().toISOString()
+        id:f.id, house_name:f.houseName||'', house_no:f.houseNo||'', street:f.street||'',
+        house_type:f.houseType||'moulding', address:f.address||'', phone:f.phone||'',
+        notes:f.notes||'', docs:f.docs||{}, custom:f.custom||[], consent_at:f.consentAt||f.consent_at||null, updated_at:new Date().toISOString()
       };
       const { error: famErr } = await c.from('families').upsert(row);
       if (famErr) throw famErr;
@@ -1494,6 +1607,7 @@ function enterApp(){
   const a = $('#authScreen'); if (a) a.classList.add('hidden');
   $('#appScreen').classList.remove('hidden');
   renderShell();
+  try { _initAutoLogout(); }catch(e){}
   /* admin QR link: #qedit=FAMILY-ID → seedha edit */
   if (state._qedit && isAdmin()){
     const id = state._qedit; state._qedit=null;
@@ -1593,7 +1707,7 @@ function viewAudit(){
     </div>
   </div>
   <div class="card">
-    <p class="muted small" style="margin:0 0 10px"><span>${state.cloudAudit === null && !state.cloudAuditTried ? 'Server se entries load ho rahi hain…' : (cloudRows ? 'Server entries included' : 'Is device ka log — cross-device ke liye supabase/audit.sql run karo')}</span>${cloudRows?' · <b>'+cloudRows+'</b>':''}</p>
+    <p class="muted small" style="margin:0 0 10px"><span>${state.cloudAudit === null && !state.cloudAuditTried ? 'Server se entries load ho rahi hain…' : (cloudRows ? 'Server entries included — login/access device details neeche dikh rahe hain' : 'Is device ka log. Cross-device access/login details ke liye supabase/audit.sql run karo aur cloud sync on rakho.')}</span>${cloudRows?' · <b>'+cloudRows+' cloud</b>':''} · <b>${auditLog().length} local</b></p>
     <div class="aud-chips">${chips.map(([k,l])=>`<button type="button" class="chip${(state.auditFilter||'all')===k?' on':''}" data-act="audit-filter" data-f="${k}">${l}</button>`).join('')}</div>
     <input class="inp" id="auditQ" type="search" placeholder="Search — naam, family, action…" value="${esc(state.auditQuery||'')}" style="margin:12px 0" />
     <div class="aud-list" id="auditList">`;
@@ -1606,11 +1720,12 @@ function viewAudit(){
     if (d !== day){ day = d; html += `<div class="aud-day">${esc(d)}</div>`; }
     const label = AUDIT_ACT[r.a] || r.a;
     const dv = r.dev || {};
-    const devShort = [dv.deviceId?dv.deviceId.slice(0,12):'', dv.platform, dv.screen].filter(Boolean).join(' · ');
-    html += `<div class="aud-row" data-s="${esc(((r.by||'')+' '+(r.t||'')+' '+(r.d||'')+' '+label).toLowerCase())}">
+    const devShort = [dv.deviceId?('ID:'+dv.deviceId.slice(0,12)):'' , dv.platform, dv.screen, dv.tz].filter(Boolean).join(' · ');
+    const accessLine = (r.a==='login'||r.a==='login_fail'||r.a==='logout') ? `<div class="aud-d muted">Access: ${esc(r.by||'—')}${r.email?(' · '+esc(r.email)):''}${r.uid?(' · '+esc(r.uid)):''}${dv.ua?(' · '+esc(String(dv.ua).slice(0,90))):''}</div>` : '';
+    html += `<div class="aud-row" data-s="${esc(((r.by||'')+' '+(r.t||'')+' '+(r.d||'')+' '+label+' '+(r.email||'')+' '+(dv.ua||'')+' '+(dv.deviceId||'')).toLowerCase())}">
       <span class="aud-badge ${AUDIT_CLASS[r.a]||'info'}">${esc(label)}</span>
-      <div class="aud-main"><b>${esc(r.t||'—')}</b>${r.d?`<span class="aud-d">${esc(r.d)}</span>`:''}${dv.href?`<div class="aud-d muted">Page: ${esc(dv.href)}</div>`:''}</div>
-      <div class="aud-meta"><b>${esc(r.by||'—')}</b><span>${esc(auditTime(r.at))}${r.uid?' · '+esc(r.uid):''}${r.cloud?' · ☁':''}${devShort?' · '+esc(devShort):''}</span></div>
+      <div class="aud-main"><b>${esc(r.t||'—')}</b>${r.d?`<span class="aud-d">${esc(r.d)}</span>`:''}${accessLine}${dv.href?`<div class="aud-d muted">Page: ${esc(dv.href)}</div>`:''}</div>
+      <div class="aud-meta"><b>${esc(r.by||'—')}</b><span>${esc(auditTime(r.at))}${r.uid?' · '+esc(r.uid):''}${r.cloud?' · ☁ cloud':''}${!r.cloud?' · local':''}${devShort?' · '+esc(devShort):''}</span></div>
     </div>`;
   });
   return html + `</div></div>`;
@@ -1637,27 +1752,35 @@ function navItems(){
            ['add','Add Household',ICON.plus], ['find','Find family',ICON.search], ['masjid','Masjid Profile',ICON.mosque] ];
   if (userRole() !== 'user') it.push(['adminpanel','Administration',ICON.gear]);
   if (isOwner()) it.push(['audit','Audit log',ICON.list]);
+  if (isOwner()) it.push(['missingdocs',tStr('Missing documents'),ICON.list]);
   return it;
 }
 
 /* website icon = jo logo owner ne upload kiya (browser tab + home screen) */
+  function getBrandLogo(){
+    try { const l = (typeof DB!=='undefined' && DB.logo ? DB.logo() : '') || ''; if (l) return l; } catch(e){}
+    try { if (typeof PUBDATA!=='undefined' && PUBDATA && PUBDATA.logo) return PUBDATA.logo; } catch(e){}
+    return './icons/logo.png';
+  }
   function applyFavicon(){
-    const logo = './icons/logo.png';
+    const logo = getBrandLogo();
     const defIcon = document.querySelector('link[rel="icon"]');
-    if (defIcon && !defIcon.dataset.def) defIcon.dataset.def = defIcon.getAttribute('href') || logo;
+    if (defIcon && !defIcon.dataset.def) defIcon.dataset.def = defIcon.getAttribute('href') || './icons/logo.png';
     const links = Array.from(document.querySelectorAll('link[rel="icon"], link[rel="shortcut icon"], link[rel="apple-touch-icon"]'));
     links.forEach(l=>{
-      if (!l.dataset.def) l.dataset.def = l.getAttribute('href') || logo;
+      if (!l.dataset.def) l.dataset.def = l.getAttribute('href') || './icons/logo.png';
       l.setAttribute('href', logo);
     });
     try {
       document.querySelectorAll('.sb-brand .crest img, .auth-brand .crest img').forEach(img=>{ img.setAttribute('src', logo); });
     } catch(e){}
     try {
-      const og = document.querySelector('meta[property="og:image"]');
-      if (og) og.setAttribute('content', 'https://smartbooksbasha-svg.github.io/masjid-e-mohammadi/icons/logo.png');
-      const tw = document.querySelector('meta[name="twitter:image"]');
-      if (tw) tw.setAttribute('content', 'https://smartbooksbasha-svg.github.io/masjid-e-mohammadi/icons/logo.png');
+      if (!/^data:/.test(logo)){
+        const og = document.querySelector('meta[property="og:image"]');
+        if (og) og.setAttribute('content', logo.indexOf('http')===0?logo:('https://smartbooksbasha-svg.github.io/masjid-e-mohammadi/icons/logo.png'));
+        const tw = document.querySelector('meta[name="twitter:image"]');
+        if (tw) tw.setAttribute('content', logo.indexOf('http')===0?logo:('https://smartbooksbasha-svg.github.io/masjid-e-mohammadi/icons/logo.png'));
+      }
     } catch(e){}
     try {
       const meta = document.querySelector('meta[name="theme-color"]');
@@ -1668,7 +1791,7 @@ function navItems(){
 function renderShell(){
   const u = currentUser();
   $('#nav').innerHTML = navItems().map(([v,label,ic])=>`<button type="button" class="nav-item" data-view="${v}" onclick="navTo('${v}');return false;">${ic}<span>${label}</span></button>`).join('');
-  const logo = DB.logo();
+  const logo = getBrandLogo();
   const brand = document.querySelector('.sb-brand');
   if(brand){
     const crest = brand.querySelector('.crest');
@@ -1737,9 +1860,9 @@ function go(view, param){
       saveFormDraft();
     }
   } catch(e){}
-  const ADMIN_ONLY = ['add','users','settings','families','detail','masjid','adminpanel','idcard','audit'];
+  const ADMIN_ONLY = ['add','users','settings','families','detail','masjid','adminpanel','idcard','audit','missingdocs'];
   if (ADMIN_ONLY.includes(view) && !isAdmin()){ toast('Ye page sirf admin ke liye hai','err'); view='dashboard'; }
-  const OWNER_ONLY = ['adminpanel','users','settings','audit','idcard'];
+  const OWNER_ONLY = ['adminpanel','users','settings','audit','idcard','missingdocs'];
   if (OWNER_ONLY.includes(view) && userRole()==='user'){ toast('Sirf Owner hi ye page khol sakta hai','err'); view='dashboard'; }
   // Push history state for back button
   try {
@@ -1765,6 +1888,7 @@ function go(view, param){
   else if (view==='admin-edit') html = isOwner()?viewAdminEdit(state.param):`<div class='empty'><h3>Owner only</h3></div>`;
   else if (view==='idcard') html = isOwner()?viewIdCardDesign():`<div class='empty'><h3>Super admin only</h3></div>`;
   else if (view==='audit') html = viewAudit();
+  else if (view==='missingdocs') html = isOwner()?viewMissingDocs():`<div class="empty"><h3>Super admin only</h3></div>`;
   else if (view==='cat') html = viewCat(state.param);
   else if (view==='memberlist') html = viewMembersList(state.memberListFilter||(()=>true), state.memberListTitle||'Members');
   else if (view==='familylist') html = viewFamilyList(state.familyListFilter||(()=>true), state.familyListTitle||'Households');
@@ -2048,7 +2172,7 @@ function groupDetail(no){
 function DOC_KEYS_HAS(m){ return BASIC_DOCS.some(([k])=>m.docs && m.docs[k]==='yes'); }
 
 function grpHead(no, title, sub){
-  return `<header class="grp-head"><span class="grp-no">${no}</span><div><h2>${esc(title)}</h2><p>${esc(sub)}</p></div></header>`;
+  return `<header class="grp-head grp-static"><span class="grp-no">${no}</span><div><h2>${esc(title)}</h2><p>${esc(sub)}</p></div></header>`;
 }
 
 function masjidHero(){
@@ -2436,7 +2560,7 @@ function viewDashboard(){
     ${empty}
 
     <div class="grp-grid">
-      <section class="grp wide" data-g="1" data-act="grp-toggle">
+      <section class="grp wide open" data-g="1">
         ${grpHead(1,'Location & Housing','Ghar aur raste ki details')}
         <div class="metrics cols2">
           ${metric('Total streets', s.streets.length, {f:'all', act:'slist', title:'All streets'})}
@@ -2447,9 +2571,10 @@ function viewDashboard(){
           ${metric('Other / kachcha (house type)', s.houseTypes.other, {f:'house:other', act:'flist', title:'Other / kachcha houses'})}
         </div>
         ${streetRows}
+        ${groupDetail(1)}
       </section>
 
-      <section class="grp wide" data-g="2" data-act="grp-toggle">
+      <section class="grp wide open" data-g="2">
         ${grpHead(2,'Family & Demographics','Ghar walon ki details')}
         <div class="metrics cols2">
           ${metric('Total families', s.families, {f:'all', act:'flist', title:'All households'})}
@@ -2472,9 +2597,10 @@ function viewDashboard(){
             ${metric('Widow', s.women.widow, {f:'widow', title:'Widows'})}
           </div>
         </div>
+        ${groupDetail(2)}
       </section>
 
-      <section class="grp" data-g="3" data-act="grp-toggle">
+      <section class="grp open" data-g="3">
         ${grpHead(3,'Education','Total child / students')}
         <div class="metrics">
           ${metric('Total students', s.students.total, {hi:true, f:'students', title:'All Students'})}
@@ -2483,9 +2609,10 @@ function viewDashboard(){
           ${metric('College students', s.students.college, {f:'college', title:'College Students'})}
           ${metric('Madarsa students', s.students.madarsa, {f:'madarsa', title:'Madarsa Students'})}
         </div>
+        ${groupDetail(3)}
       </section>
 
-      <section class="grp wide" data-g="4" data-act="grp-toggle">
+      <section class="grp wide open" data-g="4">
         ${grpHead(4,'Occupations','Kaam ke hisaab se ginti — plumber, electrician, painter, helper…')}
         <div class="metrics cols2">
           ${metric('Members with a job', s.employed, {hi:true, f:'employed', title:'Members with a job'})}
@@ -2495,9 +2622,10 @@ function viewDashboard(){
           <thead><tr><th>Occupation</th><th>Men</th><th>Women</th><th>Total</th></tr></thead><tbody>
           ${s.occupations.map(o=>`<tr class="clickable" data-act="mlist" data-f="occupation:${esc(o.name)}" data-title="${esc(o.name)} — members"><td><b>${esc(o.name)}</b></td><td>${o.men}</td><td>${o.women}</td><td><b>${o.total}</b></td></tr>`).join('')}
           </tbody></table></div>` : `<p class="muted small" style="margin-top:12px">Abhi kisi ka occupation nahi bhara — member form me "Kaam / occupation" likho (jaise Plumber).</p>`}
+        ${groupDetail(4)}
       </section>
 
-      <section class="grp wide" data-g="5" data-act="grp-toggle">
+      <section class="grp wide open" data-g="5">
         ${grpHead(5,'Religious Education','Deeni taleem — Aalim & Hafiz')}
         <div class="metrics cols2">
           ${metric('Men Aalim', s.deeni.menAalim, {f:'aalimMen', title:'Men Aalim'})}
@@ -2514,9 +2642,10 @@ function viewDashboard(){
           ${metric('Aalima (women)', s.deeni.womenAalima||0, {f:'aalimaWomen', title:'Aalima (women)'})}
           ${metric('Mufti (men)', s.deeni.menMufti||0, {f:'muftiMen', title:'Mufti (men)'})}
         </div>
+        ${groupDetail(5)}
       </section>
 
-      <section class="grp wide" data-g="6" data-act="grp-toggle">
+      <section class="grp wide open" data-g="6">
         ${grpHead(6,'Documents & Govt. Schemes','Kitne logon ke paas documents hain · kitne ne scheme li')}
         <div class="metrics cols2">
           ${metric('Members with all basic documents', s.membersWithAllDocs, {f:'docsAll', title:'Members with all basic documents'})}
@@ -2539,6 +2668,7 @@ function viewDashboard(){
             <td>Scheme nahi mili <span class="muted small">(koi scheme nahi)</span></td><td><b>${s.scheme.notApplied}</b></td></tr>
           </tbody></table></div>
         ${!s.scheme.applied ? '<p class="muted small" style="margin-top:10px">Abhi koi scheme mark nahi hui — member form me scheme chips tap karo.</p>' : ''}
+        ${groupDetail(6)}
       </section>
     </div>
     ${aboutContactBlock(mj)}`;
@@ -2632,7 +2762,7 @@ function renderFamilyList(){
       <td>${esc(streetName(f))}</td>
       <td><span class="badge gray">${esc(labelOf(HOUSE_TYPES, houseTypeKey(f.houseType))||'Other')}</span></td>
       <td>${(f.members||[]).length}</td>
-      <td>${esc(f.phone||'—')}</td>
+      <td>${f.phone?esc(maskPhone(f.phone)):'—'}</td>
       <td class="muted small" style="white-space:nowrap">${esc(fmtDateTime(f.updatedAt||f.createdAt))}</td>
       <td style="white-space:nowrap">
         <button class="btn ghost sm" data-act="view-family" data-id="${esc(f.id)}">View</button>
@@ -2720,6 +2850,12 @@ function viewFamilyForm(){
                <span class="hint">Custom ID likho ya khaali chhod do — system khud ID de dega. QR isi ID se banta hai.</span>`}
         </div>
         <div class="field" style="margin-top:12px"><label>Address / landmark</label><input class="inp" data-field="address" value="${esc(d.address)}" placeholder="Mohalla, gali, landmark" /></div>
+        <div class="field" style="margin-top:12px">
+          <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer">
+            <input type="checkbox" data-field="consentAgreed" ${(d.consentAgreed||d.consentAt)?'checked':''} style="margin-top:4px" />
+            <span>Family agreed to share this data for government scheme help <span style="color:var(--danger)">*</span></span>
+          </label>
+        </div>
         <div class="field" style="margin-top:12px"><label>Notes (optional)</label><textarea class="inp" data-field="notes" placeholder="Any remark about this household">${esc(d.notes)}</textarea></div>
       </div>
 
@@ -2888,8 +3024,8 @@ function viewFamilyDetail(id){
           <div class="row"><span>Street</span><span>${esc(streetName(f))}</span></div>
           <div class="row"><span>House no.</span><span>${esc(f.houseNo||'—')}</span></div>
           <div class="row"><span>House type</span><span>${esc(labelOf(HOUSE_TYPES, houseTypeKey(f.houseType)))}</span></div>
-          <div class="row"><span>Phone</span><span>${canEdit?esc(f.phone||'—'):esc(maskPhone(f.phone))}</span></div>
-          <div class="row"><span>Address</span><span>${esc(f.address||'—')}</span></div>
+        <div class="row"><span>Phone</span><span id="fph" data-m="${esc(f.phone||'')}" data-shown="0">${isAdmin()&&f.phone?esc(maskPhone(f.phone))+' <button class="btn ghost sm" type="button" data-act="toggle-mask" data-target="fph" data-type="phone">Show</button>':esc(f.phone||'—')}</span></div>
+        <div class="row"><span>Address</span><span id="faddr" data-m="${esc(f.address||'')}" data-shown="0">${isAdmin()&&f.address?'•••••• <button class="btn ghost sm" type="button" data-act="toggle-mask" data-target="faddr" data-type="addr">Show</button>':esc(f.address||'—')}</span></div>
           <div class="row"><span>Members</span><span>${alive.length} · ${men} <span>men</span> · ${women} <span>women</span></span></div>
           <div class="row"><span>Registered</span><span>${esc(fmtDateTime(f.createdAt))}${f.createdBy?' · '+esc(f.createdBy):''}</span></div>
           <div class="row"><span>Last updated</span><span>${esc(fmtDateTime(f.updatedAt||f.createdAt))}${f.updatedBy?' · '+esc(f.updatedBy):''}</span></div>
@@ -5226,10 +5362,7 @@ document.addEventListener('click', (e)=>{
   if (act==='slist'){ state.streetBack = state.view; go('streetlist'); return; }
   if (act==='auth-check'){ cloudLinkCheck(); return; }
   if (act==='grp-toggle'){
-    const sec = el.closest('.grp'); if (!sec) return;
-    if (!sec.dataset.filled){ sec.insertAdjacentHTML('beforeend', groupDetail(Number(sec.dataset.g)||0)); sec.dataset.filled='1'; }
-    sec.classList.toggle('open');
-    if (sec.classList.contains('open')) sec.scrollIntoView({ behavior:'smooth', block:'start' });
+    /* dashboard group click disabled by request — data shown inline */
     return;
   }
   if (act==='photo'){ const src = el.dataset.src; if (src) openPhoto(src); return; }
@@ -5494,6 +5627,46 @@ document.addEventListener('click', (e)=>{
   if (act==='drive-backup'){ backupToDrive(); return; }
   if (act==='view-family'){ go('detail', id); return; }
   if (act==='detail'){ go('detail', id); return; }
+  if (act==='toggle-mask'){
+    const t = el.getAttribute('data-target');
+    const typ = el.getAttribute('data-type')||'';
+    const span = document.getElementById(t);
+    if (!span) return;
+    if (span.getAttribute('data-shown') === '1'){
+      const m = span.getAttribute('data-m')||'';
+      if (typ === 'addr'){
+        span.innerHTML = '•••••• <button class="btn ghost sm" type="button" data-act="toggle-mask" data-target="'+esc(t)+'" data-type="addr">Show</button>';
+      } else {
+        span.innerHTML = esc(typeof maskPhone==='function'?maskPhone(m):m.replace(/./g,'*')) + (m?'<button class="btn ghost sm" type="button" data-act="toggle-mask" data-target="'+esc(t)+'" data-type="phone">Show</button>':'');
+      }
+      span.setAttribute('data-shown','0');
+      return;
+    }
+    const m = span.getAttribute('data-m')||'';
+    if (typ === 'addr'){
+      span.innerHTML = esc(m) + (m?'<button class="btn ghost sm" type="button" data-act="toggle-mask" data-target="'+esc(t)+'" data-type="addr">Hide</button>':'');
+    } else {
+      span.innerHTML = esc(m) + (m?'<button class="btn ghost sm" type="button" data-act="toggle-mask" data-target="'+esc(t)+'" data-type="phone">Hide</button>':'');
+    }
+    span.setAttribute('data-shown','1');
+    setTimeout(()=>{
+      try {
+        const s = document.getElementById(t);
+        if (s && s.getAttribute('data-shown') === '1'){
+          const mm = s.getAttribute('data-m')||'';
+          const tt = s.querySelector('[data-act="toggle-mask"]');
+          const ttyp = tt ? tt.getAttribute('data-type')||'' : typ;
+          if (ttyp === 'addr'){
+            s.innerHTML = '•••••• <button class="btn ghost sm" type="button" data-act="toggle-mask" data-target="'+esc(t)+'" data-type="addr">Show</button>';
+          } else {
+            s.innerHTML = esc(typeof maskPhone==='function'?maskPhone(mm):mm.replace(/./g,'*')) + (mm?'<button class="btn ghost sm" type="button" data-act="toggle-mask" data-target="'+esc(t)+'" data-type="phone">Show</button>':'');
+          }
+          s.setAttribute('data-shown','0');
+        }
+      }catch(e){}
+    }, 30000);
+    return;
+  }
   if (act==='edit-family'){ const f=DB.families().find(x=>x.id===id); if(f){ state.draft = JSON.parse(JSON.stringify(f)); state.draft.docs = Object.assign(Object.fromEntries(DOC_TYPES.map(d=>[d[0],'no'])), state.draft.docs||{}); state.draft.custom = normCustom(state.draft.custom); if(!state.draft.houseType) state.draft.houseType='moulding'; go('add', id); } return; }
   if (act==='del-family'){ if(confirm('Delete this household record permanently?')){
     DB.setFamilies(DB.families().filter(f=>f.id!==id));
@@ -5782,6 +5955,7 @@ function afterRender(view){
     const of = $('#ownerForm');
     if (of && !of._bound){ of._bound=true; of.addEventListener('submit',e=>{ e.preventDefault(); const v=of.elements.oemail.value.trim().toLowerCase(); if(!isEmail(v)){toast('Valid email daalo','err');return;} const prev=ownerEmail(); setOwnerEmail(v); localStorage.setItem('memc_owner_src','user'); audit('settings','Owner email', prev + ' → ' + v); toast('Owner email save ho gaya'); go('adminpanel'); }); }
   }
+  if (view==='missingdocs'){ try { renderMissingDocsTable(); }catch(e){} }
   if (view==='audit'){
     if (!state.cloudAuditTried && SYNC.on()) loadCloudAudit();
     const q = $('#auditQ');
@@ -5871,31 +6045,14 @@ function saveFamily(){
     }
   } catch(e){}
 
-  /* duplicate warn: same head/father+d.o.b */
-  try {
-    const famsNow = DB.families();
-    const headName = String(d.houseName||'').trim().toLowerCase();
-    const headDob = String((d.head&&d.head.dob)|| (members[0]&&members[0].dob)||'').trim();
-    const headFather = String((d.head&&d.head.fatherName)|| (members[0]&&members[0].fatherName)||'').trim().toLowerCase();
-    const dup = famsNow.find(f=>{
-      if (d.id && f.id === d.id) return false;
-      const hn = String(f.houseName||'').trim().toLowerCase();
-      const hm = (f.members||[])[0] || {};
-      const hdob = String(hm.dob||'').trim();
-      const hf = String(hm.fatherName||'').trim().toLowerCase();
-      if (hn && headName && hn === headName && headDob && hdob && headDob === hdob) return true;
-      if (hn && headName && hn === headName && headFather && hf && headFather === hf && headDob && hdob && headDob === hdob) return true;
-      return false;
-    });
-    if (dup){
-      if (!confirm('Same house/head lag raha hai (duplicate ho sakta hai).\n\nFamily ID: ' + dup.id + '\nContinue karna hai?')) return fail('Duplicate warn ki wajah se save rok diya gaya.');
-    }
-  } catch(e){}
+
 
   d.street = d.street.trim();
   d.houseType = d.houseType || 'moulding';
   d.members = members;
   d.custom = normCustom(d.custom);
+  if (!d.consentAgreed) return fail('Family consent is required.');
+  if (!d.consentAt) d.consentAt = new Date().toISOString();
   const fams = DB.families();
   if (d.id){
     const i = fams.findIndex(f=>f.id===d.id);
@@ -6821,7 +6978,7 @@ window.addEventListener('popstate', (e)=>{
       if (ADMIN_ONLY.includes(view) && !isAdmin()){ toast('Ye page sirf admin ke liye hai','err'); state.view='dashboard'; state.param=null; }
       const OWNER_ONLY = ['adminpanel','users','settings','audit','idcard'];
       if (OWNER_ONLY.includes(view) && userRole()==='user'){ toast('Sirf Owner hi ye page khol sakta hai','err'); state.view='dashboard'; state.param=null; }
-      const titles = { dashboard:'Survey Dashboard', families:'Households', add:(state.param?'Edit Household':'Add Household'), detail:'Household Record', find:'Find family', adminpanel:'Administration', users:'Admins', settings:'Settings', masjid:'Masjid Profile', cat:'Survey Category', myprofile:'My Profile', 'admin-edit':'Edit Admin', idcard:'ID Card Design', memberlist:'Members', familylist:'Households list', streetlist:'Streets', audit:'Audit log' };
+  const titles = { dashboard:'Survey Dashboard', families:'Households', add:(state.param?'Edit Household':'Add Household'), detail:'Household Record', find:'Find family', adminpanel:'Administration', users:'Admins', settings:'Settings', masjid:'Masjid Profile', cat:'Survey Category', myprofile:'My Profile', 'admin-edit':'Edit Admin', idcard:'ID Card Design', memberlist:'Members', familylist:'Households list', streetlist:'Streets', audit:'Audit log', missingdocs:tStr('Missing documents') };
       $('#pageTitle').textContent = titles[state.view] || 'Survey Dashboard';
       let html='';
       if (state.view==='dashboard') html = viewDashboard();
@@ -6984,6 +7141,76 @@ function scanLoop(){
     }
   }, 200);
 }
+/* ---------- Public Find OTP (server-side SMS via webhook) ---------- */
+let _findOtp = { id:null, otpId:null, sentAt:0, verified:false, phoneHint:'' };
+function _otpCfg(){ return (typeof CFG!=='undefined' && CFG) ? CFG : (window.APP_CONFIG||{}); }
+async function requestFindOtp(familyId){
+  const cfg = _otpCfg();
+  if (!cfg.OTP_WEBHOOK_URL){
+    return { ok:false, error:'OTP SMS setup nahi hua. config.js me OTP_WEBHOOK_URL add karo (server jo SMS bhejega). Is static app se direct SMS nahi ja sakta.' };
+  }
+  try{
+    const r = await fetch(cfg.OTP_WEBHOOK_URL, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ familyId:String(familyId||''), purpose:'public_find' })
+    });
+    const j = await r.json().catch(()=>({}));
+    if (!r.ok || j.ok === false) return { ok:false, error: j.error || j.message || 'OTP bhejne me problem hui.' };
+    _findOtp = { id:String(familyId||''), otpId:j.otpId||j.id||'', sentAt:Date.now(), verified:false, phoneHint:j.phoneHint||j.maskedPhone||'' };
+    return { ok:true, phoneHint:_findOtp.phoneHint };
+  }catch(e){ return { ok:false, error:'OTP server tak pahunch nahi saka. Internet/server check karo.' }; }
+}
+async function verifyFindOtp(familyId, code){
+  const cfg = _otpCfg();
+  if (!String(code||'').trim()) return { ok:false, error:'OTP daalo.' };
+  if (_findOtp.verified && _findOtp.id === String(familyId||'')) return { ok:true };
+  if (cfg.OTP_VERIFY_URL){
+    try{
+      const r = await fetch(cfg.OTP_VERIFY_URL, {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ familyId:String(familyId||''), otpId:_findOtp.otpId||'', code:String(code||'').trim(), purpose:'public_find' })
+      });
+      const j = await r.json().catch(()=>({}));
+      if (!r.ok || j.ok === false || j.verified === false) return { ok:false, error: j.error || j.message || 'Ghalat OTP. Sahi code daalo.' };
+      _findOtp.verified = true; return { ok:true };
+    }catch(e){ return { ok:false, error:'OTP verify nahi hua. Dobara try karo.' }; }
+  }
+  return { ok:false, error:'OTP verify endpoint setup nahi hai (OTP_VERIFY_URL). Ghalat OTP ya setup incomplete.' };
+}
+function renderFindOtpBox(familyId, msg, isErr){
+  const box = $('#findResult'); if(!box) return;
+  const hint = _findOtp.phoneHint ? ('<p class="muted small">OTP sent to: <b>'+esc(_findOtp.phoneHint)+'</b></p>') : '';
+  box.innerHTML = `
+    <div class="card" style="margin-top:18px">
+      <div class="sec-title" style="margin-top:0">Phone OTP verification</div>
+      <p class="muted small">Family ID <b class="mono">${esc(familyId||'')}</b> ke registered phone number par OTP bheja jayega. Sahi OTP daalne par hi details dikhenge.</p>
+      ${hint}
+      ${msg?'<div class="alert '+(isErr?'err':'info')+'" style="margin:10px 0">'+esc(msg)+'</div>':''}
+      <div class="grid g2" style="gap:10px;align-items:end">
+        <div class="field"><label>OTP</label><input class="inp" id="findOtpCode" inputmode="numeric" autocomplete="one-time-code" placeholder="6-digit OTP" maxlength="8" /></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn" type="button" id="findOtpVerifyBtn" data-id="${esc(familyId||'')}">Verify OTP</button>
+          <button class="btn ghost" type="button" id="findOtpResendBtn" data-id="${esc(familyId||'')}">Resend OTP</button>
+        </div>
+      </div>
+    </div>`;
+  const vb=$('#findOtpVerifyBtn'), rb=$('#findOtpResendBtn');
+  if (rb) rb.onclick = async ()=>{ rb.disabled=true; const r=await requestFindOtp(familyId); renderFindOtpBox(familyId, r.ok?'OTP dobara bheja gaya.':r.error, !r.ok); };
+  if (vb) vb.onclick = async ()=>{
+    vb.disabled=true;
+    const code = ($('#findOtpCode')&&$('#findOtpCode').value)||'';
+    const v = await verifyFindOtp(familyId, code);
+    if (!v.ok){ renderFindOtpBox(familyId, v.error||'Ghalat OTP. Sahi code daalo.', true); return; }
+    await _doRenderFindResult(familyId);
+  };
+}
+async function startPublicFindOtp(familyId){
+  const box = $('#findResult'); if(box) box.innerHTML='<div class="card" style="margin-top:18px"><p class="muted">Registered phone number par OTP bheja ja raha hai...</p></div>';
+  const r = await requestFindOtp(familyId);
+  if (!r.ok){ renderFindOtpBox(familyId, r.error, true); return; }
+  renderFindOtpBox(familyId, 'OTP bhej diya gaya. Code daal kar verify karo.', false);
+}
+
 function getPublicFamilyById(id){
   try {
     const pid = String(id||'').trim().toUpperCase();
@@ -7006,27 +7233,21 @@ function handleQrFind(txt){
   id = id.replace(/^#qedit=/i,'').replace(/^#/, '').split(/\s*\|\s*/)[0].trim();
   lookupById(id);
 }
-async function lookupById(id){
+async function _doRenderFindResult(id){
   const box = $('#findResult'); if(!box) return;
   const pid = String(id||'').trim();
-  if (!pid){ box.innerHTML='<div class="card"><div class="alert err">Family ID daalo.</div></div>'; return; }
-  box.innerHTML = '<div class="card"><p class="muted">Searching...</p></div>';
   try {
-    // try local/admin first
     let f = DB.families().find(x=> String(x.id).toUpperCase() === pid.toUpperCase());
     if (f){ renderFindResult(famToPub(f)); return; }
-    // try public snapshot
     f = getPublicFamilyById(pid);
     if (f){ renderFindResult(famToPub(f)); return; }
-    // try to pull public data on demand
-    if (CLOUD.enabled()){
+    if (typeof CLOUD !== 'undefined' && CLOUD.enabled()){
       try {
         if (typeof SYNC.pullPublic === 'function') await SYNC.pullPublic();
         try { PUBDATA = JSON.parse(localStorage.getItem('memc_pub') || 'null'); } catch(e){}
         f = getPublicFamilyById(pid);
         if (f){ renderFindResult(famToPub(f)); return; }
       } catch(e){}
-      // try RPC if exists
       try {
         const c = await CLOUD.get();
         if (c && typeof c.rpc === 'function'){
@@ -7040,48 +7261,21 @@ async function lookupById(id){
     box.innerHTML = '<div class="card"><div class="alert err">Lookup nahi hua. Thodi der baad try karo.</div></div>';
   }
 }
-async function lookupByPhone(id){
+
+async function lookupById(id){
   const box = $('#findResult'); if(!box) return;
   const pid = String(id||'').trim();
   if (!pid){ box.innerHTML='<div class="card"><div class="alert err">Family ID daalo.</div></div>'; return; }
-  box.innerHTML = '<div class="card"><p class="muted">Searching...</p></div>';
-  try {
-    if (typeof CLOUD !== 'undefined' && CLOUD.enabled()){
-      try {
-        const c = await CLOUD.get();
-        if (c && typeof c.rpc === 'function'){
-          const { data, error } = await c.rpc('get_family_by_id_public', { p_id: pid.trim() });
-          if (error){
-            box.innerHTML = '<div class="card"><div class="alert err">' + esc(error.message || String(error)) + '</div></div>';
-            return;
-          } else if (data && data.found){
-            renderFindResult(data);
-            return;
-          }
-          // else RPC ok but not found -> fall back to local
-        }
-      } catch(e){
-        box.innerHTML = '<div class="card"><div class="alert err">' + esc(e.message || String(e)) + '</div></div>';
-        return;
-      }
-    }
-    const p = pid.toUpperCase();
-    let f = DB.families().find(x=>String(x.id||'').toUpperCase()===p);
-    if (f){ renderFindResult(famToPub(f)); return; }
-    f = getPublicFamilyById(p);
-    if (f){ renderFindResult(famToPub(f)); return; }
-    if (typeof CLOUD !== 'undefined' && CLOUD.enabled()){
-      try {
-        if (typeof SYNC.pullPublic === 'function') await SYNC.pullPublic();
-        try { PUBDATA = JSON.parse(localStorage.getItem('memc_pub') || 'null'); } catch(e){}
-        f = getPublicFamilyById(p);
-        if (f){ renderFindResult(famToPub(f)); return; }
-      } catch(e){}
-    }
-    box.innerHTML = '<div class="card"><div class="alert err">Is Family ID se koi ghar nahi mila.</div></div>';
-  } catch(e){
-    box.innerHTML = '<div class="card"><div class="alert err">' + esc(e.message || String(e)) + '</div></div>';
+  /* admins bypass OTP for workflow; public must verify phone OTP */
+  if (typeof isAdmin === 'function' && isAdmin()){
+    box.innerHTML = '<div class="card"><p class="muted">Searching...</p></div>';
+    return _doRenderFindResult(pid);
   }
+  _findOtp = { id:null, otpId:null, sentAt:0, verified:false, phoneHint:'' };
+  await startPublicFindOtp(pid);
+}
+async function lookupByPhone(id){
+  return lookupById(id);
 }
 function renderFindResult(res){
   const box = $('#findResult'); if(!box) return;
@@ -7126,3 +7320,128 @@ window.addEventListener('beforeunload', function(){
 });
 
 window.onerror = function(msg, url, line){ console.error('ERR:', msg, line); return false; };
+
+
+/* ============================================================
+   MISSING DOCUMENTS
+   ============================================================ */
+function viewMissingDocs(){
+  if (!isOwner()) return `<div class="empty"><h3>Super admin only</h3></div>`;
+  const fams = DB.families();
+  const streets = Array.from(new Set(fams.map(f=>streetName(f)).filter(x=>x && x!=='Unassigned'))).sort();
+  const docList = [
+    ['aadhaar','Aadhaar'],
+    ['pan','PAN card'],
+    ['passbook','Bank passbook'],
+    ['voter','Voter ID'],
+    ['birth','Birth certificate'],
+    ['passport','Passport'],
+    ['tc','School TC'],
+    ['smartcard','Smart card'],
+    ['kapidu','Kapidu Thittam card'],
+    ['ration','Ration card (family)']
+  ];
+  return `
+    <div class="page-head"><div><h1>${tStr('Missing documents')}</h1><p>${tStr('Har member ke kaun se basic documents missing hain.')}</p></div>
+      <div class="ph-actions"><button class="btn ghost sm" type="button" onclick="exportMissingDocs()">${ICON.dl} Export Excel</button></div>
+    </div>
+    <div class="card">
+      <div class="grid g3">
+        <div class="field"><label>${tStr('Street')}</label><select class="inp" id="mdStreet"><option value="">${tStr('All')}</option>${streets.map(s=>`<option value="${esc(s)}">${esc(s)}</option>`).join('')}</select></div>
+        <div class="field"><label>${tStr('Document')}</label><select class="inp" id="mdDoc"><option value="">${tStr('All')}</option>${docList.map(([k,l])=>`<option value="${esc(k)}">${esc(l)}</option>`).join('')}</select></div>
+        <div class="field" style="display:flex;align-items:flex-end"><button class="btn" type="button" onclick="renderMissingDocsTable()">${tStr('Apply filter')}</button></div>
+      </div>
+    </div>
+    <div class="card" style="margin-top:14px;overflow:auto">
+      <table id="mdTable"><thead><tr><th>${tStr('Family ID')}</th><th>${tStr('Household')}</th><th>${tStr('Street')}</th><th>${tStr('Member')}</th><th>${tStr('Relation')}</th><th>${tStr('Missing')}</th></tr></thead><tbody></tbody></table>
+    </div>`;
+}
+
+function renderMissingDocsTable(){
+  const fams = DB.families();
+  const st = document.getElementById('mdStreet') && document.getElementById('mdStreet').value || '';
+  const dd = document.getElementById('mdDoc') && document.getElementById('mdDoc').value || '';
+  const keys = ['aadhaar','pan','passbook','voter','birth','passport','tc','smartcard','kapidu'];
+  const map = {aadhaar:'Aadhaar',pan:'PAN card',passbook:'Bank passbook',voter:'Voter ID',birth:'Birth certificate',passport:'Passport',tc:'School TC',smartcard:'Smart card',kapidu:'Kapidu Thittam card',ration:'Ration card (family)'};
+  const rows = [];
+  fams.forEach(f=>{
+    if (st && streetName(f) !== st) return;
+    (f.members||[]).forEach(m=>{
+      const miss = [];
+      if (!dd){
+        keys.forEach(k=>{ if (!(m.docs && m.docs[k]==='yes')) miss.push(k); });
+        if (f.docs && f.docs.ration !== 'yes') miss.push('ration');
+      } else if (dd === 'ration'){
+        if (f.docs && f.docs.ration !== 'yes') miss.push('ration');
+      } else {
+        if (!(m.docs && m.docs[dd]==='yes')) miss.push(dd);
+      }
+      if (miss.length) rows.push({f,m,miss});
+    });
+  });
+  const tbody = document.querySelector('#mdTable tbody');
+  if (!tbody) return;
+  if (!rows.length){ tbody.innerHTML = '<tr><td colspan="6" class="muted">'+tStr('No missing documents')+'</td></tr>'; return; }
+  tbody.innerHTML = rows.map(r=>`<tr><td class="mono">${esc(r.f.id)}</td><td>${esc(r.f.houseName||'')}</td><td>${esc(streetName(r.f))}</td><td>${esc(r.m.name||'')}</td><td>${esc(r.m.relation||'')}</td><td>${r.miss.map(x=>esc(map[x]||x)).join(', ')}</td></tr>`).join('');
+}
+
+function exportMissingDocs(){
+  if (!isOwner()) return;
+  try {
+    const fams = DB.families();
+    const st = document.getElementById('mdStreet') && document.getElementById('mdStreet').value || '';
+    const dd = document.getElementById('mdDoc') && document.getElementById('mdDoc').value || '';
+    const keys = ['aadhaar','pan','passbook','voter','birth','passport','tc','smartcard','kapidu'];
+    const map = {aadhaar:'Aadhaar',pan:'PAN card',passbook:'Bank passbook',voter:'Voter ID',birth:'Birth certificate',passport:'Passport',tc:'School TC',smartcard:'Smart card',kapidu:'Kapidu Thittam card',ration:'Ration card (family)'};
+    const rows = [[tStr('Family ID'),tStr('Household'),tStr('Street'),tStr('Member'),tStr('Relation'),tStr('Missing documents')]];
+    fams.forEach(f=>{
+      if (st && streetName(f) !== st) return;
+      (f.members||[]).forEach(m=>{
+        const miss = [];
+        if (!dd){
+          keys.forEach(k=>{ if (!(m.docs && m.docs[k]==='yes')) miss.push(k); });
+          if (f.docs && f.docs.ration !== 'yes') miss.push('ration');
+        } else if (dd === 'ration'){
+          if (f.docs && f.docs.ration !== 'yes') miss.push('ration');
+        } else {
+          if (!(m.docs && m.docs[dd]==='yes')) miss.push(dd);
+        }
+        if (miss.length) rows.push([f.id,f.houseName||'',streetName(f),m.name||'',m.relation||'',miss.map(x=>map[x]||x).join('; ')]);
+      });
+    });
+    const csv = rows.map(r=>r.map(x=>'"'+String(x==null?'':x).replace(/"/g,'""')+'"').join(',')).join('\r\n');
+    const blob = new Blob(['\ufeff'+csv], {type:'text/csv;charset=utf-8'});
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+    a.download = 'missing-documents-' + todayStr() + '.csv'; a.click(); URL.revokeObjectURL(a.href);
+  } catch(e){ toast('Export nahi hua','err'); }
+}
+
+/* ---------- PWA install prompt ---------- */
+let _installPrompt = null;
+function _showInstallBtn(){
+  const b = document.getElementById('installBtn');
+  if (b) b.style.display = '';
+}
+window.addEventListener('beforeinstallprompt', (e)=>{
+  e.preventDefault();
+  _installPrompt = e;
+  _showInstallBtn();
+});
+window.addEventListener('appinstalled', ()=>{
+  _installPrompt = null;
+  const b = document.getElementById('installBtn');
+  if (b) b.style.display = 'none';
+});
+window.addEventListener('load', ()=>{
+  const b = document.getElementById('installBtn');
+  if (!b) return;
+  b.addEventListener('click', async ()=>{
+    if (!_installPrompt){ toast('Browser menu se "Install app" choose karo'); return; }
+    try{
+      _installPrompt.prompt();
+      await _installPrompt.userChoice;
+      _installPrompt = null;
+      b.style.display = 'none';
+    }catch(err){}
+  });
+});

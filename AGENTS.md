@@ -717,6 +717,8 @@ Key findings (details + line numbers in TASK.md "AUDIT" section):
 - Keep localStorage as offline cache + migration button to upload local data.
 - Sync status UI, security rules for logged-in users, robots noindex, icon.png + og:image, Excel/JSON backup/restore. Single index.html preferred if possible.
 - Header/sidebar/auth use icons/logo.png; favicon/apple-touch-icon/og use full URL to icons/logo.png; manifest uses icons/logo.png; SW cache v125. Urdu (اردو) RTL added with Noto Nastaliq Urdu, html[dir=rtl] styles for tables/sidebar/forms, lang dropdown Urdu. lookupByPhone RPC first via CLOUD.get(), SYNC.saveFamily queues failed writes in localStorage pending + retries on start/online, footer shows Synced/Syncing/Offline/Not logged in + pending count, public snapshot uses ageGroup instead of dob. Tests 191/191 green.
+- v126 (in progress): SYNC.saveFamily upsert-safe (no delete before insert), pending queue memc_pending + retry on start/online/2min + #pendingStatus; public snapshot removes dob/docs uses ageGroup; lookupByPhone keeps RPC error visible; index.html remove Firebase scripts/buttons.
+- v129: auto-logout + masking + consent; v130: toggle-mask + draft save on logout + consent_at sync/pull; v132 mistake: built on old v128 base → dropped v129/v130 changes (auto-logout/draft-save, Show/Hide mask, consent, sync/pending). Always base new features on latest deployed app.js (v130). Do not rebuild from v128.
 
 ## Audit (2026-10-29)
 - QR overlay needs history/back handling (close on back instead of navigate). Native confirm/prompt used in places. Public find depends on published snapshot. Recommend: back-button close for QR, head-name search in public find, PWA install prompt.

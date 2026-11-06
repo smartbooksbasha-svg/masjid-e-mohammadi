@@ -26,5 +26,12 @@ window.APP_CONFIG = {
   /* committee owner — admin requests / approvals isi email par jaate hain */
   OWNER_EMAIL: "smartbooksbasha@gmail.com",
   ORG_SUB: "Khidmath Committee",
-  FAMILY_ID_PREFIX: "MEMC"
+  FAMILY_ID_PREFIX: "MEMC",
+  /* Public Find OTP (scan/family ID): server-side SMS required for real delivery.
+     Set OTP_WEBHOOK_URL to an endpoint you control (POST JSON: {phone,familyId,purpose})
+     that sends SMS and returns {ok:true,otpId?:string} or {ok:false,error:string}.
+     Optional OTP_VERIFY_URL (POST {otpId,code,phone,familyId}) -> {ok:true/false}.
+     Without webhook, OTP cannot be delivered from this static app. */
+  OTP_WEBHOOK_URL: "",
+  OTP_VERIFY_URL: ""
 };

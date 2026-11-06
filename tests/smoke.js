@@ -86,6 +86,7 @@ const wait = ms => new Promise(r => setTimeout(r, ms || 120));
   A.win.eval(`
     state.draft = Object.assign(blankDraft(), {
       street:'Test Street', houseNo:'12', houseName:'Test Head', phone:'9876543210',
+      consentAgreed:true,
       members:[{ name:'Test Head', gender:'Male', relation:'Head', dob:'1980-05-10', maritalStatus:'Married', educationLevel:'college' }]
     });
     saveFamily();
@@ -262,7 +263,7 @@ const wait = ms => new Promise(r => setTimeout(r, ms || 120));
   AU.win.eval("auditSave([])");
 
   /* add a household through the real save path */
-  AU.win.eval("state.draft = blankDraft(); state.draft.street='Audit Street'; state.draft.houseType='cement'; state.draft.houseName='Audit Family'; state.draft.members=[{name:'Head',gender:'Male',dob:'1980-01-01',maritalStatus:'Married'}]; go('add')");
+  AU.win.eval("state.draft = blankDraft(); state.draft.street='Audit Street'; state.draft.houseType='cement'; state.draft.houseName='Audit Family'; state.draft.consentAgreed=true; state.draft.members=[{name:'Head',gender:'Male',dob:'1980-01-01',maritalStatus:'Married'}]; go('add')");
   await wait(150);
   AU.win.eval("saveFamily(false)");
   await wait(150);
